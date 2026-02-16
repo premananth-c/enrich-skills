@@ -1,0 +1,13 @@
+:root {
+  --color-bg: #0c0c0e;
+  --color-surface: #161619;
+  --color-border: #27272a;
+  --color-primary: #8b5cf6;
+  --color-text: #fafafa;
+  --color-text-muted: #a1a1aa;
+  --font-sans: 'DM Sans', system-ui, sans-serif;
+}
+
+* { box-sizing: border-box; }
+body { margin: 0; font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); }
+button { font-family: inherit; cursor: pointer; }

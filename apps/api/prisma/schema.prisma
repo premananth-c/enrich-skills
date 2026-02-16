@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  planId         String?
+  domain         String?  @unique
+  status         String   @default("active") // active, suspended, trial, cancelled
+  brandingConfig Json     @default("{}")
+  featureFlags   Json     @default("{}")
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users    User[]
+  tests    Test[]
+  courses  Course[]
+  questions Question[]
+}
+
+model User {
+  id        String   @id @default(uuid())
+  tenantId  String
+  email     String
+  passwordHash String
+  name      String
+  role      String   @default("student") // student, admin, proctor, content_author, platform_operator
+  cohortIds String[] @default([])
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts Attempt[]
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model Test {
+  id        String   @id @default(uuid())
+  tenantId  String
+  title     String
+  type      String   // coding, mcq
+  status    String   @default("draft") // draft, published, archived
+  config    Json
+  schedule  Json?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  testQuestions   TestQuestion[]
+  attempts        Attempt[]
+  assignmentTests AssignmentTest[]
+}
+
+model Question {
+  id        String   @id @default(uuid())
+  tenantId  String
+  type      String   // coding, mcq
+  content   Json
+  difficulty String  // easy, medium, hard
+  tags      String[] @default([])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  testCases    TestCase[]
+  testQuestions TestQuestion[]
+  submissions  Submission[]
+}
+
+model TestCase {
+  id            String   @id @default(uuid())
+  questionId    String
+  input         String
+  expectedOutput String
+  isPublic      Boolean  @default(false)
+  weight        Int      @default(1)
+  createdAt     DateTime @default(now())
+
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@index([questionId])
+}
+
+model TestQuestion {
+  id         String @id @default(uuid())
+  testId     String
+  questionId String
+  order      Int    @default(0)
+
+  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([testId, questionId])
+  @@index([testId])
+}
+
+model Attempt {
+  id          String    @id @default(uuid())
+  userId      String
+  testId      String
+  startedAt   DateTime  @default(now())
+  submittedAt DateTime?
+  score       Float?
+  maxScore    Float?
+  status      String    @default("in_progress") // in_progress, submitted, graded
+
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  test        Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  submissions Submission[]
+}
+
+model Submission {
+  id              String   @id @default(uuid())
+  attemptId       String
+  questionId      String
+  code            String?
+  language        String?
+  selectedOptionId String?
+  status          String   @default("pending") // pending, running, passed, failed, error
+  score           Float?
+  aiRatings       Json?
+  output          String?
+  errorMessage    String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  @@unique([attemptId, questionId])
+  @@index([attemptId])
+}
+
+model Course {
+  id          String   @id @default(uuid())
+  tenantId    String
+  title       String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments Assignment[]
+}
+
+model Assignment {
+  id          String    @id @default(uuid())
+  courseId    String
+  title       String
+  description String?
+  dueDate     DateTime?
+  gradingType String    @default("auto") // auto, manual, hybrid
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  assignmentTests AssignmentTest[]
+}
+
+model AssignmentTest {
+  id           String @id @default(uuid())
+  assignmentId String
+  testId       String
+
+  assignment Assignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  test       Test       @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([assignmentId, testId])
+}
+
