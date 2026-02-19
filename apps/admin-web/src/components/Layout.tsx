@@ -11,8 +11,9 @@ export default function Layout() {
         <Link to="/" style={{ color: 'inherit', textDecoration: 'none', fontSize: '1.25rem', fontWeight: 600 }}>Admin</Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
           <Link to="/" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>Dashboard</Link>
-          <Link to="/questions" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>Questions</Link>
           <Link to="/tests" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>Tests</Link>
+          <Link to="/questions" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>Questions</Link>
+          <Link to="/students" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>Students</Link>
         </nav>
         <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>{user?.email}</span>

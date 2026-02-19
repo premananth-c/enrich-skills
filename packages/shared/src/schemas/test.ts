@@ -27,11 +27,15 @@ export const testScheduleSchema = z.object({
 export const createTestSchema = z.object({
   title: z.string().min(2),
   type: z.enum(['coding', 'mcq']),
+  difficulty: z.enum(['easy', 'medium', 'hard']).optional(),
   config: testConfigSchema,
   schedule: testScheduleSchema.optional(),
   questionIds: z.array(z.string().uuid()).optional(),
 });
 
-export const updateTestSchema = createTestSchema.partial();
+export const updateTestSchema = createTestSchema.partial().extend({
+  status: z.enum(['draft', 'published', 'archived']).optional(),
+});
 
 export type CreateTestInput = z.infer<typeof createTestSchema>;
+export type UpdateTestInput = z.infer<typeof updateTestSchema>;

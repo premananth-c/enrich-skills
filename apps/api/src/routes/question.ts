@@ -1,16 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma.js';
-import { createCodingQuestionSchema, createMcqQuestionSchema } from '@enrich-skills/shared';
-import { requireTenant } from '../lib/tenant.js';
-
-async function authenticate(request: FastifyRequest, reply: FastifyReply) {
-  try {
-    await request.jwtVerify();
-  } catch {
-    return reply.status(401).send({ error: 'Unauthorized' });
-  }
-}
+import { createCodingQuestionSchema, createMcqQuestionSchema, updateCodingQuestionSchema, updateMcqQuestionSchema } from '@enrich-skills/shared';
+import { requireTenant, authenticate } from '../lib/tenant.js';
 
 export async function questionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -99,5 +91,89 @@ export async function questionRoutes(app: FastifyInstance) {
     });
 
     return reply.status(201).send(question);
+  });
+
+  app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = requireTenant(request);
+    const existing = await prisma.question.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Question not found' });
+
+    if (existing.type === 'coding') {
+      const parsed = updateCodingQuestionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.flatten() });
+      }
+      const data = parsed.data;
+      const currentContent = existing.content as Record<string, unknown>;
+
+      const question = await prisma.question.update({
+        where: { id: request.params.id },
+        data: {
+          ...(data.difficulty && { difficulty: data.difficulty }),
+          ...(data.tags && { tags: data.tags }),
+          content: {
+            ...currentContent,
+            ...(data.title && { title: data.title }),
+            ...(data.description && { description: data.description }),
+            ...(data.examples !== undefined && { examples: data.examples }),
+            ...(data.constraints !== undefined && { constraints: data.constraints }),
+          },
+          ...(data.testCases && {
+            testCases: {
+              deleteMany: {},
+              create: data.testCases.map((tc) => ({
+                input: tc.input,
+                expectedOutput: tc.expectedOutput,
+                isPublic: tc.isPublic,
+                weight: tc.weight,
+              })),
+            },
+          }),
+        },
+        include: { testCases: true },
+      });
+      return reply.send(question);
+    } else {
+      const parsed = updateMcqQuestionSchema.safeParse(request.body);
+      if (!parsed.success) {
+        return reply.status(400).send({ error: parsed.error.flatten() });
+      }
+      const data = parsed.data;
+      const currentContent = existing.content as Record<string, unknown>;
+
+      const question = await prisma.question.update({
+        where: { id: request.params.id },
+        data: {
+          ...(data.difficulty && { difficulty: data.difficulty }),
+          ...(data.tags && { tags: data.tags }),
+          content: {
+            ...currentContent,
+            ...(data.title && { title: data.title }),
+            ...(data.description !== undefined && { description: data.description }),
+            ...(data.options && {
+              options: data.options.map((o) => ({
+                id: randomUUID(),
+                text: o.text,
+                isCorrect: o.isCorrect,
+              })),
+            }),
+            ...(data.explanation !== undefined && { explanation: data.explanation }),
+          },
+        },
+      });
+      return reply.send(question);
+    }
+  });
+
+  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = requireTenant(request);
+    const existing = await prisma.question.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Question not found' });
+    await prisma.question.delete({ where: { id: request.params.id } });
+    return reply.status(204).send();
   });
 }

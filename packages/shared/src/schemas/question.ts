@@ -32,5 +32,10 @@ export const createMcqQuestionSchema = z.object({
   explanation: z.string().optional(),
 });
 
+export const updateCodingQuestionSchema = createCodingQuestionSchema.partial();
+export const updateMcqQuestionSchema = createMcqQuestionSchema.partial();
+
 export type CreateCodingQuestionInput = z.infer<typeof createCodingQuestionSchema>;
 export type CreateMcqQuestionInput = z.infer<typeof createMcqQuestionSchema>;
+export type UpdateCodingQuestionInput = z.infer<typeof updateCodingQuestionSchema>;
+export type UpdateMcqQuestionInput = z.infer<typeof updateMcqQuestionSchema>;

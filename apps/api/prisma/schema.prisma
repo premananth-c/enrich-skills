@@ -23,42 +23,71 @@ model Tenant {
   tests    Test[]
   courses  Course[]
   questions Question[]
+  invites   Invite[]
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  tenantId  String
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  invitedBy String
+  testId    String?   // optional: when used, student is allocated to this test
+  variantId String?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User    @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+  test    Test?   @relation(fields: [testId], references: [id], onDelete: SetNull)
+  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([token])
+  @@index([tenantId, email])
 }
 
 model User {
-  id        String   @id @default(uuid())
-  tenantId  String
-  email     String
+  id           String   @id @default(uuid())
+  tenantId     String
+  email        String
   passwordHash String
-  name      String
-  role      String   @default("student") // student, admin, proctor, content_author, platform_operator
-  cohortIds String[] @default([])
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name         String
+  phoneNumber  String?  // student profile
+  address      String?  // student profile
+  role         String   @default("student") // student, admin, proctor, content_author, platform_operator
+  cohortIds    String[] @default([])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
   tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   attempts Attempt[]
+  invitesSent Invite[] @relation("InvitedBy")
 
   @@unique([tenantId, email])
   @@index([tenantId])
 }
 
 model Test {
-  id        String   @id @default(uuid())
-  tenantId  String
-  title     String
-  type      String   // coding, mcq
-  status    String   @default("draft") // draft, published, archived
-  config    Json
-  schedule  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  title      String
+  type       String   // coding, mcq
+  status     String   @default("draft") // draft, published, archived
+  difficulty String?  // easy, medium, hard (optional overall difficulty label)
+  config     Json
+  schedule   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
   tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   testQuestions   TestQuestion[]
   attempts        Attempt[]
   assignmentTests AssignmentTest[]
+  variants        TestVariant[]
+  allocations     TestAllocation[]
+  invites         Invite[]
 }
 
 model Question {
@@ -92,15 +121,49 @@ model TestCase {
 }
 
 model TestQuestion {
-  id         String @id @default(uuid())
+  id         String  @id @default(uuid())
   testId     String
   questionId String
-  order      Int    @default(0)
+  order      Int     @default(0)
+  variantId  String? // if null, belongs to default set; otherwise to a specific TestVariant
 
-  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  test     Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variant  TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@unique([testId, questionId])
+  @@index([testId])
+  @@index([variantId])
+}
+
+model TestVariant {
+  id         String @id @default(uuid())
+  testId     String
+  name       String // e.g. "Easy Set", "Medium Set"
+  difficulty String // easy, medium, hard
+  createdAt  DateTime @default(now())
+
+  test          Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testQuestions TestQuestion[]
+  allocations   TestAllocation[]
+  attempts      Attempt[]
+  invites       Invite[]
+
+  @@index([testId])
+}
+
+model TestAllocation {
+  id         String   @id @default(uuid())
+  userId     String
+  testId     String
+  variantId  String?
+  assignedBy String?  // admin user id who assigned
+  assignedAt DateTime @default(now())
+
+  test    Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, testId])
   @@index([testId])
 }
 
@@ -108,6 +171,7 @@ model Attempt {
   id          String    @id @default(uuid())
   userId      String
   testId      String
+  variantId   String?   // if the test has variants, which variant this attempt uses
   startedAt   DateTime  @default(now())
   submittedAt DateTime?
   score       Float?
@@ -116,6 +180,7 @@ model Attempt {
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   test        Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variant     TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   submissions Submission[]
 }
 

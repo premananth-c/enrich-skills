@@ -1,15 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { submitCodeSchema, submitMcqSchema } from '@enrich-skills/shared';
-import { requireTenant } from '../lib/tenant.js';
-
-async function authenticate(request: FastifyRequest, reply: FastifyReply) {
-  try {
-    await request.jwtVerify();
-  } catch {
-    return reply.status(401).send({ error: 'Unauthorized' });
-  }
-}
+import { requireTenant, authenticate } from '../lib/tenant.js';
 
 export async function attemptRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);

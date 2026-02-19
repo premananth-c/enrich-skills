@@ -7,6 +7,7 @@ export interface Test {
   title: string;
   type: TestType;
   status: TestStatus;
+  difficulty?: 'easy' | 'medium' | 'hard' | null;
   config: TestConfig;
   schedule: TestSchedule | null;
   createdAt: Date;

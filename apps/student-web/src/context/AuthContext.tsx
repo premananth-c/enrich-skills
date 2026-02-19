@@ -14,6 +14,7 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string, tenantId?: string) => Promise<void>;
   register: (email: string, password: string, name: string, tenantId?: string) => Promise<void>;
+  registerWithInvite: (token: string, password: string, name: string, phoneNumber: string, address: string) => Promise<void>;
   logout: () => void;
   setAuth: (user: User, accessToken: string) => void;
 }
@@ -79,6 +80,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setAuth(data.user, data.accessToken);
   }, [setAuth]);
 
+  const registerWithInvite = useCallback(async (token: string, password: string, name: string, phoneNumber: string, address: string) => {
+    const res = await fetch('/api/v1/auth/register-with-invite', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token, password, name, phoneNumber, address }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || 'Sign up failed');
+    }
+    const data = await res.json();
+    setAuth(data.user, data.accessToken);
+  }, [setAuth]);
+
   const logout = useCallback(() => {
     setUser(null);
     setAccessToken(null);
@@ -88,7 +103,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   return (
-    <AuthContext.Provider value={{ user, accessToken, loading, login, register, logout, setAuth }}>
+    <AuthContext.Provider value={{ user, accessToken, loading, login, register, registerWithInvite, logout, setAuth }}>
       {children}
     </AuthContext.Provider>
   );
