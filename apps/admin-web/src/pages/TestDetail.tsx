@@ -289,7 +289,7 @@ export default function TestDetail() {
         <div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
             <button onClick={openPool} style={{ padding: '0.4rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
-              + Add from Pool
+              + Add from Question Bank
             </button>
             <button onClick={() => navigate(`/questions/new?testId=${test.id}`)} style={{ padding: '0.4rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
               + Create New Question
@@ -424,12 +424,12 @@ export default function TestDetail() {
         </div>
       )}
 
-      {/* Question Pool Modal */}
+      {/* Question Bank Modal */}
       {poolOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
           <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 600, maxHeight: '70vh', display: 'flex', flexDirection: 'column' }}>
             <div style={{ padding: '1rem 1.25rem', borderBottom: '1px solid var(--color-border)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <h3 style={{ margin: 0 }}>Add Questions from Pool</h3>
+              <h3 style={{ margin: 0 }}>Add Questions from Question Bank</h3>
               <button onClick={() => setPoolOpen(false)} style={{ background: 'transparent', border: 'none', color: 'var(--color-text-muted)', fontSize: '1.25rem', cursor: 'pointer' }}>x</button>
             </div>
             <div style={{ flex: 1, overflow: 'auto', padding: '0.5rem' }}>

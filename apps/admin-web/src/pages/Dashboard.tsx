@@ -10,6 +10,8 @@ interface DashboardStats {
 
 export default function Dashboard() {
   const [stats, setStats] = useState<DashboardStats>({ tests: 0, questions: 0, students: 0 });
+  const [batchesCount, setBatchesCount] = useState(0);
+  const [coursesCount, setCoursesCount] = useState(0);
 
   useEffect(() => {
     api<DashboardStats>('/users/stats')
@@ -17,7 +19,14 @@ export default function Dashboard() {
       .catch(() => {});
   }, []);
 
+  useEffect(() => {
+    api<unknown[]>('/batches').then((b) => setBatchesCount(b.length)).catch(() => {});
+    api<unknown[]>('/courses').then((c) => setCoursesCount(c.length)).catch(() => {});
+  }, []);
+
   const cards = [
+    { label: 'Courses', value: coursesCount, to: '/courses' },
+    { label: 'Batches', value: batchesCount, to: '/batches' },
     { label: 'Tests', value: stats.tests, to: '/tests' },
     { label: 'Questions', value: stats.questions, to: '/questions' },
     { label: 'Students', value: stats.students, to: '/students' },

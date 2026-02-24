@@ -7,6 +7,8 @@ interface Student {
   name: string;
   role: string;
   isActive: boolean;
+  phoneNumber?: string | null;
+  address?: string | null;
   createdAt: string;
 }
 
@@ -27,6 +29,13 @@ export default function Students() {
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteError, setInviteError] = useState('');
   const [tests, setTests] = useState<TestOption[]>([]);
+  const [editOpen, setEditOpen] = useState(false);
+  const [editingStudent, setEditingStudent] = useState<Student | null>(null);
+  const [editForm, setEditForm] = useState({ name: '', email: '', phoneNumber: '', address: '', isActive: true });
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState('');
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteDeleting, setDeleteDeleting] = useState(false);
 
   const loadStudents = () => {
     api<Student[]>('/users?role=student')
@@ -69,10 +78,64 @@ export default function Students() {
       setInviteEmail('');
       setInviteTestId('');
       setInviteVariantId('');
+      loadStudents();
     } catch (err) {
       setInviteError(err instanceof Error ? err.message : 'Failed to send invite');
     } finally {
       setInviteSending(false);
+    }
+  };
+
+  const openEdit = (s: Student) => {
+    setEditingStudent(s);
+    setEditForm({
+      name: s.name ?? '',
+      email: s.email ?? '',
+      phoneNumber: s.phoneNumber ?? '',
+      address: s.address ?? '',
+      isActive: s.isActive ?? true,
+    });
+    setEditError('');
+    setEditOpen(true);
+  };
+
+  const handleEditSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingStudent) return;
+    setEditSaving(true);
+    setEditError('');
+    try {
+      const updated = await api<Student>('/users/' + editingStudent.id, {
+        method: 'PATCH',
+        body: JSON.stringify({
+          name: editForm.name.trim(),
+          email: editForm.email.trim(),
+          phoneNumber: editForm.phoneNumber.trim() || null,
+          address: editForm.address.trim() || null,
+          isActive: editForm.isActive,
+        }),
+      });
+      setStudents((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
+      setEditOpen(false);
+      setEditingStudent(null);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to update student');
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!deleteId) return;
+    setDeleteDeleting(true);
+    try {
+      await api('/users/' + deleteId, { method: 'DELETE' });
+      setStudents((prev) => prev.filter((s) => s.id !== deleteId));
+      setDeleteId(null);
+    } catch (err) {
+      alert(err instanceof Error ? err.message : 'Failed to delete student');
+    } finally {
+      setDeleteDeleting(false);
     }
   };
 
@@ -103,6 +166,7 @@ export default function Students() {
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
               </tr>
             </thead>
             <tbody>
@@ -116,6 +180,12 @@ export default function Students() {
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => openEdit(s)} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: 'pointer' }}>Edit</button>
+                      <button type="button" onClick={() => setDeleteId(s.id)} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: 'pointer' }}>Delete</button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -161,6 +231,56 @@ export default function Students() {
                 <button type="submit" disabled={inviteSending} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: inviteSending ? 0.7 : 1 }}>{inviteSending ? 'Sending...' : 'Send invite'}</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {editOpen && editingStudent && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 420, padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem' }}>Edit Student</h3>
+            {editError && <div style={{ padding: '0.5rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.9rem' }}>{editError}</div>}
+            <form onSubmit={handleEditSubmit}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Name</label>
+                <input value={editForm.name} onChange={(e) => setEditForm((f) => ({ ...f, name: e.target.value }))} style={inputStyle} placeholder="Full name" />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Email *</label>
+                <input type="email" value={editForm.email} onChange={(e) => setEditForm((f) => ({ ...f, email: e.target.value }))} required style={inputStyle} placeholder="student@example.com" />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Phone</label>
+                <input value={editForm.phoneNumber} onChange={(e) => setEditForm((f) => ({ ...f, phoneNumber: e.target.value }))} style={inputStyle} placeholder="Optional" />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Address</label>
+                <input value={editForm.address} onChange={(e) => setEditForm((f) => ({ ...f, address: e.target.value }))} style={inputStyle} placeholder="Optional" />
+              </div>
+              <div style={{ marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <input type="checkbox" id="edit-isActive" checked={editForm.isActive} onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))} />
+                <label htmlFor="edit-isActive" style={labelStyle}>Active (can sign in)</label>
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+                <button type="button" onClick={() => { setEditOpen(false); setEditingStudent(null); }} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
+                <button type="submit" disabled={editSaving} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: editSaving ? 0.7 : 1 }}>{editSaving ? 'Saving...' : 'Save'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {deleteId && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 380, padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 0.5rem' }}>Delete student?</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              This will permanently remove the student and their batch memberships, course assignments, and attempt history. This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button type="button" onClick={() => setDeleteId(null)} disabled={deleteDeleting} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
+              <button type="button" onClick={handleDeleteConfirm} disabled={deleteDeleting} style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: deleteDeleting ? 0.7 : 1 }}>{deleteDeleting ? 'Deleting...' : 'Delete'}</button>
+            </div>
           </div>
         </div>
       )}

@@ -9,6 +9,13 @@ import Tests from './pages/Tests';
 import TestDetail from './pages/TestDetail';
 import TestForm from './pages/TestForm';
 import Students from './pages/Students';
+import Batches from './pages/Batches';
+import BatchForm from './pages/BatchForm';
+import BatchDetail from './pages/BatchDetail';
+import Courses from './pages/Courses';
+import CourseForm from './pages/CourseForm';
+import CourseDetail from './pages/CourseDetail';
+import Reports from './pages/Reports';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -32,6 +39,15 @@ export default function App() {
           <Route path="tests/new" element={<TestForm />} />
           <Route path="tests/:id" element={<TestDetail />} />
           <Route path="tests/:id/edit" element={<TestForm />} />
+          <Route path="batches" element={<Batches />} />
+          <Route path="batches/new" element={<BatchForm />} />
+          <Route path="batches/:id" element={<BatchDetail />} />
+          <Route path="batches/:id/edit" element={<BatchForm />} />
+          <Route path="courses" element={<Courses />} />
+          <Route path="courses/new" element={<CourseForm />} />
+          <Route path="courses/:id" element={<CourseDetail />} />
+          <Route path="courses/:id/edit" element={<CourseForm />} />
+          <Route path="reports" element={<Reports />} />
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
