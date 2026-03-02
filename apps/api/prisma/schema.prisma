@@ -19,46 +19,83 @@ model Tenant {
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  users    User[]
-  tests    Test[]
-  courses  Course[]
-  questions Question[]
+  users             User[]
+  tests             Test[]
+  courses           Course[]
+  questions         Question[]
+  invites           Invite[]
+  batches           Batch[]
+  courseAssignments CourseAssignment[]
+}
+
+model Invite {
+  id        String    @id @default(uuid())
+  tenantId  String
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  invitedBy String
+  testId    String?   // optional: when used, student is allocated to this test
+  variantId String?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User    @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+  test    Test?   @relation(fields: [testId], references: [id], onDelete: SetNull)
+  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([token])
+  @@index([tenantId, email])
 }
 
 model User {
-  id        String   @id @default(uuid())
-  tenantId  String
-  email     String
+  id           String   @id @default(uuid())
+  tenantId     String
+  email        String
   passwordHash String
-  name      String
-  role      String   @default("student") // student, admin, proctor, content_author, platform_operator
-  cohortIds String[] @default([])
-  isActive  Boolean  @default(true)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name         String
+  phoneNumber  String?  // student profile
+  address      String?  // student profile
+  role         String   @default("student") // student, admin, proctor, content_author, platform_operator
+  cohortIds    String[] @default([])
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  tenant   Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attempts Attempt[]
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts         Attempt[]
+  invitesSent      Invite[]          @relation("InvitedBy")
+  batchMembers     BatchMember[]
+  courseAssignments CourseAssignment[]
+  schedulerNotes   SchedulerNote[]
+  batchVideos      BatchVideo[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
 }
 
 model Test {
-  id        String   @id @default(uuid())
-  tenantId  String
-  title     String
-  type      String   // coding, mcq
-  status    String   @default("draft") // draft, published, archived
-  config    Json
-  schedule  Json?
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  id         String   @id @default(uuid())
+  tenantId   String
+  title      String
+  type       String   // coding, mcq
+  status     String   @default("draft") // draft, published, archived
+  difficulty String?  // easy, medium, hard (optional overall difficulty label)
+  config     Json
+  schedule   Json?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  testQuestions   TestQuestion[]
-  attempts        Attempt[]
-  assignmentTests AssignmentTest[]
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  testQuestions    TestQuestion[]
+  attempts         Attempt[]
+  assignmentTests  AssignmentTest[]
+  variants         TestVariant[]
+  allocations      TestAllocation[]
+  invites          Invite[]
+  courseEvaluations CourseEvaluation[]
+  batchTestAssignments BatchTestAssignment[]
 }
 
 model Question {
@@ -92,15 +129,49 @@ model TestCase {
 }
 
 model TestQuestion {
-  id         String @id @default(uuid())
+  id         String  @id @default(uuid())
   testId     String
   questionId String
-  order      Int    @default(0)
+  order      Int     @default(0)
+  variantId  String? // if null, belongs to default set; otherwise to a specific TestVariant
 
-  test     Test     @relation(fields: [testId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  test     Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  question Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  variant  TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
 
   @@unique([testId, questionId])
+  @@index([testId])
+  @@index([variantId])
+}
+
+model TestVariant {
+  id         String @id @default(uuid())
+  testId     String
+  name       String // e.g. "Easy Set", "Medium Set"
+  difficulty String // easy, medium, hard
+  createdAt  DateTime @default(now())
+
+  test          Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
+  testQuestions TestQuestion[]
+  allocations   TestAllocation[]
+  attempts      Attempt[]
+  invites       Invite[]
+
+  @@index([testId])
+}
+
+model TestAllocation {
+  id         String   @id @default(uuid())
+  userId     String
+  testId     String
+  variantId  String?
+  assignedBy String?  // admin user id who assigned
+  assignedAt DateTime @default(now())
+
+  test    Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@unique([userId, testId])
   @@index([testId])
 }
 
@@ -108,6 +179,7 @@ model Attempt {
   id          String    @id @default(uuid())
   userId      String
   testId      String
+  variantId   String?   // if the test has variants, which variant this attempt uses
   startedAt   DateTime  @default(now())
   submittedAt DateTime?
   score       Float?
@@ -116,6 +188,7 @@ model Attempt {
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   test        Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
+  variant     TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   submissions Submission[]
 }
 
@@ -149,8 +222,11 @@ model Course {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant      Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignments Assignment[]
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignments       Assignment[]
+  chapters          CourseChapter[]
+  courseAssignments CourseAssignment[]
+  scheduleEvents    BatchScheduleEvent[]
 }
 
 model Assignment {
@@ -178,3 +254,212 @@ model AssignmentTest {
   @@unique([assignmentId, testId])
 }
 
+// ----- LMS: Batch -----
+model Batch {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members           BatchMember[]
+  scheduleEvents    BatchScheduleEvent[]
+  schedulerNotes    SchedulerNote[]
+  batchVideos       BatchVideo[]
+  courseAssignments CourseAssignment[]
+  batchTests        BatchTestAssignment[]
+
+  @@index([tenantId])
+}
+
+model BatchTestAssignment {
+  id         String   @id @default(uuid())
+  batchId    String
+  testId     String
+  assignedAt DateTime @default(now())
+  assignedBy String?
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  test  Test  @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, testId])
+  @@index([batchId])
+  @@index([testId])
+}
+
+model BatchMember {
+  id       String   @id @default(uuid())
+  batchId  String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  batch Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, userId])
+  @@index([batchId])
+  @@index([userId])
+}
+
+// ----- LMS: Course structure (Chapter → Topic → Materials/Activities/Evaluations) -----
+model CourseChapter {
+  id        String   @id @default(uuid())
+  courseId  String
+  title     String
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  course Course        @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  topics CourseTopic[]
+
+  @@index([courseId])
+}
+
+model CourseTopic {
+  id        String   @id @default(uuid())
+  chapterId String
+  title     String
+  order     Int      @default(0)
+  content   String?  // rich text or markdown
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  chapter     CourseChapter     @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  materials   CourseMaterial[]
+  activities  CourseActivity[]
+  evaluations CourseEvaluation[]
+
+  @@index([chapterId])
+}
+
+model CourseMaterial {
+  id         String   @id @default(uuid())
+  topicId    String
+  type       String   // pdf, link
+  title      String
+  storageKey String?  // key in storage for PDF
+  url        String?  // optional external URL
+  order      Int      @default(0)
+  createdAt  DateTime @default(now())
+
+  topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+model CourseActivity {
+  id        String   @id @default(uuid())
+  topicId   String
+  type      String   // assignment, discussion, etc.
+  title     String
+  config    Json     @default("{}")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+
+  @@index([topicId])
+}
+
+model CourseEvaluation {
+  id        String   @id @default(uuid())
+  topicId   String
+  type      String   // quiz, test, mcp
+  title     String
+  testId    String?  // link to existing Test
+  config    Json     @default("{}")
+  order     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  test  Test?       @relation(fields: [testId], references: [id], onDelete: SetNull)
+
+  @@index([topicId])
+  @@index([testId])
+}
+
+// ----- LMS: Assign course to Batch or User -----
+model CourseAssignment {
+  id         String   @id @default(uuid())
+  tenantId   String
+  courseId   String
+  batchId    String?
+  userId     String?
+  assignedBy String
+  assignedAt DateTime @default(now())
+  dueDate    DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  batch  Batch? @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  user   User?  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([courseId])
+  @@index([batchId])
+  @@index([userId])
+}
+
+// ----- LMS: Calendar per batch -----
+model BatchScheduleEvent {
+  id        String   @id @default(uuid())
+  batchId   String
+  title     String
+  startAt   DateTime
+  endAt     DateTime
+  type      String?  // class, exam, live_session
+  courseId  String?
+  location  String?
+  metadata  Json     @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch  Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  course Course? @relation(fields: [courseId], references: [id], onDelete: SetNull)
+
+  @@index([batchId])
+  @@index([startAt, endAt])
+}
+
+// ----- LMS: Notes on scheduler (per day, per batch) -----
+model SchedulerNote {
+  id        String   @id @default(uuid())
+  batchId   String
+  date      DateTime @db.Date
+  content   String
+  createdBy String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  batch  Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  author User  @relation(fields: [createdBy], references: [id], onDelete: Cascade)
+
+  @@unique([batchId, date])
+  @@index([batchId])
+}
+
+// ----- LMS: Batch-level recorded videos -----
+model BatchVideo {
+  id              String   @id @default(uuid())
+  batchId         String
+  title           String
+  description     String?
+  storageKey      String
+  mimeType        String   @default("video/mp4")
+  sizeBytes       Int?
+  durationSeconds Int?
+  order           Int      @default(0)
+  uploadedBy      String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  batch    Batch @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  uploader User  @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
+}

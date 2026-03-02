@@ -1,13 +1,87 @@
 :root {
-  --color-bg: #0c0c0e;
-  --color-surface: #161619;
-  --color-border: #27272a;
-  --color-primary: #8b5cf6;
-  --color-text: #fafafa;
-  --color-text-muted: #a1a1aa;
+  --color-bg: #f5f5f7;
+  --color-surface: #ffffff;
+  --color-border: #e0e0e0;
+  --color-primary: #6366f1;
+  --color-text: #1a1a1a;
+  --color-text-muted: #6b7280;
   --font-sans: 'DM Sans', system-ui, sans-serif;
 }
 
 * { box-sizing: border-box; }
 body { margin: 0; font-family: var(--font-sans); background: var(--color-bg); color: var(--color-text); }
 button { font-family: inherit; cursor: pointer; }
+
+/* Rich text editor */
+.rich-text-editor { border: 1px solid var(--color-border); border-radius: 8px; background: var(--color-surface); }
+.rich-text-editor .tiptap,
+.rich-text-editor .rich-text-editor-content {
+  outline: none;
+  color: var(--color-text);
+  font-size: 0.95rem;
+  line-height: 1.6;
+  padding: 8px 12px;
+}
+.rich-text-editor .tiptap p { margin: 0.5em 0; }
+.rich-text-editor .tiptap p:first-child { margin-top: 0; }
+.rich-text-editor .tiptap ul, .rich-text-editor .tiptap ol { padding-left: 1.5em; margin: 0.5em 0; }
+.rich-text-editor .tiptap h1 { font-size: 1.5rem; margin: 0.75em 0 0.25em; }
+.rich-text-editor .tiptap h2 { font-size: 1.25rem; margin: 0.6em 0 0.2em; }
+.rich-text-editor .tiptap h3 { font-size: 1.1rem; margin: 0.5em 0 0.2em; }
+.rich-text-editor .tiptap a { color: var(--color-primary); text-decoration: underline; }
+.rich-text-editor .tiptap img { max-width: 100%; height: auto; border-radius: 4px; }
+.rich-text-editor .tiptap table { border-collapse: collapse; width: 100%; margin: 0.75em 0; }
+.rich-text-editor .tiptap th,
+.rich-text-editor .tiptap td { border: 1px solid var(--color-border); padding: 0.4em 0.6em; text-align: left; }
+.rich-text-editor .tiptap th { background: var(--color-border); font-weight: 600; }
+/* Read-only rich text (e.g. topic content display) */
+.rich-text-readonly p { margin: 0.5em 0; }
+.rich-text-readonly ul, .rich-text-readonly ol { padding-left: 1.5em; margin: 0.5em 0; }
+.rich-text-readonly a { color: var(--color-primary); text-decoration: underline; }
+.rich-text-readonly img { max-width: 100%; height: auto; border-radius: 4px; }
+.rich-text-readonly table { border-collapse: collapse; width: 100%; margin: 0.75em 0; }
+.rich-text-readonly th, .rich-text-readonly td { border: 1px solid var(--color-border); padding: 0.4em 0.6em; text-align: left; }
+.rich-text-readonly th { background: var(--color-border); font-weight: 600; }
+.rich-text-editor .tiptap .tiptap-placeholder::before {
+  color: var(--color-text-muted);
+  content: attr(data-placeholder);
+  float: left;
+  height: 0;
+  pointer-events: none;
+}
+.rich-text-editor-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; border-bottom: 1px solid var(--color-border); padding: 6px 8px; }
+.rich-text-editor-toolbar button {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 32px; height: 32px;
+  border: 1px solid var(--color-border); border-radius: 4px;
+  background: var(--color-surface); color: var(--color-text);
+  font-size: 0.85rem;
+}
+.rich-text-editor-toolbar button:hover:not(:disabled) { background: var(--color-border); }
+.rich-text-editor-toolbar button:disabled { opacity: 0.5; }
+.rich-text-editor-toolbar .sep { width: 1px; height: 22px; background: var(--color-border); }
+.rich-text-editor-toolbar select.rich-text-editor-select {
+  height: 32px; padding: 0 6px; border-radius: 4px; border: 1px solid var(--color-border);
+  background: var(--color-surface); color: var(--color-text); font-size: 0.8rem; min-width: 0;
+}
+.rich-text-editor-toolbar select.rich-text-editor-select:hover { background: var(--color-border); }
+.rich-text-editor-popover {
+  position: absolute; left: 0; top: 100%; margin-top: 4px; z-index: 20;
+  display: flex; align-items: center; gap: 6px; padding: 8px;
+  border-radius: 6px; border: 1px solid var(--color-border);
+  background: var(--color-surface); box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.rich-text-editor-popover input {
+  width: 180px; padding: 4px 8px; border-radius: 4px;
+  border: 1px solid var(--color-border); background: var(--color-surface); color: var(--color-text); font-size: 0.85rem;
+}
+.rich-text-editor-popover-image { flex-direction: column; align-items: stretch; min-width: 260px; }
+.rich-text-editor-bubble {
+  display: flex; gap: 4px; padding: 6px 8px; border-radius: 6px; border: 1px solid var(--color-border);
+  background: var(--color-surface); box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.rich-text-editor-bubble button {
+  padding: 4px 10px; font-size: 0.85rem; border: 1px solid var(--color-border); border-radius: 4px;
+  background: var(--color-surface); color: var(--color-text);
+}
+.rich-text-editor-bubble button:hover { background: var(--color-border); }
