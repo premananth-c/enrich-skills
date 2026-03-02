@@ -50,9 +50,11 @@ export async function reportsRoutes(app: FastifyInstance) {
         },
         orderBy: { startedAt: 'desc' },
       });
-      const batches = batchId
-        ? await prisma.batch.findMany({ where: { id: batchId, tenantId }, select: { id: true, name: true } })
-        : await prisma.batch.findMany({ where: { tenantId }, select: { id: true, name: true }, orderBy: { name: 'asc' } });
+      const batches = await prisma.batch.findMany({
+        where: { tenantId },
+        select: { id: true, name: true },
+        orderBy: { name: 'asc' },
+      });
       return reply.send({ test, attempts, batches });
     }
 
