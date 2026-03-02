@@ -12,8 +12,7 @@ export interface CourseChapter {
   courseId: string;
   title: string;
   order: number;
-  createdAt: Date;
-  updatedAt: Date;
+  topics?: CourseTopic[];
 }
 
 export interface CourseTopic {
@@ -22,8 +21,9 @@ export interface CourseTopic {
   title: string;
   order: number;
   content: string | null;
-  createdAt: Date;
-  updatedAt: Date;
+  materials?: CourseMaterial[];
+  activities?: CourseActivity[];
+  evaluations?: CourseEvaluation[];
 }
 
 export interface CourseMaterial {
@@ -34,7 +34,6 @@ export interface CourseMaterial {
   storageKey: string | null;
   url: string | null;
   order: number;
-  createdAt: Date;
 }
 
 export interface CourseActivity {
@@ -44,18 +43,27 @@ export interface CourseActivity {
   title: string;
   config: Record<string, unknown>;
   order: number;
-  createdAt: Date;
 }
 
 export interface CourseEvaluation {
   id: string;
   topicId: string;
-  type: 'quiz' | 'test' | 'mcp';
+  type: string;
   title: string;
   testId: string | null;
   config: Record<string, unknown>;
   order: number;
-  createdAt: Date;
+}
+
+export interface ActivitySubmission {
+  id: string;
+  activityId: string;
+  userId: string;
+  storageKey: string;
+  fileName: string;
+  fileSizeBytes: number | null;
+  submittedAt: Date;
+  updatedAt: Date;
 }
 
 export interface CourseAssignment {
@@ -67,6 +75,17 @@ export interface CourseAssignment {
   assignedBy: string;
   assignedAt: Date;
   dueDate: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
+  course?: Course;
+}
+
+export interface BatchScheduleEvent {
+  id: string;
+  batchId: string;
+  title: string;
+  startAt: Date;
+  endAt: Date;
+  type: string | null;
+  courseId: string | null;
+  location: string | null;
+  metadata: Record<string, unknown>;
 }

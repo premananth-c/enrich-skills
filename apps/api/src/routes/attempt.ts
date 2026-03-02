@@ -10,7 +10,7 @@ export async function attemptRoutes(app: FastifyInstance) {
     const user = request.user as { sub: string };
     const attempts = await prisma.attempt.findMany({
       where: { userId: user.sub },
-      include: { test: { select: { title: true } } },
+      include: { test: { select: { title: true, config: true } } },
       orderBy: { startedAt: 'desc' },
       take: 20,
     });
@@ -51,7 +51,14 @@ export async function attemptRoutes(app: FastifyInstance) {
         },
       },
       include: {
-        test: { include: { testQuestions: { include: { question: { include: { testCases: { where: { isPublic: true } } } } }, orderBy: { order: 'asc' } } } },
+        test: {
+          include: {
+            testQuestions: {
+              include: { question: { include: { testCases: { where: { isPublic: true } } } } },
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
         submissions: true,
       },
     });
@@ -64,12 +71,55 @@ export async function attemptRoutes(app: FastifyInstance) {
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub },
       include: {
-        test: { include: { testQuestions: { include: { question: true }, orderBy: { order: 'asc' } } } },
+        test: {
+          include: {
+            testQuestions: {
+              include: { question: { include: { testCases: { where: { isPublic: true } } } } },
+              orderBy: { order: 'asc' },
+            },
+          },
+        },
         submissions: { include: { question: true } },
       },
     });
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
     return reply.send(attempt);
+  });
+
+  // GET /:id/result — returns full attempt result when available
+  app.get('/:id/result', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const user = request.user as { sub: string };
+    const attempt = await prisma.attempt.findFirst({
+      where: { id: request.params.id, userId: user.sub },
+      include: {
+        test: {
+          select: { id: true, title: true, type: true, config: true },
+        },
+        submissions: {
+          include: { question: { select: { id: true, type: true, content: true } } },
+        },
+      },
+    });
+    if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
+
+    if (attempt.status === 'in_progress') {
+      return reply.status(400).send({ error: 'Attempt is still in progress' });
+    }
+
+    const config = attempt.test.config as { showResultsImmediately?: boolean };
+    if (!config.showResultsImmediately && attempt.status !== 'graded') {
+      return reply.send({
+        id: attempt.id,
+        status: attempt.status,
+        resultsAvailable: false,
+        message: 'Results will be shared by your instructor.',
+      });
+    }
+
+    return reply.send({
+      ...attempt,
+      resultsAvailable: true,
+    });
   });
 
   app.post('/:id/submit-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
@@ -134,7 +184,7 @@ export async function attemptRoutes(app: FastifyInstance) {
     const user = request.user as { sub: string };
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
-      include: { submissions: true },
+      include: { submissions: true, test: { select: { config: true } } },
     });
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
 
@@ -146,6 +196,19 @@ export async function attemptRoutes(app: FastifyInstance) {
       data: { submittedAt: new Date(), score: totalScore, maxScore, status: 'submitted' },
     });
 
-    return reply.send({ message: 'Attempt submitted', score: totalScore, maxScore });
+    const config = attempt.test.config as { showResultsImmediately?: boolean };
+    if (config.showResultsImmediately) {
+      return reply.send({
+        message: 'Attempt submitted',
+        score: totalScore,
+        maxScore,
+        resultsAvailable: true,
+      });
+    }
+
+    return reply.send({
+      message: 'Attempt submitted. Results will be shared by your instructor.',
+      resultsAvailable: false,
+    });
   });
 }

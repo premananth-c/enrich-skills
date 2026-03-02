@@ -12,4 +12,5 @@ export interface BatchMember {
   batchId: string;
   userId: string;
   joinedAt: Date;
+  batch?: Batch;
 }

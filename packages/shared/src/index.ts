@@ -4,6 +4,8 @@ export * from './types/user.js';
 export * from './types/test.js';
 export * from './types/question.js';
 export * from './types/attempt.js';
+export * from './types/course.js';
+export * from './types/notification.js';
 export * from './types/batch.js';
 export * from './types/course.js';
 export * from './types/schedule.js';

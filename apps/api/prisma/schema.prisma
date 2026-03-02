@@ -25,28 +25,8 @@ model Tenant {
   questions         Question[]
   invites           Invite[]
   batches           Batch[]
-  courseAssignments CourseAssignment[]
-}
-
-model Invite {
-  id        String    @id @default(uuid())
-  tenantId  String
-  email     String
-  token     String    @unique
-  expiresAt DateTime
-  invitedBy String
-  testId    String?   // optional: when used, student is allocated to this test
-  variantId String?
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  tenant  Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  inviter User    @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
-  test    Test?   @relation(fields: [testId], references: [id], onDelete: SetNull)
-  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
-
-  @@index([token])
-  @@index([tenantId, email])
+  courseAssignments  CourseAssignment[]
+  notifications     Notification[]
 }
 
 model User {
@@ -55,6 +35,8 @@ model User {
   email        String
   passwordHash String
   name         String
+  phoneNumber  String?
+  address      String?
   phoneNumber  String?  // student profile
   address      String?  // student profile
   role         String   @default("student") // student, admin, proctor, content_author, platform_operator
@@ -63,13 +45,15 @@ model User {
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  attempts         Attempt[]
-  invitesSent      Invite[]          @relation("InvitedBy")
-  batchMembers     BatchMember[]
-  courseAssignments CourseAssignment[]
-  schedulerNotes   SchedulerNote[]
-  batchVideos      BatchVideo[]
+  tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  attempts             Attempt[]
+  invitesSent          Invite[]             @relation("InvitedBy")
+  batchMembers         BatchMember[]
+  courseAssignments     CourseAssignment[]
+  schedulerNotes       SchedulerNote[]
+  batchVideos          BatchVideo[]
+  notifications        Notification[]
+  activitySubmissions  ActivitySubmission[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -81,20 +65,20 @@ model Test {
   title      String
   type       String   // coding, mcq
   status     String   @default("draft") // draft, published, archived
-  difficulty String?  // easy, medium, hard (optional overall difficulty label)
+  difficulty String?
   config     Json
   schedule   Json?
   createdAt  DateTime @default(now())
   updatedAt  DateTime @updatedAt
 
-  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  testQuestions    TestQuestion[]
-  attempts         Attempt[]
-  assignmentTests  AssignmentTest[]
-  variants         TestVariant[]
-  allocations      TestAllocation[]
-  invites          Invite[]
-  courseEvaluations CourseEvaluation[]
+  tenant               Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  testQuestions        TestQuestion[]
+  attempts             Attempt[]
+  assignmentTests      AssignmentTest[]
+  variants             TestVariant[]
+  allocations          TestAllocation[]
+  invites              Invite[]
+  courseEvaluations     CourseEvaluation[]
   batchTestAssignments BatchTestAssignment[]
 }
 
@@ -133,7 +117,7 @@ model TestQuestion {
   testId     String
   questionId String
   order      Int     @default(0)
-  variantId  String? // if null, belongs to default set; otherwise to a specific TestVariant
+  variantId  String?
 
   test     Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
   question Question     @relation(fields: [questionId], references: [id], onDelete: Cascade)
@@ -145,10 +129,10 @@ model TestQuestion {
 }
 
 model TestVariant {
-  id         String @id @default(uuid())
+  id         String   @id @default(uuid())
   testId     String
-  name       String // e.g. "Easy Set", "Medium Set"
-  difficulty String // easy, medium, hard
+  name       String
+  difficulty String
   createdAt  DateTime @default(now())
 
   test          Test             @relation(fields: [testId], references: [id], onDelete: Cascade)
@@ -165,7 +149,7 @@ model TestAllocation {
   userId     String
   testId     String
   variantId  String?
-  assignedBy String?  // admin user id who assigned
+  assignedBy String?
   assignedAt DateTime @default(now())
 
   test    Test         @relation(fields: [testId], references: [id], onDelete: Cascade)
@@ -175,11 +159,32 @@ model TestAllocation {
   @@index([testId])
 }
 
+model Invite {
+  id        String    @id @default(uuid())
+  tenantId  String
+  email     String
+  token     String    @unique
+  expiresAt DateTime
+  invitedBy String
+  testId    String?
+  variantId String?
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  inviter User         @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
+  test    Test?        @relation(fields: [testId], references: [id], onDelete: SetNull)
+  variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([token])
+  @@index([tenantId, email])
+}
+
 model Attempt {
   id          String    @id @default(uuid())
   userId      String
   testId      String
-  variantId   String?   // if the test has variants, which variant this attempt uses
+  variantId   String?
   startedAt   DateTime  @default(now())
   submittedAt DateTime?
   score       Float?
@@ -222,10 +227,10 @@ model Course {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   assignments       Assignment[]
   chapters          CourseChapter[]
-  courseAssignments CourseAssignment[]
+  courseAssignments  CourseAssignment[]
   scheduleEvents    BatchScheduleEvent[]
 }
 
@@ -239,7 +244,7 @@ model Assignment {
   createdAt   DateTime  @default(now())
   updatedAt   DateTime  @updatedAt
 
-  course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  course          Course           @relation(fields: [courseId], references: [id], onDelete: Cascade)
   assignmentTests AssignmentTest[]
 }
 
@@ -263,12 +268,12 @@ model Batch {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  tenant            Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   members           BatchMember[]
   scheduleEvents    BatchScheduleEvent[]
   schedulerNotes    SchedulerNote[]
   batchVideos       BatchVideo[]
-  courseAssignments CourseAssignment[]
+  courseAssignments  CourseAssignment[]
   batchTests        BatchTestAssignment[]
 
   @@index([tenantId])
@@ -303,10 +308,10 @@ model BatchMember {
   @@index([userId])
 }
 
-// ----- LMS: Course structure (Chapter → Topic → Materials/Activities/Evaluations) -----
+// ----- LMS: Course structure -----
 model CourseChapter {
   id        String   @id @default(uuid())
-  courseId  String
+  courseId   String
   title     String
   order     Int      @default(0)
   createdAt DateTime @default(now())
@@ -323,7 +328,7 @@ model CourseTopic {
   chapterId String
   title     String
   order     Int      @default(0)
-  content   String?  // rich text or markdown
+  content   String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -340,8 +345,8 @@ model CourseMaterial {
   topicId    String
   type       String   // pdf, link
   title      String
-  storageKey String?  // key in storage for PDF
-  url        String?  // optional external URL
+  storageKey String?
+  url        String?
   order      Int      @default(0)
   createdAt  DateTime @default(now())
 
@@ -353,13 +358,14 @@ model CourseMaterial {
 model CourseActivity {
   id        String   @id @default(uuid())
   topicId   String
-  type      String   // assignment, discussion, etc.
+  type      String   // assignment, discussion
   title     String
   config    Json     @default("{}")
   order     Int      @default(0)
   createdAt DateTime @default(now())
 
-  topic CourseTopic @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  topic       CourseTopic          @relation(fields: [topicId], references: [id], onDelete: Cascade)
+  submissions ActivitySubmission[]
 
   @@index([topicId])
 }
@@ -367,9 +373,9 @@ model CourseActivity {
 model CourseEvaluation {
   id        String   @id @default(uuid())
   topicId   String
-  type      String   // quiz, test, mcp
+  type      String   // quiz, test
   title     String
-  testId    String?  // link to existing Test
+  testId    String?
   config    Json     @default("{}")
   order     Int      @default(0)
   createdAt DateTime @default(now())
@@ -383,16 +389,16 @@ model CourseEvaluation {
 
 // ----- LMS: Assign course to Batch or User -----
 model CourseAssignment {
-  id         String   @id @default(uuid())
+  id         String    @id @default(uuid())
   tenantId   String
-  courseId   String
+  courseId    String
   batchId    String?
   userId     String?
   assignedBy String
-  assignedAt DateTime @default(now())
+  assignedAt DateTime  @default(now())
   dueDate    DateTime?
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   course Course @relation(fields: [courseId], references: [id], onDelete: Cascade)
@@ -413,7 +419,7 @@ model BatchScheduleEvent {
   startAt   DateTime
   endAt     DateTime
   type      String?  // class, exam, live_session
-  courseId  String?
+  courseId   String?
   location  String?
   metadata  Json     @default("{}")
   createdAt DateTime @default(now())
@@ -426,7 +432,7 @@ model BatchScheduleEvent {
   @@index([startAt, endAt])
 }
 
-// ----- LMS: Notes on scheduler (per day, per batch) -----
+// ----- LMS: Notes on scheduler -----
 model SchedulerNote {
   id        String   @id @default(uuid())
   batchId   String
@@ -443,7 +449,7 @@ model SchedulerNote {
   @@index([batchId])
 }
 
-// ----- LMS: Batch-level recorded videos -----
+// ----- LMS: Batch videos -----
 model BatchVideo {
   id              String   @id @default(uuid())
   batchId         String
@@ -463,3 +469,41 @@ model BatchVideo {
 
   @@index([batchId])
 }
+
+// ----- Notifications -----
+model Notification {
+  id        String   @id @default(uuid())
+  userId    String
+  tenantId  String
+  type      String   // test_allocated, course_assigned, result_ready, announcement
+  title     String
+  message   String
+  metadata  Json     @default("{}")
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@index([tenantId])
+}
+
+// ----- Activity Submissions -----
+model ActivitySubmission {
+  id            String   @id @default(uuid())
+  activityId    String
+  userId        String
+  storageKey    String
+  fileName      String
+  fileSizeBytes Int?
+  submittedAt   DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  activity CourseActivity @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  user     User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([activityId, userId])
+  @@index([activityId])
+}
+
