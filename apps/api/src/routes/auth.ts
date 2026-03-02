@@ -1,5 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { loginSchema, registerSchema } from '@enrich-skills/shared';
 import { randomUUID } from 'crypto';

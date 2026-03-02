@@ -4,8 +4,13 @@ import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import TestList from './pages/TestList';
+import MyTests from './pages/MyTests';
 import TestAttempt from './pages/TestAttempt';
+import TestResult from './pages/TestResult';
+import MyCourses from './pages/MyCourses';
+import CourseDetail from './pages/CourseDetail';
+import Calendar from './pages/Calendar';
+import Notifications from './pages/Notifications';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -28,8 +33,13 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard />} />
-        <Route path="tests" element={<TestList />} />
+        <Route path="tests" element={<MyTests />} />
         <Route path="attempt/:attemptId" element={<TestAttempt />} />
+        <Route path="result/:attemptId" element={<TestResult />} />
+        <Route path="courses" element={<MyCourses />} />
+        <Route path="courses/:courseId" element={<CourseDetail />} />
+        <Route path="calendar" element={<Calendar />} />
+        <Route path="notifications" element={<Notifications />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
