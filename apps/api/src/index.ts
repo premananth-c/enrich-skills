@@ -8,6 +8,15 @@ import { testRoutes } from './routes/test.js';
 import { questionRoutes } from './routes/question.js';
 import { attemptRoutes } from './routes/attempt.js';
 import { studentRoutes } from './routes/student.js';
+import { userRoutes } from './routes/users.js';
+import { inviteRoutes } from './routes/invites.js';
+import { batchRoutes } from './routes/batches.js';
+import { courseRoutes } from './routes/courses.js';
+import { courseAssignmentRoutes } from './routes/courseAssignments.js';
+import { scheduleRoutes } from './routes/schedule.js';
+import { schedulerNotesRoutes } from './routes/schedulerNotes.js';
+import { batchVideoRoutes } from './routes/batchVideos.js';
+import { reportsRoutes } from './routes/reports.js';
 import { prisma } from './lib/prisma.js';
 
 const app = Fastify({ logger: true });
@@ -27,6 +36,15 @@ async function main() {
   app.register(questionRoutes, { prefix: '/api/v1/questions' });
   app.register(attemptRoutes, { prefix: '/api/v1/attempts' });
   app.register(studentRoutes, { prefix: '/api/v1/student' });
+  app.register(userRoutes, { prefix: '/api/v1/users' });
+  app.register(inviteRoutes, { prefix: '/api/v1/invites' });
+  app.register(batchRoutes, { prefix: '/api/v1/batches' });
+  app.register(courseRoutes, { prefix: '/api/v1/courses' });
+  app.register(courseAssignmentRoutes, { prefix: '/api/v1/course-assignments' });
+  app.register(scheduleRoutes, { prefix: '/api/v1/schedule' });
+  app.register(schedulerNotesRoutes, { prefix: '/api/v1/schedule' });
+  app.register(batchVideoRoutes, { prefix: '/api/v1/schedule' });
+  app.register(reportsRoutes, { prefix: '/api/v1/reports' });
 
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });

@@ -3,6 +3,7 @@ import { AuthProvider, useAuth } from './context/AuthContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
+import InviteSignup from './pages/InviteSignup';
 import Dashboard from './pages/Dashboard';
 import MyTests from './pages/MyTests';
 import TestAttempt from './pages/TestAttempt';
@@ -24,6 +25,7 @@ function AppRoutes() {
     <Routes>
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/invite" element={<InviteSignup />} />
       <Route
         path="/"
         element={
