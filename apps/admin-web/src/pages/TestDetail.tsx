@@ -31,8 +31,13 @@ interface TestData {
   title: string;
   type: string;
   status: string;
-  difficulty?: string;
-  config: { durationMinutes: number; attemptLimit: number };
+  config: {
+    durationMinutes: number;
+    attemptLimit: number;
+    passPercentage?: number;
+    scoreDistribution?: 'equal' | 'custom';
+    questionWeights?: Record<string, number>;
+  };
   schedule?: { startAt: string; endAt: string } | null;
   testQuestions: TestQuestion[];
   variants?: Variant[];
@@ -49,6 +54,18 @@ interface AttemptEntry {
   user: { id: string; name: string; email: string };
 }
 
+interface StudentAttemptSummary {
+  userId: string;
+  user: { id: string; name: string; email: string } | null;
+  assignedAt: string;
+  variantId?: string | null;
+  attemptCount: number;
+  latestStatus: string;
+  latestScore: number | null;
+  latestMaxScore: number | null;
+  attempts: AttemptEntry[];
+}
+
 interface StudentItem {
   id: string;
   name: string;
@@ -60,6 +77,7 @@ export default function TestDetail() {
   const navigate = useNavigate();
   const [test, setTest] = useState<TestData | null>(null);
   const [attempts, setAttempts] = useState<AttemptEntry[]>([]);
+  const [studentAttempts, setStudentAttempts] = useState<StudentAttemptSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [poolOpen, setPoolOpen] = useState(false);
   const [pool, setPool] = useState<QuestionItem[]>([]);
@@ -83,16 +101,54 @@ export default function TestDetail() {
   const [allocEmail, setAllocEmail] = useState('');
   const [allocVariantId, setAllocVariantId] = useState('');
   const [allocError, setAllocError] = useState('');
+  const [allocResetAttempts, setAllocResetAttempts] = useState(false);
+  const [title, setTitle] = useState('');
+  const [type, setType] = useState<'mcq' | 'coding'>('mcq');
+  const [status, setStatus] = useState<'draft' | 'published' | 'archived'>('draft');
+  const [config, setConfig] = useState<TestData['config']>({
+    durationMinutes: 60,
+    attemptLimit: 3,
+    passPercentage: 40,
+    scoreDistribution: 'equal',
+    questionWeights: {},
+  });
+  const [scheduleEnabled, setScheduleEnabled] = useState(false);
+  const [startAt, setStartAt] = useState('');
+  const [endAt, setEndAt] = useState('');
+  const [saveError, setSaveError] = useState('');
+  const [saving, setSaving] = useState(false);
 
   const loadTest = useCallback(async () => {
     if (!id) return;
     try {
-      const [t, a] = await Promise.all([
+      const [t, attemptData] = await Promise.all([
         api<TestData>(`/tests/${id}`),
-        api<AttemptEntry[]>(`/tests/${id}/attempts`).catch(() => [] as AttemptEntry[]),
+        api<{ students: StudentAttemptSummary[]; attempts: AttemptEntry[] }>(`/tests/${id}/attempts`).catch(
+          () => ({ students: [] as StudentAttemptSummary[], attempts: [] as AttemptEntry[] })
+        ),
       ]);
       setTest(t);
-      setAttempts(a);
+      setAttempts(attemptData.attempts);
+      setStudentAttempts(attemptData.students);
+      setTitle(t.title);
+      setType(t.type as 'mcq' | 'coding');
+      setStatus(t.status as 'draft' | 'published' | 'archived');
+      setConfig({
+        durationMinutes: t.config.durationMinutes,
+        attemptLimit: t.config.attemptLimit,
+        passPercentage: t.config.passPercentage ?? 40,
+        scoreDistribution: t.config.scoreDistribution ?? 'equal',
+        questionWeights: t.config.questionWeights ?? {},
+      });
+      if (t.schedule?.startAt && t.schedule?.endAt) {
+        setScheduleEnabled(true);
+        setStartAt(t.schedule.startAt.slice(0, 16));
+        setEndAt(t.schedule.endAt.slice(0, 16));
+      } else {
+        setScheduleEnabled(false);
+        setStartAt('');
+        setEndAt('');
+      }
     } catch {
       setTest(null);
     } finally {
@@ -186,6 +242,7 @@ export default function TestDetail() {
     setAllocEmail('');
     setAllocVariantId('');
     setAllocError('');
+    setAllocResetAttempts(false);
     setAllocateOpen(true);
   };
 
@@ -200,7 +257,7 @@ export default function TestDetail() {
     setAllocError('');
     try {
       const body = hasStudent
-        ? { userId: allocStudentId, variantId: allocVariantId || undefined }
+        ? { userId: allocStudentId, variantId: allocVariantId || undefined, resetAttempts: allocResetAttempts }
         : { email: allocEmail.trim(), variantId: allocVariantId || undefined };
       await api(`/tests/${test.id}/allocations`, { method: 'POST', body: JSON.stringify(body) });
       setAllocateOpen(false);
@@ -223,6 +280,79 @@ export default function TestDetail() {
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
 
   const variants = test.variants || [];
+  const isCustomWeights = test.config.scoreDistribution === 'custom';
+
+  const updateQuestionWeight = async (questionId: string, nextWeight: number) => {
+    if (!test) return;
+    const weights = { ...(test.config.questionWeights || {}) };
+    weights[questionId] = Math.max(0, Number.isFinite(nextWeight) ? nextWeight : 0);
+    await api(`/tests/${test.id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        config: {
+          ...test.config,
+          scoreDistribution: 'custom',
+          questionWeights: weights,
+        },
+      }),
+    });
+    setTest({
+      ...test,
+      config: {
+        ...test.config,
+        scoreDistribution: 'custom',
+        questionWeights: weights,
+      },
+    });
+  };
+
+  const handleUpdateTest = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!test) return;
+    setSaveError('');
+    setSaving(true);
+    try {
+      const payload: Record<string, unknown> = {
+        title,
+        type,
+        status,
+        config,
+      };
+      if (scheduleEnabled && startAt && endAt) {
+        payload.schedule = { startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() };
+      }
+      await api(`/tests/${test.id}`, { method: 'PATCH', body: JSON.stringify(payload) });
+      await loadTest();
+    } catch (e) {
+      setSaveError(e instanceof Error ? e.message : 'Failed to update test');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const resetForm = () => {
+    if (!test) return;
+    setTitle(test.title);
+    setType(test.type as 'mcq' | 'coding');
+    setStatus(test.status as 'draft' | 'published' | 'archived');
+    setConfig({
+      durationMinutes: test.config.durationMinutes,
+      attemptLimit: test.config.attemptLimit,
+      passPercentage: test.config.passPercentage ?? 40,
+      scoreDistribution: test.config.scoreDistribution ?? 'equal',
+      questionWeights: test.config.questionWeights ?? {},
+    });
+    if (test.schedule?.startAt && test.schedule?.endAt) {
+      setScheduleEnabled(true);
+      setStartAt(test.schedule.startAt.slice(0, 16));
+      setEndAt(test.schedule.endAt.slice(0, 16));
+    } else {
+      setScheduleEnabled(false);
+      setStartAt('');
+      setEndAt('');
+    }
+    setSaveError('');
+  };
 
   return (
     <div>
@@ -236,11 +366,93 @@ export default function TestDetail() {
           <button onClick={openAllocate} style={{ padding: '0.5rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
             Assign to Student
           </button>
-          <button onClick={() => navigate(`/tests/${test.id}/edit`)} style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}>
-            Edit Test
-          </button>
         </div>
       </div>
+
+      <form onSubmit={handleUpdateTest} style={{ marginBottom: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
+        <h3 style={{ margin: '0 0 1rem' }}>Test Configuration</h3>
+        {saveError && <div style={{ padding: '0.65rem 0.75rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171' }}>{saveError}</div>}
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+          <div>
+            <label style={labelStyle}>Title</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} required minLength={2} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Type</label>
+            <select value={type} onChange={(e) => setType(e.target.value as 'mcq' | 'coding')} style={inputStyle}>
+              <option value="mcq">MCQ</option>
+              <option value="coding">Coding</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Status</label>
+            <select value={status} onChange={(e) => setStatus(e.target.value as 'draft' | 'published' | 'archived')} style={inputStyle}>
+              <option value="draft">Draft</option>
+              <option value="published">Published</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+          <div>
+            <label style={labelStyle}>Duration (minutes)</label>
+            <input type="number" min={1} max={480} value={config.durationMinutes} onChange={(e) => setConfig({ ...config, durationMinutes: +e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Attempt Limit</label>
+            <input type="number" min={1} max={100} value={config.attemptLimit} onChange={(e) => setConfig({ ...config, attemptLimit: +e.target.value })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Minimum Pass Percentage</label>
+            <input type="number" min={0} max={100} value={config.passPercentage ?? 40} onChange={(e) => setConfig({ ...config, passPercentage: Math.max(0, Math.min(100, +e.target.value || 0)) })} style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Score Distribution</label>
+            <select value={config.scoreDistribution ?? 'equal'} onChange={(e) => setConfig({ ...config, scoreDistribution: e.target.value as 'equal' | 'custom' })} style={inputStyle}>
+              <option value="equal">Equal Distribution</option>
+              <option value="custom">Custom Weightage</option>
+            </select>
+          </div>
+        </div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
+          {([
+            ['shuffleQuestions', 'Shuffle Questions'],
+            ['showResultsImmediately', 'Show Results Immediately'],
+            ['partialScoring', 'Partial Scoring'],
+            ['proctoringEnabled', 'Proctoring'],
+            ['aiFeedbackEnabled', 'AI Feedback'],
+          ] as const).map(([key, label]) => (
+            <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
+              <input type="checkbox" checked={Boolean(config[key as keyof typeof config])} onChange={(e) => setConfig({ ...config, [key]: e.target.checked })} />
+              {label}
+            </label>
+          ))}
+        </div>
+        <div style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '0.75rem', marginBottom: '1rem' }}>
+          <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer', marginBottom: scheduleEnabled ? '0.75rem' : 0 }}>
+            <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} />
+            Enable schedule
+          </label>
+          {scheduleEnabled && (
+            <div style={{ display: 'flex', gap: '1rem' }}>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>Start</label>
+                <input type="datetime-local" value={startAt} onChange={(e) => setStartAt(e.target.value)} style={inputStyle} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <label style={labelStyle}>End</label>
+                <input type="datetime-local" value={endAt} onChange={(e) => setEndAt(e.target.value)} style={inputStyle} />
+              </div>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '0.75rem' }}>
+          <button type="submit" disabled={saving} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+            {saving ? 'Saving...' : 'Update Test'}
+          </button>
+          <button type="button" onClick={resetForm} style={{ padding: '0.6rem 1.5rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>
+            Cancel
+          </button>
+        </div>
+      </form>
 
       <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
@@ -251,15 +463,17 @@ export default function TestDetail() {
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Status</div>
           <div><span style={badgeStyle(test.status)}>{test.status}</span></div>
         </div>
-        {test.difficulty && (
-          <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
-            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Difficulty</div>
-            <div><span style={badgeStyle(test.difficulty)}>{test.difficulty}</span></div>
-          </div>
-        )}
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Duration</div>
           <div style={{ fontWeight: 500 }}>{test.config.durationMinutes} min</div>
+        </div>
+        <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Pass Mark</div>
+          <div style={{ fontWeight: 500 }}>{test.config.passPercentage ?? 40}%</div>
+        </div>
+        <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+          <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Distribution</div>
+          <div style={{ fontWeight: 500 }}>{isCustomWeights ? 'Custom Weightage' : 'Equal'}</div>
         </div>
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Questions</div>
@@ -307,6 +521,7 @@ export default function TestDetail() {
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Type</th>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Difficulty</th>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Variant</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Weight</th>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
                   </tr>
                 </thead>
@@ -322,6 +537,19 @@ export default function TestDetail() {
                           <span style={badgeStyle(tq.question.difficulty)}>{tq.question.difficulty}</span>
                         </td>
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{v ? v.name : 'Default'}</td>
+                        <td style={{ padding: '0.75rem 1rem' }}>
+                          <input
+                            type="number"
+                            min={0}
+                            step={0.5}
+                            value={test.config.questionWeights?.[tq.questionId] ?? 1}
+                            onChange={(e) => {
+                              const value = Number(e.target.value);
+                              if (Number.isFinite(value)) void updateQuestionWeight(tq.questionId, value);
+                            }}
+                            style={{ width: 80, ...inputStyle }}
+                          />
+                        </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
                         </td>
@@ -387,35 +615,45 @@ export default function TestDetail() {
       {/* Students Tab */}
       {tab === 'students' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-          {attempts.length === 0 ? (
-            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No students have attempted this test yet.</div>
+          {studentAttempts.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No students are assigned to this test yet.</div>
           ) : (
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
               <thead>
                 <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Student</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Assigned</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempts</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Score</th>
-                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Started</th>
-                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Submitted</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempt Timestamps</th>
                 </tr>
               </thead>
               <tbody>
-                {attempts.map((a) => (
-                  <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{a.user.name}</td>
-                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.user.email}</td>
+                {studentAttempts.map((s) => (
+                  <tr key={s.userId} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{s.user?.name ?? 'Unknown'}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.user?.email ?? '--'}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>
-                      <span style={badgeStyle(a.status === 'submitted' || a.status === 'graded' ? 'published' : a.status === 'in_progress' ? 'draft' : 'archived')}>
-                        {a.status}
+                      {new Date(s.assignedAt).toLocaleString()}
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.attemptCount}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={badgeStyle(s.latestStatus === 'submitted' || s.latestStatus === 'graded' ? 'published' : s.latestStatus === 'in_progress' ? 'draft' : 'archived')}>
+                        {s.latestStatus.replace('_', ' ')}
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>
-                      {a.score != null && a.maxScore != null ? `${a.score} / ${a.maxScore}` : '--'}
+                      {s.latestScore != null && s.latestMaxScore != null ? `${s.latestScore} / ${s.latestMaxScore}` : '--'}
                     </td>
-                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{new Date(a.startedAt).toLocaleString()}</td>
-                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.submittedAt ? new Date(a.submittedAt).toLocaleString() : '--'}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                      {s.attempts.length === 0
+                        ? 'No attempts'
+                        : s.attempts
+                            .map((a, i) => `#${i + 1} ${new Date(a.startedAt).toLocaleString()}${a.submittedAt ? ` -> ${new Date(a.submittedAt).toLocaleString()}` : ''}`)
+                            .join(' | ')}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -563,6 +801,17 @@ export default function TestDetail() {
                 </select>
               </div>
             )}
+            <div style={{ marginBottom: '1.25rem' }}>
+              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
+                <input
+                  type="checkbox"
+                  checked={allocResetAttempts}
+                  onChange={(e) => setAllocResetAttempts(e.target.checked)}
+                  disabled={!allocStudentId}
+                />
+                Reset previous attempts for this student before reassigning
+              </label>
+            </div>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
               <button onClick={() => setAllocateOpen(false)} style={{ padding: '0.4rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
               <button onClick={allocateTest} disabled={!allocStudentId.trim() && !allocEmail.trim()} style={{ padding: '0.4rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: !allocStudentId.trim() && !allocEmail.trim() ? 0.5 : 1 }}>

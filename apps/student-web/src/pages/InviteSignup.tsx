@@ -9,6 +9,16 @@ interface ValidateResponse {
   testTitle?: string;
 }
 
+function isValidateResponse(data: unknown): data is ValidateResponse {
+  if (!data || typeof data !== 'object') return false;
+  const candidate = data as Partial<ValidateResponse>;
+  return (
+    typeof candidate.valid === 'boolean' &&
+    typeof candidate.email === 'string' &&
+    typeof candidate.expiresAt === 'string'
+  );
+}
+
 const inputStyle: React.CSSProperties = {
   width: '100%',
   padding: '0.75rem',
@@ -45,13 +55,18 @@ export default function InviteSignup() {
     }
     fetch(`/api/v1/invites/validate?token=${encodeURIComponent(token)}`)
       .then((res) => res.json())
-      .then((data: ValidateResponse | { error?: string }) => {
-        if ('error' in data) {
+      .then((data: unknown) => {
+        if (
+          data &&
+          typeof data === 'object' &&
+          'error' in data &&
+          typeof (data as { error?: unknown }).error === 'string'
+        ) {
           setStatus('invalid');
-          setError(data.error || 'Invalid or expired invite');
+          setError((data as { error: string }).error || 'Invalid or expired invite');
           return;
         }
-        if (data.valid && data.email) {
+        if (isValidateResponse(data) && data.valid && data.email) {
           setStatus('valid');
           setInviteEmail(data.email);
           setTestTitle(data.testTitle || null);

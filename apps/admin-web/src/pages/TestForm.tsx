@@ -7,7 +7,6 @@ interface TestData {
   title: string;
   type: string;
   status: string;
-  difficulty: string;
   config: {
     durationMinutes: number;
     attemptLimit: number;
@@ -16,12 +15,15 @@ interface TestData {
     partialScoring: boolean;
     proctoringEnabled: boolean;
     aiFeedbackEnabled: boolean;
+    passPercentage: number;
+    scoreDistribution: 'equal' | 'custom';
+    questionWeights?: Record<string, number>;
   };
   schedule?: { startAt: string; endAt: string } | null;
   testQuestions?: { questionId: string; question: { id: string; content: { title: string }; type: string; difficulty: string } }[];
 }
 
-const defaultConfig = {
+const defaultConfig: TestData['config'] = {
   durationMinutes: 60,
   attemptLimit: 3,
   shuffleQuestions: false,
@@ -29,6 +31,9 @@ const defaultConfig = {
   partialScoring: true,
   proctoringEnabled: false,
   aiFeedbackEnabled: false,
+  passPercentage: 40,
+  scoreDistribution: 'equal',
+  questionWeights: {},
 };
 
 export default function TestForm() {
@@ -39,7 +44,6 @@ export default function TestForm() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState('mcq');
   const [status, setStatus] = useState('draft');
-  const [difficulty, setDifficulty] = useState('');
   const [config, setConfig] = useState(defaultConfig);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [startAt, setStartAt] = useState('');
@@ -55,7 +59,6 @@ export default function TestForm() {
         setTitle(t.title);
         setType(t.type);
         setStatus(t.status);
-        setDifficulty(t.difficulty || '');
         setConfig({ ...defaultConfig, ...t.config });
         if (t.schedule) {
           setScheduleEnabled(true);
@@ -76,7 +79,6 @@ export default function TestForm() {
         title,
         type,
         config,
-        ...(difficulty && { difficulty }),
       };
       if (scheduleEnabled && startAt && endAt) {
         payload.schedule = { startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() };
@@ -128,15 +130,6 @@ export default function TestForm() {
               </select>
             </div>
           )}
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>Difficulty</label>
-            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} style={inputStyle}>
-              <option value="">-- None --</option>
-              <option value="easy">Easy</option>
-              <option value="medium">Medium</option>
-              <option value="hard">Hard</option>
-            </select>
-          </div>
         </div>
 
         <fieldset style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
@@ -149,6 +142,28 @@ export default function TestForm() {
             <div>
               <label style={labelStyle}>Attempt Limit</label>
               <input type="number" min={1} max={100} value={config.attemptLimit} onChange={(e) => setConfig({ ...config, attemptLimit: +e.target.value })} style={inputStyle} />
+            </div>
+            <div>
+              <label style={labelStyle}>Minimum Pass Percentage</label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={config.passPercentage}
+                onChange={(e) => setConfig({ ...config, passPercentage: Math.max(0, Math.min(100, +e.target.value || 0)) })}
+                style={inputStyle}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>Score Distribution</label>
+              <select
+                value={config.scoreDistribution}
+                onChange={(e) => setConfig({ ...config, scoreDistribution: e.target.value as 'equal' | 'custom' })}
+                style={inputStyle}
+              >
+                <option value="equal">Equal Distribution</option>
+                <option value="custom">Custom Weightage</option>
+              </select>
             </div>
           </div>
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>

@@ -29,6 +29,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(stored));
       } catch {
         localStorage.removeItem('enrich_admin_token');
+        localStorage.removeItem('enrich_admin_refresh_token');
         localStorage.removeItem('enrich_admin_user');
       }
     }
@@ -48,6 +49,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const data = await res.json();
     setUser(data.user);
     localStorage.setItem('enrich_admin_token', data.accessToken);
+    if (data.refreshToken) localStorage.setItem('enrich_admin_refresh_token', data.refreshToken);
     localStorage.setItem('enrich_admin_user', JSON.stringify(data.user));
     if (data.user.tenantId) localStorage.setItem('enrich_tenant_id', data.user.tenantId);
   }, []);
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('enrich_admin_token');
+    localStorage.removeItem('enrich_admin_refresh_token');
     localStorage.removeItem('enrich_admin_user');
     localStorage.removeItem('enrich_tenant_id');
   }, []);

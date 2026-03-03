@@ -78,14 +78,3 @@ export interface CourseAssignment {
   course?: Course;
 }
 
-export interface BatchScheduleEvent {
-  id: string;
-  batchId: string;
-  title: string;
-  startAt: Date;
-  endAt: Date;
-  type: string | null;
-  courseId: string | null;
-  location: string | null;
-  metadata: Record<string, unknown>;
-}

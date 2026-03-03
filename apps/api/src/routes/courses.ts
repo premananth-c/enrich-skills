@@ -17,6 +17,7 @@ import {
 } from '@enrich-skills/shared';
 import { requireTenant, requireAdmin, authenticate } from '../lib/tenant.js';
 import { saveFile, getFilePath, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
+import { logRevision } from '../lib/revision.js';
 
 export async function courseRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -24,8 +25,9 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Course CRUD ---
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const { includeArchived } = request.query as { includeArchived?: string };
     const courses = await prisma.course.findMany({
-      where: { tenantId },
+      where: { tenantId, ...(includeArchived === 'true' ? {} : { isArchived: false }) },
       orderBy: { updatedAt: 'desc' },
     });
     return reply.send(courses);
@@ -45,6 +47,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const user = request.user as { sub: string };
     const parsed = createCourseSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -56,11 +59,20 @@ export async function courseRoutes(app: FastifyInstance) {
         description: parsed.data.description ?? null,
       },
     });
+    await logRevision({
+      tenantId,
+      module: 'courses',
+      entityId: course.id,
+      action: 'created',
+      userId: user.sub,
+      details: { title: course.title },
+    });
     return reply.status(201).send(course);
   });
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const user = request.user as { sub: string };
     const parsed = updateCourseSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -74,15 +86,35 @@ export async function courseRoutes(app: FastifyInstance) {
         ...(parsed.data.description !== undefined && { description: parsed.data.description ?? null }),
       },
     });
+    await logRevision({
+      tenantId,
+      module: 'courses',
+      entityId: course.id,
+      action: 'updated',
+      userId: user.sub,
+      details: { title: course.title },
+    });
     return reply.send(course);
   });
 
-  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const user = request.user as { sub: string };
     const existing = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Course not found' });
-    await prisma.course.delete({ where: { id: request.params.id } });
-    return reply.status(204).send();
+    const course = await prisma.course.update({
+      where: { id: request.params.id },
+      data: { isArchived: true },
+    });
+    await logRevision({
+      tenantId,
+      module: 'courses',
+      entityId: course.id,
+      action: 'archived',
+      userId: user.sub,
+      details: { title: course.title },
+    });
+    return reply.send(course);
   });
 
   // --- Chapters ---

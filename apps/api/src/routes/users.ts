@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { requireAdmin, authenticate } from '../lib/tenant.js';
+import { logRevision } from '../lib/revision.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -62,6 +63,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const admin = request.user as { sub: string };
     const body = request.body as { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
@@ -97,18 +99,49 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: updated.id,
+      action: 'updated',
+      userId: admin.sub,
+      details: { name: updated.name, email: updated.email, isActive: updated.isActive },
+    });
     return reply.send(updated);
   });
 
-  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+  app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const admin = request.user as { sub: string };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
       select: { id: true, role: true },
     });
     if (!user) return reply.status(404).send({ error: 'User not found' });
-    if (user.role !== 'student') return reply.status(403).send({ error: 'Only students can be deleted' });
-    await prisma.user.delete({ where: { id: request.params.id } });
-    return reply.status(204).send();
+    if (user.role !== 'student') return reply.status(403).send({ error: 'Only students can be archived' });
+    const archived = await prisma.user.update({
+      where: { id: request.params.id },
+      data: { isActive: false },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        phoneNumber: true,
+        address: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: archived.id,
+      action: 'archived',
+      userId: admin.sub,
+      details: { name: archived.name, email: archived.email },
+    });
+    return reply.send(archived);
   });
 }

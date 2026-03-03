@@ -31,6 +31,9 @@ interface AttemptResult {
   submittedAt?: string;
   resultsAvailable: boolean;
   message?: string;
+  result?: 'pass' | 'fail';
+  passPercentage?: number;
+  percentage?: number;
   test?: { id: string; title: string; type: string; config: Record<string, unknown> };
   submissions?: ResultSubmission[];
 }
@@ -66,24 +69,41 @@ export default function TestResult() {
         <p style={{ color: 'var(--color-text-muted)', maxWidth: 400, margin: '0 auto 1.5rem' }}>
           {result.message || 'Results will be shared by your instructor once they are ready.'}
         </p>
-        <Link
-          to="/tests"
-          style={{
-            padding: '0.6rem 1.5rem',
-            background: 'var(--color-primary)',
-            color: 'white',
-            borderRadius: '6px',
-            textDecoration: 'none',
-            fontWeight: 500,
-          }}
-        >
-          Back to Tests
-        </Link>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <Link
+            to={`/attempt/${attemptId}?review=1`}
+            style={{
+              padding: '0.6rem 1.5rem',
+              border: '1px solid var(--color-border)',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              color: 'var(--color-text)',
+              fontWeight: 500,
+            }}
+          >
+            Review Answers
+          </Link>
+          <Link
+            to="/tests"
+            style={{
+              padding: '0.6rem 1.5rem',
+              background: 'var(--color-primary)',
+              color: 'white',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              fontWeight: 500,
+            }}
+          >
+            Back to Tests
+          </Link>
+        </div>
       </div>
     );
   }
 
   const scorePercent = result.maxScore ? Math.round(((result.score ?? 0) / result.maxScore) * 100) : 0;
+  const passPercentage = result.passPercentage ?? 40;
+  const resultStatus = result.result ?? (scorePercent >= passPercentage ? 'pass' : 'fail');
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -110,7 +130,7 @@ export default function TestResult() {
             width: 80,
             height: 80,
             borderRadius: '50%',
-            border: `4px solid ${scorePercent >= 70 ? '#22c55e' : scorePercent >= 40 ? '#f59e0b' : '#ef4444'}`,
+            border: `4px solid ${resultStatus === 'pass' ? '#22c55e' : '#ef4444'}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -126,6 +146,13 @@ export default function TestResult() {
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
             {result.submissions?.filter((s) => s.status === 'passed').length ?? 0} of{' '}
             {result.submissions?.length ?? 0} questions correct
+          </div>
+          <div style={{ marginTop: '0.25rem', fontSize: '0.9rem' }}>
+            Result:{' '}
+            <span style={{ fontWeight: 700, color: resultStatus === 'pass' ? '#22c55e' : '#ef4444' }}>
+              {resultStatus.toUpperCase()}
+            </span>{' '}
+            (Pass mark: {passPercentage}%)
           </div>
         </div>
       </div>
@@ -209,6 +236,21 @@ export default function TestResult() {
           )}
         </div>
       ))}
+      <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'center' }}>
+        <Link
+          to={`/attempt/${attemptId}?review=1`}
+          style={{
+            padding: '0.6rem 1.25rem',
+            border: '1px solid var(--color-border)',
+            borderRadius: '6px',
+            textDecoration: 'none',
+            color: 'var(--color-text)',
+            fontWeight: 500,
+          }}
+        >
+          Review Answers
+        </Link>
+      </div>
     </div>
   );
 }

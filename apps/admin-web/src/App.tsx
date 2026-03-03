@@ -38,7 +38,7 @@ export default function App() {
           <Route path="tests" element={<Tests />} />
           <Route path="tests/new" element={<TestForm />} />
           <Route path="tests/:id" element={<TestDetail />} />
-          <Route path="tests/:id/edit" element={<TestForm />} />
+          <Route path="tests/:id/edit" element={<Navigate to=".." replace />} />
           <Route path="batches" element={<Batches />} />
           <Route path="batches/new" element={<BatchForm />} />
           <Route path="batches/:id" element={<BatchDetail />} />

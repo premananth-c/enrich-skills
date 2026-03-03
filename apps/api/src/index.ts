@@ -17,6 +17,7 @@ import { scheduleRoutes } from './routes/schedule.js';
 import { schedulerNotesRoutes } from './routes/schedulerNotes.js';
 import { batchVideoRoutes } from './routes/batchVideos.js';
 import { reportsRoutes } from './routes/reports.js';
+import { revisionRoutes } from './routes/revisions.js';
 import { prisma } from './lib/prisma.js';
 
 const app = Fastify({ logger: true });
@@ -45,6 +46,7 @@ async function main() {
   app.register(schedulerNotesRoutes, { prefix: '/api/v1/schedule' });
   app.register(batchVideoRoutes, { prefix: '/api/v1/schedule' });
   app.register(reportsRoutes, { prefix: '/api/v1/reports' });
+  app.register(revisionRoutes, { prefix: '/api/v1/revisions' });
 
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });

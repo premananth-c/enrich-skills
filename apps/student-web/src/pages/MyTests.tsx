@@ -6,6 +6,15 @@ interface AllocatedTest {
   testId: string;
   assignedAt: string;
   attemptCount: number;
+  latestCompletedAttempt: {
+    id: string;
+    score: number | null;
+    maxScore: number | null;
+    submittedAt: string | null;
+    percentage: number | null;
+    passPercentage: number;
+    result: 'pass' | 'fail';
+  } | null;
   test: {
     id: string;
     title: string;
@@ -21,6 +30,7 @@ function getTestGroup(test: AllocatedTest): 'active' | 'upcoming' | 'completed' 
   const now = Date.now();
   const schedule = test.test.schedule;
   if (test.attemptCount >= test.test.config.attemptLimit) return 'completed';
+  if (test.latestCompletedAttempt) return 'completed';
   if (schedule) {
     const start = new Date(schedule.startAt).getTime();
     const end = new Date(schedule.endAt).getTime();
@@ -93,6 +103,14 @@ export default function MyTests() {
           {items.map((alloc) => {
             const group = getTestGroup(alloc);
             const canStart = group === 'active' && alloc.attemptCount < alloc.test.config.attemptLimit;
+            const hasScheduleEnded = alloc.test.schedule
+              ? Date.now() > new Date(alloc.test.schedule.endAt).getTime()
+              : false;
+            const canTakeAgain =
+              group === 'completed' &&
+              alloc.attemptCount < alloc.test.config.attemptLimit &&
+              !hasScheduleEnded;
+            const latest = alloc.latestCompletedAttempt;
             return (
               <div key={alloc.testId} style={cardStyle}>
                 <div style={{ flex: 1 }}>
@@ -112,6 +130,14 @@ export default function MyTests() {
                       {new Date(alloc.test.schedule.startAt).toLocaleDateString()} — {new Date(alloc.test.schedule.endAt).toLocaleDateString()}
                     </div>
                   )}
+                  {latest && (
+                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem', marginTop: '0.25rem' }}>
+                      Score: {latest.score ?? 0}/{latest.maxScore ?? 0} &middot; Result:{' '}
+                      <span style={{ color: latest.result === 'pass' ? '#22c55e' : '#ef4444', fontWeight: 600 }}>
+                        {latest.result.toUpperCase()}
+                      </span>
+                    </div>
+                  )}
                 </div>
                 {canStart ? (
                   <button
@@ -129,9 +155,25 @@ export default function MyTests() {
                   >
                     {starting === alloc.test.id ? 'Starting...' : 'Start Test'}
                   </button>
+                ) : canTakeAgain ? (
+                  <button
+                    onClick={() => startTest(alloc.test.id)}
+                    disabled={!!starting}
+                    style={{
+                      padding: '0.5rem 1.25rem',
+                      background: '#16a34a',
+                      color: 'white',
+                      border: 'none',
+                      borderRadius: '6px',
+                      fontWeight: 500,
+                      flexShrink: 0,
+                    }}
+                  >
+                    {starting === alloc.test.id ? 'Starting...' : 'Take Again'}
+                  </button>
                 ) : group === 'completed' ? (
                   <Link
-                    to="/tests"
+                    to={latest ? `/result/${latest.id}` : '/tests'}
                     style={{
                       padding: '0.5rem 1rem',
                       border: '1px solid var(--color-border)',
@@ -142,7 +184,7 @@ export default function MyTests() {
                       flexShrink: 0,
                     }}
                   >
-                    Completed
+                    {latest ? 'View Result' : 'Completed'}
                   </Link>
                 ) : (
                   <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', flexShrink: 0 }}>

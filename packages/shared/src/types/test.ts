@@ -23,6 +23,9 @@ export interface TestConfig {
   proctoringEnabled: boolean;
   proctoringConfig?: ProctoringConfig;
   aiFeedbackEnabled: boolean;
+  passPercentage: number;
+  scoreDistribution: 'equal' | 'custom';
+  questionWeights?: Record<string, number>;
 }
 
 export interface TestSchedule {
