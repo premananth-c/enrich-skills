@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, apiUpload } from '../lib/api';
+import { formatStatusLabel } from '../lib/status';
+import { emitToast } from '../lib/toast';
 
 type Tab = 'members' | 'calendar' | 'notes' | 'videos' | 'assignments' | 'tests' | 'reports';
 
@@ -163,7 +165,7 @@ export default function BatchDetail() {
       const list = await api<BatchTestAssignmentType[]>(`/batches/${id}/tests`);
       setBatchTests(list);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Assign failed');
+      emitToast('error', e instanceof Error ? e.message : 'Assign failed');
     }
   };
 
@@ -173,7 +175,7 @@ export default function BatchDetail() {
       await api(`/batches/${id}/tests/${testId}`, { method: 'DELETE' });
       setBatchTests((prev) => prev.filter((t) => t.testId !== testId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Remove failed');
+      emitToast('error', e instanceof Error ? e.message : 'Remove failed');
     }
   };
 
@@ -183,7 +185,7 @@ export default function BatchDetail() {
       await api(`/schedule/batches/${id}/notes`, { method: 'PUT', body: JSON.stringify({ date: noteDate, content: noteContent }) });
       setCurrentNote({ ...currentNote!, content: noteContent, date: noteDate, id: '', author: { name: '' } });
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to save note');
+      emitToast('error', e instanceof Error ? e.message : 'Failed to save note');
     }
   };
 
@@ -205,7 +207,7 @@ export default function BatchDetail() {
       setNewEvent({ title: '', startAt: '', endAt: '', type: '', location: '' });
       api<ScheduleEvent[]>(`/schedule/batches/${id}/events`).then(setEvents);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to add event');
+      emitToast('error', err instanceof Error ? err.message : 'Failed to add event');
     }
   };
 
@@ -215,7 +217,7 @@ export default function BatchDetail() {
       await api(`/schedule/batches/${id}/events/${eventId}`, { method: 'DELETE' });
       setEvents((prev) => prev.filter((ev) => ev.id !== eventId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      emitToast('error', e instanceof Error ? e.message : 'Delete failed');
     }
   };
 
@@ -227,7 +229,7 @@ export default function BatchDetail() {
       const b = await api<BatchInfo>(`/batches/${id}`);
       setBatch(b);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Add failed');
+      emitToast('error', e instanceof Error ? e.message : 'Add failed');
     }
   };
 
@@ -238,7 +240,7 @@ export default function BatchDetail() {
       const b = await api<BatchInfo>(`/batches/${id}`);
       setBatch(b);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Remove failed');
+      emitToast('error', e instanceof Error ? e.message : 'Remove failed');
     }
   };
 
@@ -253,7 +255,7 @@ export default function BatchDetail() {
       const list = await api<BatchVideoType[]>(`/schedule/batches/${id}/videos`);
       setVideos(list);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      emitToast('error', err instanceof Error ? err.message : 'Upload failed');
     } finally {
       setVideoUploading(false);
       e.target.value = '';
@@ -266,7 +268,7 @@ export default function BatchDetail() {
       await api(`/schedule/batches/${id}/videos/${videoId}`, { method: 'DELETE' });
       setVideos((prev) => prev.filter((v) => v.id !== videoId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Delete failed');
+      emitToast('error', e instanceof Error ? e.message : 'Delete failed');
     }
   };
 
@@ -279,7 +281,7 @@ export default function BatchDetail() {
       const list = await api<CourseAssignmentType[]>(`/course-assignments?batchId=${id}`);
       setAssignments(list);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Assign failed');
+      emitToast('error', e instanceof Error ? e.message : 'Assign failed');
     }
   };
 
@@ -289,7 +291,7 @@ export default function BatchDetail() {
       await api(`/course-assignments/${assignmentId}`, { method: 'DELETE' });
       setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Remove failed');
+      emitToast('error', e instanceof Error ? e.message : 'Remove failed');
     }
   };
 
@@ -583,7 +585,7 @@ export default function BatchDetail() {
                 <tr key={bt.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.5rem' }}><Link to={`/tests/${bt.testId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{bt.test.title}</Link></td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{bt.test.type}</td>
-                  <td style={{ padding: '0.5rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: bt.test.status === 'published' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{bt.test.status}</span></td>
+                  <td style={{ padding: '0.5rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: bt.test.status === 'published' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{formatStatusLabel(bt.test.status)}</span></td>
                   <td><button onClick={() => unassignTest(bt.testId)} style={{ padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button></td>
                 </tr>
               ))}
@@ -613,7 +615,7 @@ export default function BatchDetail() {
                 <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.75rem 1rem' }}>{a.user.name}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.test.title}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: a.status === 'submitted' || a.status === 'graded' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{a.status}</span></td>
+                  <td style={{ padding: '0.75rem 1rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: a.status === 'submitted' || a.status === 'graded' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{formatStatusLabel(a.status)}</span></td>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{a.score != null && a.maxScore != null ? `${a.score} / ${a.maxScore}` : '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{new Date(a.startedAt).toLocaleString()}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.submittedAt ? new Date(a.submittedAt).toLocaleString() : '--'}</td>

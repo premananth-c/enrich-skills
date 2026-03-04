@@ -2,10 +2,11 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 interface User {
   id: string;
-  email: string;
+  email?: string | null;
   name: string;
   role: string;
   tenantId: string;
+  permissions?: Record<string, 'none' | 'view' | 'edit'>;
 }
 
 interface AuthContextType {
@@ -13,6 +14,9 @@ interface AuthContextType {
   loading: boolean;
   login: (email: string, password: string, tenantId?: string) => Promise<void>;
   logout: () => void;
+  canView: (moduleKey: string) => boolean;
+  canEdit: (moduleKey: string) => boolean;
+  isSuperAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -29,6 +33,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setUser(JSON.parse(stored));
       } catch {
         localStorage.removeItem('enrich_admin_token');
+        localStorage.removeItem('enrich_admin_refresh_token');
         localStorage.removeItem('enrich_admin_user');
       }
     }
@@ -46,8 +51,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(err.error || 'Login failed');
     }
     const data = await res.json();
+    if (data.user?.role === 'student') {
+      throw new Error('You dont have permission to view this page.');
+    }
     setUser(data.user);
     localStorage.setItem('enrich_admin_token', data.accessToken);
+    if (data.refreshToken) localStorage.setItem('enrich_admin_refresh_token', data.refreshToken);
     localStorage.setItem('enrich_admin_user', JSON.stringify(data.user));
     if (data.user.tenantId) localStorage.setItem('enrich_tenant_id', data.user.tenantId);
   }, []);
@@ -55,12 +64,36 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const logout = useCallback(() => {
     setUser(null);
     localStorage.removeItem('enrich_admin_token');
+    localStorage.removeItem('enrich_admin_refresh_token');
     localStorage.removeItem('enrich_admin_user');
     localStorage.removeItem('enrich_tenant_id');
   }, []);
 
+  const canView = useCallback(
+    (moduleKey: string) => {
+      if (!user) return false;
+      if (user.role === 'super_admin') return true;
+      if (user.role === 'admin') return moduleKey !== 'manage_users';
+      const permission = user.permissions?.[moduleKey];
+      return permission === 'view' || permission === 'edit';
+    },
+    [user]
+  );
+
+  const canEdit = useCallback(
+    (moduleKey: string) => {
+      if (!user) return false;
+      if (user.role === 'super_admin') return true;
+      if (user.role === 'admin') return moduleKey !== 'manage_users';
+      return user.permissions?.[moduleKey] === 'edit';
+    },
+    [user]
+  );
+
+  const isSuperAdmin = user?.role === 'super_admin';
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, canView, canEdit, isSuperAdmin }}>
       {children}
     </AuthContext.Provider>
   );

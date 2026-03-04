@@ -199,9 +199,10 @@ export default function CourseDetail() {
                         >
                           <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>{topic.title}</h4>
                           {topic.content && (
-                            <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem' }}>
-                              {topic.content}
-                            </p>
+                            <div
+                              style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem', lineHeight: 1.6 }}
+                              dangerouslySetInnerHTML={{ __html: topic.content }}
+                            />
                           )}
 
                           {/* Materials */}

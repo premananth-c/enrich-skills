@@ -17,6 +17,9 @@ export const testConfigSchema = z.object({
   proctoringEnabled: z.boolean(),
   proctoringConfig: proctoringConfigSchema.optional(),
   aiFeedbackEnabled: z.boolean(),
+  passPercentage: z.number().min(0).max(100).default(40),
+  scoreDistribution: z.enum(['equal', 'custom']).default('equal'),
+  questionWeights: z.record(z.string(), z.number().min(0)).optional(),
 });
 
 export const testScheduleSchema = z.object({

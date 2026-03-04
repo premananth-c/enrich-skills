@@ -2,16 +2,21 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { createCodingQuestionSchema, createMcqQuestionSchema, updateCodingQuestionSchema, updateMcqQuestionSchema } from '@enrich-skills/shared';
-import { requireTenant, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
+import { logRevision } from '../lib/revision.js';
 
 export async function questionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
-    const type = (request.query as { type?: string }).type;
+    const tenantId = await requireModuleAccess(request, 'questions', 'view');
+    const { type, includeArchived } = request.query as { type?: string; includeArchived?: string };
     const questions = await prisma.question.findMany({
-      where: { tenantId, ...(type && { type }) },
+      where: {
+        tenantId,
+        ...(type && { type }),
+        ...(includeArchived === 'true' ? {} : { isArchived: false }),
+      },
       include: { testCases: { where: { isPublic: true } } },
       orderBy: { updatedAt: 'desc' },
     });
@@ -19,7 +24,7 @@ export async function questionRoutes(app: FastifyInstance) {
   });
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'questions', 'view');
     const question = await prisma.question.findFirst({
       where: { id: request.params.id, tenantId },
       include: { testCases: true },
@@ -29,7 +34,8 @@ export async function questionRoutes(app: FastifyInstance) {
   });
 
   app.post('/coding', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const user = request.user as { sub: string };
     const parsed = createCodingQuestionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -60,11 +66,21 @@ export async function questionRoutes(app: FastifyInstance) {
       include: { testCases: true },
     });
 
+    await logRevision({
+      tenantId,
+      module: 'questions',
+      entityId: question.id,
+      action: 'created',
+      userId: user.sub,
+      details: { title: (question.content as { title?: string })?.title ?? '(untitled)', type: question.type },
+    });
+
     return reply.status(201).send(question);
   });
 
   app.post('/mcq', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const user = request.user as { sub: string };
     const parsed = createMcqQuestionSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -90,11 +106,21 @@ export async function questionRoutes(app: FastifyInstance) {
       },
     });
 
+    await logRevision({
+      tenantId,
+      module: 'questions',
+      entityId: question.id,
+      action: 'created',
+      userId: user.sub,
+      details: { title: (question.content as { title?: string })?.title ?? '(untitled)', type: question.type },
+    });
+
     return reply.status(201).send(question);
   });
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const user = request.user as { sub: string };
     const existing = await prisma.question.findFirst({
       where: { id: request.params.id, tenantId },
     });
@@ -134,6 +160,14 @@ export async function questionRoutes(app: FastifyInstance) {
         },
         include: { testCases: true },
       });
+      await logRevision({
+        tenantId,
+        module: 'questions',
+        entityId: question.id,
+        action: 'updated',
+        userId: user.sub,
+        details: { title: (question.content as { title?: string })?.title ?? '(untitled)' },
+      });
       return reply.send(question);
     } else {
       const parsed = updateMcqQuestionSchema.safeParse(request.body);
@@ -163,17 +197,62 @@ export async function questionRoutes(app: FastifyInstance) {
           },
         },
       });
+      await logRevision({
+        tenantId,
+        module: 'questions',
+        entityId: question.id,
+        action: 'updated',
+        userId: user.sub,
+        details: { title: (question.content as { title?: string })?.title ?? '(untitled)' },
+      });
       return reply.send(question);
     }
   });
 
-  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+  app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const user = request.user as { sub: string };
     const existing = await prisma.question.findFirst({
       where: { id: request.params.id, tenantId },
     });
     if (!existing) return reply.status(404).send({ error: 'Question not found' });
-    await prisma.question.delete({ where: { id: request.params.id } });
-    return reply.status(204).send();
+    const archived = await prisma.question.update({
+      where: { id: request.params.id },
+      data: { isArchived: true },
+    });
+    await logRevision({
+      tenantId,
+      module: 'questions',
+      entityId: archived.id,
+      action: 'archived',
+      userId: user.sub,
+      details: { title: (archived.content as { title?: string })?.title ?? '(untitled)' },
+    });
+    return reply.send(archived);
+  });
+
+  app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const user = request.user as { sub: string };
+    const existing = await prisma.question.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Question not found' });
+    const restored = await prisma.question.update({
+      where: { id: request.params.id },
+      data: { isArchived: false },
+    });
+    await logRevision({
+      tenantId,
+      module: 'questions',
+      entityId: restored.id,
+      action: 'updated',
+      userId: user.sub,
+      details: {
+        title: (restored.content as { title?: string })?.title ?? '(untitled)',
+        isArchived: false,
+      },
+    });
+    return reply.send(restored);
   });
 }

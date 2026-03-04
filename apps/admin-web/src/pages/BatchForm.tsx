@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { api } from '../lib/api';
+import { emitToast } from '../lib/toast';
 
 export default function BatchForm() {
   const { id } = useParams();
@@ -8,13 +9,19 @@ export default function BatchForm() {
   const isEdit = Boolean(id);
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
+  const [initialForm, setInitialForm] = useState({ name: '', description: '' });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
 
   useEffect(() => {
     if (isEdit && id) {
       api<{ name: string; description: string | null }>(`/batches/${id}`)
-        .then((b) => { setName(b.name); setDescription(b.description ?? ''); })
+        .then((b) => {
+          const next = { name: b.name, description: b.description ?? '' };
+          setName(next.name);
+          setDescription(next.description);
+          setInitialForm(next);
+        })
         .catch(() => navigate('/batches'))
         .finally(() => setLoading(false));
     }
@@ -31,7 +38,7 @@ export default function BatchForm() {
       }
       navigate('/batches');
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Save failed');
+      emitToast('error', err instanceof Error ? err.message : 'Save failed');
     } finally {
       setSaving(false);
     }
@@ -39,6 +46,8 @@ export default function BatchForm() {
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
+  const isDirty = !isEdit || name !== initialForm.name || description !== initialForm.description;
+  const canSubmit = !saving && name.trim().length > 0 && isDirty;
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
@@ -55,7 +64,7 @@ export default function BatchForm() {
           <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={3} style={inputStyle} />
         </div>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="submit" disabled={saving} style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}>{saving ? 'Saving...' : 'Save'}</button>
+          <button type="submit" disabled={!canSubmit} style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSubmit ? 1 : 0.65, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>{saving ? 'Saving...' : 'Save'}</button>
           <button type="button" onClick={() => navigate('/batches')} style={{ padding: '0.5rem 1.25rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
         </div>
       </form>

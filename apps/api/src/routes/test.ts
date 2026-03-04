@@ -1,13 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createTestSchema, updateTestSchema } from '@enrich-skills/shared';
-import { requireTenant, requireAdmin, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
+import { logRevision } from '../lib/revision.js';
 
 export async function testRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const tests = await prisma.test.findMany({
       where: { tenantId },
       include: {
@@ -19,7 +20,7 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const test = await prisma.test.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -32,7 +33,8 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const user = request.user as { sub: string };
     const parsed = createTestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -56,11 +58,21 @@ export async function testRoutes(app: FastifyInstance) {
       include: { testQuestions: true },
     });
 
+    await logRevision({
+      tenantId,
+      module: 'tests',
+      entityId: test.id,
+      action: 'created',
+      userId: user.sub,
+      details: { title: test.title, type: test.type },
+    });
+
     return reply.status(201).send(test);
   });
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const user = request.user as { sub: string };
     const parsed = updateTestSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -89,11 +101,44 @@ export async function testRoutes(app: FastifyInstance) {
       include: { testQuestions: true },
     });
 
+    await logRevision({
+      tenantId,
+      module: 'tests',
+      entityId: test.id,
+      action: data.status === 'archived' ? 'archived' : 'updated',
+      userId: user.sub,
+      details: { title: test.title, status: test.status },
+    });
+
+    return reply.send(test);
+  });
+
+  app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const user = request.user as { sub: string };
+    const existing = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!existing) return reply.status(404).send({ error: 'Test not found' });
+
+    const test = await prisma.test.update({
+      where: { id: request.params.id },
+      data: { status: 'draft' },
+      include: { testQuestions: true },
+    });
+
+    await logRevision({
+      tenantId,
+      module: 'tests',
+      entityId: test.id,
+      action: 'updated',
+      userId: user.sub,
+      details: { title: test.title, status: test.status },
+    });
+
     return reply.send(test);
   });
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const existing = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Test not found' });
     await prisma.test.delete({ where: { id: request.params.id } });
@@ -101,9 +146,22 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.get('/:id/attempts', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
+
+    const allocations = await prisma.testAllocation.findMany({
+      where: { testId: request.params.id },
+      orderBy: { assignedAt: 'desc' },
+    });
+    const userIds = [...new Set(allocations.map((a) => a.userId))];
+    const users = userIds.length
+      ? await prisma.user.findMany({
+          where: { id: { in: userIds } },
+          select: { id: true, name: true, email: true },
+        })
+      : [];
+    const userMap = new Map(users.map((u) => [u.id, u]));
 
     const attempts = await prisma.attempt.findMany({
       where: { testId: request.params.id },
@@ -113,13 +171,37 @@ export async function testRoutes(app: FastifyInstance) {
       },
       orderBy: { startedAt: 'desc' },
     });
-    return reply.send(attempts);
+
+    const attemptsByUser = new Map<string, typeof attempts>();
+    for (const attempt of attempts) {
+      const list = attemptsByUser.get(attempt.userId) ?? [];
+      list.push(attempt);
+      attemptsByUser.set(attempt.userId, list);
+    }
+
+    const students = allocations.map((allocation) => {
+      const attemptsForUser = attemptsByUser.get(allocation.userId) ?? [];
+      const latestAttempt = attemptsForUser[0];
+      return {
+        userId: allocation.userId,
+        user: userMap.get(allocation.userId) ?? null,
+        assignedAt: allocation.assignedAt,
+        variantId: allocation.variantId,
+        attemptCount: attemptsForUser.length,
+        latestStatus: latestAttempt?.status ?? 'not_started',
+        latestScore: latestAttempt?.score ?? null,
+        latestMaxScore: latestAttempt?.maxScore ?? null,
+        attempts: attemptsForUser,
+      };
+    });
+
+    return reply.send({ students, attempts });
   });
 
   // --- Variant CRUD ---
 
   app.get('/:id/variants', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
     const variants = await prisma.testVariant.findMany({
@@ -133,7 +215,7 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.post('/:id/variants', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -164,7 +246,7 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.patch('/:id/variants/:variantId', async (request: FastifyRequest<{ Params: { id: string; variantId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -198,7 +280,7 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.delete('/:id/variants/:variantId', async (request: FastifyRequest<{ Params: { id: string; variantId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -213,7 +295,7 @@ export async function testRoutes(app: FastifyInstance) {
   // --- Test Allocation (assign test to student with optional variant) ---
 
   app.get('/:id/allocations', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -226,12 +308,12 @@ export async function testRoutes(app: FastifyInstance) {
   });
 
   app.post('/:id/allocations', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const admin = request.user as { sub: string };
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
-    const body = request.body as { userId?: string; email?: string; variantId?: string };
+    const body = request.body as { userId?: string; email?: string; variantId?: string; resetAttempts?: boolean };
     let userId = body.userId;
 
     if (!userId && body.email) {
@@ -276,6 +358,12 @@ export async function testRoutes(app: FastifyInstance) {
         assignedBy: admin.sub,
       },
     });
+
+    if (body.resetAttempts) {
+      await prisma.attempt.deleteMany({
+        where: { userId, testId: request.params.id },
+      });
+    }
     return reply.status(201).send(allocation);
   });
 }

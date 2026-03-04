@@ -3,6 +3,55 @@ import bcrypt from 'bcryptjs';
 import { prisma } from '../lib/prisma.js';
 import { loginSchema, registerSchema, registerWithInviteSchema } from '@enrich-skills/shared';
 import { randomUUID } from 'crypto';
+import { logRevision } from '../lib/revision.js';
+import { MODULE_KEYS, type ModuleKey, type PermissionLevel } from '../lib/tenant.js';
+
+async function resolvePermissionsForUser(tenantId: string, role: string): Promise<Record<ModuleKey, PermissionLevel>> {
+  if (role === 'super_admin') {
+    return {
+      courses: 'edit',
+      batches: 'edit',
+      tests: 'edit',
+      questions: 'edit',
+      students: 'edit',
+      reports: 'edit',
+      manage_users: 'edit',
+    };
+  }
+  if (role === 'admin') {
+    return {
+      courses: 'edit',
+      batches: 'edit',
+      tests: 'edit',
+      questions: 'edit',
+      students: 'edit',
+      reports: 'edit',
+      manage_users: 'none',
+    };
+  }
+  const base = {
+    courses: 'none',
+    batches: 'none',
+    tests: 'none',
+    questions: 'none',
+    students: 'none',
+    reports: 'none',
+    manage_users: 'none',
+  } as Record<ModuleKey, PermissionLevel>;
+  const roleDef = await prisma.roleDefinition.findFirst({
+    where: { tenantId, roleKey: role, isActive: true },
+    select: { permissions: true },
+  });
+  if (!roleDef?.permissions || typeof roleDef.permissions !== 'object') return base;
+  const raw = roleDef.permissions as Record<string, unknown>;
+  for (const moduleKey of MODULE_KEYS) {
+    const granted = raw[moduleKey];
+    if (granted === 'view' || granted === 'edit') {
+      base[moduleKey] = granted;
+    }
+  }
+  return base;
+}
 
 export async function authRoutes(app: FastifyInstance) {
   app.post('/register', async (request: FastifyRequest, reply: FastifyReply) => {
@@ -11,6 +60,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     const { email, password, name, tenantId } = parsed.data;
+    const emailLower = email.trim().toLowerCase();
 
     let resolvedTenantId: string | undefined = tenantId;
     if (!resolvedTenantId) {
@@ -22,7 +72,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const existing = await prisma.user.findUnique({
-      where: { tenantId_email: { tenantId: resolvedTenantId, email } },
+      where: { tenantId_email: { tenantId: resolvedTenantId, email: emailLower } },
     });
     if (existing) {
       return reply.status(409).send({ error: 'Email already registered' });
@@ -32,27 +82,35 @@ export async function authRoutes(app: FastifyInstance) {
     const user = await prisma.user.create({
       data: {
         tenantId: resolvedTenantId,
-        email,
+        email: emailLower,
         passwordHash,
         name,
         role: 'student',
       },
     });
+    await logRevision({
+      tenantId: user.tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'created',
+      details: { name: user.name, email: user.email },
+    });
 
     const accessToken = app.jwt.sign(
       { sub: user.id, tenantId: user.tenantId, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '8h' }
     );
     const refreshToken = app.jwt.sign(
       { sub: user.id, jti: randomUUID() },
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
+    const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
     return reply.send({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, permissions },
       accessToken,
       refreshToken,
-      expiresIn: 900,
+      expiresIn: 28800,
     });
   });
 
@@ -83,18 +141,19 @@ export async function authRoutes(app: FastifyInstance) {
 
       const accessToken = app.jwt.sign(
         { sub: user.id, tenantId: user.tenantId, role: user.role },
-        { expiresIn: '15m' }
+        { expiresIn: '8h' }
       );
       const refreshToken = app.jwt.sign(
         { sub: user.id, jti: randomUUID() },
-        { expiresIn: '7d' }
+        { expiresIn: '30d' }
       );
 
+      const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
       return reply.send({
-        user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId },
+        user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, permissions },
         accessToken,
         refreshToken,
-        expiresIn: 900,
+        expiresIn: 28800,
       });
     } catch (err) {
       request.log.error(err);
@@ -142,6 +201,14 @@ export async function authRoutes(app: FastifyInstance) {
         role: 'student',
       },
     });
+    await logRevision({
+      tenantId: invite.tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'created',
+      userId: invite.invitedBy,
+      details: { name: user.name, email: user.email },
+    });
 
     await prisma.invite.update({
       where: { id: invite.id },
@@ -163,18 +230,19 @@ export async function authRoutes(app: FastifyInstance) {
 
     const accessToken = app.jwt.sign(
       { sub: user.id, tenantId: user.tenantId, role: user.role },
-      { expiresIn: '15m' }
+      { expiresIn: '8h' }
     );
     const refreshToken = app.jwt.sign(
       { sub: user.id, jti: randomUUID() },
-      { expiresIn: '7d' }
+      { expiresIn: '30d' }
     );
 
+    const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
     return reply.status(201).send({
-      user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, phoneNumber: user.phoneNumber, address: user.address },
+      user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, phoneNumber: user.phoneNumber, address: user.address, permissions },
       accessToken,
       refreshToken,
-      expiresIn: 900,
+      expiresIn: 28800,
     });
   });
 
@@ -188,10 +256,10 @@ export async function authRoutes(app: FastifyInstance) {
 
       const accessToken = app.jwt.sign(
         { sub: user.id, tenantId: user.tenantId, role: user.role },
-        { expiresIn: '15m' }
+        { expiresIn: '8h' }
       );
 
-      return reply.send({ accessToken, expiresIn: 900 });
+      return reply.send({ accessToken, expiresIn: 28800 });
     } catch {
       return reply.status(401).send({ error: 'Invalid refresh token' });
     }

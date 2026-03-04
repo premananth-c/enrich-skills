@@ -85,3 +85,35 @@ button { font-family: inherit; cursor: pointer; }
   background: var(--color-surface); color: var(--color-text);
 }
 .rich-text-editor-bubble button:hover { background: var(--color-border); }
+
+/* Toast notifications */
+.toast-viewport {
+  align-items: flex-end;
+}
+
+.toast-item {
+  transform-origin: top right;
+  will-change: transform, opacity;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) translateX(12px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+}
+
+@keyframes toast-out {
+  from {
+    opacity: 1;
+    transform: translateY(0) translateX(0) scale(1);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px) translateX(12px) scale(0.98);
+  }
+}

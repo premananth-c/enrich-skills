@@ -31,6 +31,32 @@ interface QuestionData {
   testCases?: TestCaseEntry[];
 }
 
+function buildQuestionSnapshot(input: {
+  type: 'mcq' | 'coding';
+  title: string;
+  description: string;
+  difficulty: 'easy' | 'medium' | 'hard';
+  tags: string;
+  explanation: string;
+  options: McqOption[];
+  examples: { input: string; output: string }[];
+  constraints: string;
+  testCases: TestCaseEntry[];
+}) {
+  return JSON.stringify({
+    type: input.type,
+    title: input.title,
+    description: input.description,
+    difficulty: input.difficulty,
+    tags: input.tags,
+    explanation: input.explanation,
+    options: input.options,
+    examples: input.examples,
+    constraints: input.constraints,
+    testCases: input.testCases,
+  });
+}
+
 export default function QuestionForm() {
   const { id } = useParams<{ id: string }>();
   const [searchParams] = useSearchParams();
@@ -61,6 +87,7 @@ export default function QuestionForm() {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
+  const [initialSnapshot, setInitialSnapshot] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -79,6 +106,20 @@ export default function QuestionForm() {
           setConstraints((q.content.constraints || []).join('\n'));
           setTestCases(q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1 }]);
         }
+        setInitialSnapshot(
+          buildQuestionSnapshot({
+            type: q.type as 'mcq' | 'coding',
+            title: q.content.title,
+            description: q.content.description || '',
+            difficulty: q.difficulty as 'easy' | 'medium' | 'hard',
+            tags: q.tags.join(', '),
+            explanation: q.content.explanation || '',
+            options: q.content.options || [{ text: '', isCorrect: true }, { text: '', isCorrect: false }],
+            examples: q.content.examples || [{ input: '', output: '' }],
+            constraints: (q.content.constraints || []).join('\n'),
+            testCases: q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1 }],
+          })
+        );
       })
       .catch(() => setError('Failed to load question'))
       .finally(() => setLoading(false));
@@ -175,6 +216,13 @@ export default function QuestionForm() {
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
   const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, resize: 'vertical' as const };
+  const currentSnapshot = buildQuestionSnapshot({ type, title, description, difficulty, tags, explanation, options, examples, constraints, testCases });
+  const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
+  const hasCorrect = options.some((o) => o.isCorrect);
+  const hasRequiredForCreate = type === 'mcq'
+    ? title.trim().length >= 2 && options.length >= 2 && options.every((o) => o.text.trim().length > 0) && hasCorrect
+    : title.trim().length >= 2 && description.trim().length >= 10 && testCases.length > 0 && testCases.every((tc) => tc.input.trim().length > 0 && tc.expectedOutput.trim().length > 0);
+  const canSubmit = !saving && hasRequiredForCreate && isDirty;
 
   return (
     <div style={{ maxWidth: 720 }}>
@@ -327,7 +375,7 @@ export default function QuestionForm() {
         )}
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" disabled={saving} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+          <button type="submit" disabled={!canSubmit} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSubmit ? 1 : 0.65, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
             {saving ? 'Saving...' : isEdit ? 'Update Question' : 'Create Question'}
           </button>
           <button type="button" onClick={() => navigate(testId ? `/tests/${testId}` : '/questions')} style={{ padding: '0.6rem 1.5rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>

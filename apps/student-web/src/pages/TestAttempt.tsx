@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
@@ -11,7 +11,7 @@ interface Question {
     title: string;
     description: string;
     examples?: { input: string; output: string }[];
-    options?: { id: string; text: string; isCorrect: boolean }[];
+    options?: { id: string; text: string; isCorrect?: boolean }[];
     explanation?: string;
   };
   testCases?: { input: string; expectedOutput: string; isPublic: boolean }[];
@@ -57,67 +57,90 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TestAttempt() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const reviewMode = searchParams.get('review') === '1';
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [codeMap, setCodeMap] = useState<Record<string, string>>({});
   const [langMap, setLangMap] = useState<Record<string, string>>({});
   const [output, setOutput] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const [finishing, setFinishing] = useState(false);
   const [mcqFeedback, setMcqFeedback] = useState<Record<string, { status: string; correct: boolean } | null>>({});
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (!attemptId) return;
-    api<AttemptData>(`/attempts/${attemptId}`).then((data) => {
+    const endpoint = reviewMode ? `/attempts/${attemptId}/review` : `/attempts/${attemptId}`;
+    api<AttemptData>(endpoint).then((data) => {
       setAttempt(data);
       const codes: Record<string, string> = {};
       const langs: Record<string, string> = {};
+      const selections: Record<string, string> = {};
       data.submissions.forEach((sub) => {
         codes[sub.questionId] = sub.code || DEFAULT_CODE[sub.language || 'python'] || DEFAULT_CODE.python;
         langs[sub.questionId] = sub.language || 'python';
+        if (sub.selectedOptionId) selections[sub.questionId] = sub.selectedOptionId;
       });
       setCodeMap(codes);
       setLangMap(langs);
+      setSelectedOptions(selections);
     });
-  }, [attemptId]);
+  }, [attemptId, reviewMode]);
 
   const handleFinish = useCallback(async () => {
-    if (submitting) return;
-    setSubmitting(true);
+    if (finishing) return;
+    if (!attemptId) {
+      setOutput('Unable to submit test: attempt id is missing.');
+      return;
+    }
+    if (!window.confirm('Are you sure you want to submit the test? You cannot change your answers after submission.')) return;
+    setFinishing(true);
     try {
-      const res = await api<{ resultsAvailable: boolean }>(`/attempts/${attemptId}/finish`, { method: 'POST' });
-      if (res.resultsAvailable) {
-        navigate(`/result/${attemptId}`);
-      } else {
-        navigate('/tests');
-      }
+      await api<{ resultsAvailable: boolean }>(`/attempts/${attemptId}/finish`, { method: 'POST' });
+      navigate(`/result/${attemptId}`);
     } catch (e) {
       setOutput(`Error: ${e instanceof Error ? e.message : 'Finish failed'}`);
     } finally {
-      setSubmitting(false);
+      setFinishing(false);
     }
-  }, [attemptId, submitting, navigate]);
+  }, [attemptId, finishing, navigate]);
 
   if (!attempt) return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>;
 
-  if (attempt.status !== 'in_progress') {
+  if (attempt.status !== 'in_progress' && !reviewMode) {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Test Submitted</h1>
         <p style={{ color: 'var(--color-text-muted)' }}>This attempt has already been submitted.</p>
-        <button
-          onClick={() => navigate(`/result/${attemptId}`)}
-          style={{
-            padding: '0.6rem 1.5rem',
-            background: 'var(--color-primary)',
-            color: 'white',
-            border: 'none',
-            borderRadius: '6px',
-            fontWeight: 500,
-            marginTop: '1rem',
-          }}
-        >
-          View Results
-        </button>
+        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+          <button
+            onClick={() => navigate(`/result/${attemptId}`)}
+            style={{
+              padding: '0.6rem 1.5rem',
+              background: 'var(--color-primary)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '6px',
+              fontWeight: 500,
+            }}
+          >
+            View Results
+          </button>
+          <Link
+            to={`/attempt/${attemptId}?review=1`}
+            style={{
+              padding: '0.6rem 1.5rem',
+              border: '1px solid var(--color-border)',
+              borderRadius: '6px',
+              textDecoration: 'none',
+              color: 'var(--color-text)',
+              fontWeight: 500,
+            }}
+          >
+            Review Answers
+          </Link>
+        </div>
       </div>
     );
   }
@@ -128,9 +151,12 @@ export default function TestAttempt() {
   const qId = current?.question.id || '';
   const currentCode = codeMap[qId] || DEFAULT_CODE.python;
   const currentLang = langMap[qId] || 'python';
+  const savedCode = submission?.code || DEFAULT_CODE[submission?.language || 'python'] || DEFAULT_CODE.python;
+  const savedLang = submission?.language || 'python';
 
   const handleCodeSubmit = async () => {
     if (!current || current.question.type !== 'coding') return;
+    if (!attemptId) return;
     setSubmitting(true);
     try {
       const res = await api<{ status: string }>(`/attempts/${attemptId}/submit-code`, {
@@ -154,8 +180,17 @@ export default function TestAttempt() {
     }
   };
 
-  const handleMcqSubmit = async (optionId: string) => {
+  const handleMcqSelect = (optionId: string) => {
+    if (submission?.selectedOptionId) return;
+    setSelectedOptions((prev) => ({ ...prev, [qId]: optionId }));
+  };
+
+  const handleMcqSubmit = async () => {
     if (!current) return;
+    if (!attemptId) return;
+    const optionId = selectedOptions[qId];
+    if (!optionId) return;
+    setSubmitting(true);
     try {
       const res = await api<{ status: string; correct: boolean }>(`/attempts/${attemptId}/submit-mcq`, {
         method: 'POST',
@@ -173,6 +208,8 @@ export default function TestAttempt() {
       });
     } catch (e) {
       setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
+    } finally {
+      setSubmitting(false);
     }
   };
 
@@ -180,6 +217,13 @@ export default function TestAttempt() {
   const isCoding = current?.question.type === 'coding';
   const isMcq = current?.question.type === 'mcq';
   const showImmediate = attempt.test.config.showResultsImmediately;
+  const isReview = reviewMode || attempt.status !== 'in_progress';
+  const hasAnyResponse = attempt.submissions.some((sub) => {
+    if (sub.selectedOptionId) return true;
+    if (sub.code && sub.code.trim().length > 0) return true;
+    return false;
+  });
+  const isCodeDirty = currentCode !== savedCode || currentLang !== savedLang;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -193,28 +237,60 @@ export default function TestAttempt() {
         }}
       >
         <h1 style={{ margin: 0, fontSize: '1.25rem' }}>{attempt.test.title}</h1>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-          <CountdownTimer
-            startedAt={attempt.startedAt}
-            durationMinutes={attempt.test.config.durationMinutes}
-            onExpire={handleFinish}
-          />
-          <button
-            onClick={handleFinish}
-            disabled={submitting}
+        {isReview ? (
+          <div
             style={{
-              padding: '0.5rem 1rem',
-              background: '#22c55e',
-              color: 'white',
-              border: 'none',
+              padding: '0.3rem 0.65rem',
               borderRadius: '6px',
-              fontWeight: 500,
+              background: 'rgba(99,102,241,0.15)',
+              color: 'var(--color-primary)',
+              fontSize: '0.85rem',
+              fontWeight: 600,
             }}
           >
-            Submit Test
-          </button>
-        </div>
+            Review Mode
+          </div>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <CountdownTimer
+              startedAt={attempt.startedAt}
+              durationMinutes={attempt.test.config.durationMinutes}
+              onExpire={handleFinish}
+            />
+            <button
+              onClick={handleFinish}
+              disabled={finishing || !hasAnyResponse}
+              style={{
+                padding: '0.5rem 1rem',
+                background: '#22c55e',
+                color: 'white',
+                border: 'none',
+                borderRadius: '6px',
+                fontWeight: 500,
+                opacity: finishing || !hasAnyResponse ? 0.7 : 1,
+                cursor: finishing || !hasAnyResponse ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {finishing ? 'Submitting...' : 'Submit Test'}
+            </button>
+          </div>
+        )}
       </div>
+      {output && (
+        <div
+          style={{
+            marginBottom: '0.75rem',
+            padding: '0.65rem 0.8rem',
+            borderRadius: '8px',
+            border: '1px solid rgba(239,68,68,0.4)',
+            background: 'rgba(239,68,68,0.08)',
+            color: '#ef4444',
+            fontSize: '0.88rem',
+          }}
+        >
+          {output}
+        </div>
+      )}
 
       <div style={{ display: 'flex', gap: '0.75rem', flex: 1, minHeight: 0 }}>
         {/* Question navigation */}
@@ -306,85 +382,159 @@ export default function TestAttempt() {
             ) : null}
 
             {/* MCQ options */}
-            {isMcq && content?.options && (
-              <div style={{ marginTop: '1rem' }}>
-                <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>Options</h4>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
-                  {content.options.map((opt) => {
-                    const isSelected = submission?.selectedOptionId === opt.id;
-                    const feedback = mcqFeedback[qId];
-                    let borderColor = 'var(--color-border)';
-                    let bg = 'var(--color-bg)';
-                    if (isSelected && feedback && showImmediate) {
-                      borderColor = feedback.correct ? '#22c55e' : '#ef4444';
-                      bg = feedback.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
-                    } else if (isSelected) {
-                      borderColor = 'var(--color-primary)';
-                      bg = 'rgba(99,102,241,0.1)';
-                    }
-                    return (
-                      <button
-                        key={opt.id}
-                        onClick={() => handleMcqSubmit(opt.id)}
-                        disabled={!!submission?.selectedOptionId}
-                        style={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '0.75rem',
-                          padding: '0.75rem 1rem',
-                          background: bg,
-                          border: `2px solid ${borderColor}`,
-                          borderRadius: '8px',
-                          textAlign: 'left',
-                          color: 'var(--color-text)',
-                          cursor: submission?.selectedOptionId ? 'default' : 'pointer',
-                          fontSize: '0.9rem',
-                        }}
-                      >
-                        <span
+            {isMcq && content?.options && (() => {
+              const isSubmitted = isReview || !!submission?.selectedOptionId;
+              const feedback = mcqFeedback[qId];
+              const localSelection = selectedOptions[qId] || '';
+              const correctOption = content.options.find((opt) => opt.isCorrect);
+
+              return (
+                <div style={{ marginTop: '1rem' }}>
+                  <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>Options</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {content.options.map((opt) => {
+                      const isSelected = localSelection === opt.id;
+                      let borderColor = 'var(--color-border)';
+                      let bg = 'var(--color-bg)';
+
+                      if (isReview && opt.isCorrect) {
+                        borderColor = '#22c55e';
+                        bg = 'rgba(34,197,94,0.1)';
+                      } else if (isReview && isSelected && !opt.isCorrect) {
+                        borderColor = '#ef4444';
+                        bg = 'rgba(239,68,68,0.1)';
+                      } else if (isSubmitted && isSelected && feedback && showImmediate) {
+                        borderColor = feedback.correct ? '#22c55e' : '#ef4444';
+                        bg = feedback.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
+                      } else if (isSelected) {
+                        borderColor = 'var(--color-primary)';
+                        bg = 'rgba(99,102,241,0.1)';
+                      }
+
+                      return (
+                        <button
+                          key={opt.id}
+                          onClick={() => handleMcqSelect(opt.id)}
+                          disabled={isSubmitted || isReview}
                           style={{
-                            width: 18,
-                            height: 18,
-                            borderRadius: '50%',
-                            border: `2px solid ${isSelected ? borderColor : 'var(--color-text-muted)'}`,
-                            background: isSelected ? borderColor : 'transparent',
-                            flexShrink: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.75rem',
+                            padding: '0.75rem 1rem',
+                            background: bg,
+                            border: `2px solid ${borderColor}`,
+                            borderRadius: '8px',
+                            textAlign: 'left',
+                            color: 'var(--color-text)',
+                            cursor: isSubmitted ? 'default' : 'pointer',
+                            fontSize: '0.9rem',
                           }}
-                        />
-                        {opt.text}
-                      </button>
-                    );
-                  })}
-                </div>
-                {submission?.selectedOptionId && showImmediate && mcqFeedback[qId] && (
-                  <div
-                    style={{
-                      marginTop: '0.75rem',
-                      padding: '0.75rem',
-                      borderRadius: '6px',
-                      background: mcqFeedback[qId]!.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
-                      color: mcqFeedback[qId]!.correct ? '#22c55e' : '#ef4444',
-                      fontSize: '0.9rem',
-                      fontWeight: 500,
-                    }}
-                  >
-                    {mcqFeedback[qId]!.correct ? 'Correct!' : 'Incorrect'}
-                    {content.explanation && (
-                      <div style={{ marginTop: '0.5rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
-                        {content.explanation}
-                      </div>
-                    )}
+                        >
+                          <span
+                            style={{
+                              width: 18,
+                              height: 18,
+                              borderRadius: '50%',
+                              border: `2px solid ${isSelected ? borderColor : 'var(--color-text-muted)'}`,
+                              background: isSelected ? borderColor : 'transparent',
+                              flexShrink: 0,
+                            }}
+                          />
+                          {opt.text}
+                        </button>
+                      );
+                    })}
                   </div>
-                )}
-              </div>
-            )}
+
+                  {!isSubmitted && !isReview && localSelection && (
+                    <button
+                      onClick={handleMcqSubmit}
+                      disabled={submitting || localSelection === submission?.selectedOptionId}
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.6rem 1.5rem',
+                        background: 'var(--color-primary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        fontWeight: 500,
+                        fontSize: '0.9rem',
+                        cursor: submitting || localSelection === submission?.selectedOptionId ? 'not-allowed' : 'pointer',
+                        opacity: submitting || localSelection === submission?.selectedOptionId ? 0.7 : 1,
+                      }}
+                    >
+                      {submitting ? 'Submitting...' : 'Submit Answer'}
+                    </button>
+                  )}
+
+                  {!isReview && isSubmitted && showImmediate && feedback && (
+                    <div
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        background: feedback.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)',
+                        color: feedback.correct ? '#22c55e' : '#ef4444',
+                        fontSize: '0.9rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      {feedback.correct ? 'Correct!' : 'Incorrect'}
+                      {content.explanation && (
+                        <div style={{ marginTop: '0.5rem', color: 'var(--color-text-muted)', fontWeight: 400 }}>
+                          {content.explanation}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!isReview && isSubmitted && !showImmediate && (
+                    <div
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        background: 'rgba(99,102,241,0.1)',
+                        color: 'var(--color-primary)',
+                        fontSize: '0.9rem',
+                        fontWeight: 500,
+                      }}
+                    >
+                      Answer submitted
+                    </div>
+                  )}
+                  {isReview && (
+                    <div
+                      style={{
+                        marginTop: '0.75rem',
+                        padding: '0.75rem',
+                        borderRadius: '6px',
+                        background: 'rgba(99,102,241,0.1)',
+                        color: 'var(--color-text)',
+                        fontSize: '0.88rem',
+                        lineHeight: 1.5,
+                      }}
+                    >
+                      <div style={{ fontWeight: 600 }}>
+                        Correct Answer: {correctOption?.text ?? 'Not available'}
+                      </div>
+                      {content.explanation && (
+                        <div style={{ marginTop: '0.5rem', color: 'var(--color-text-muted)' }}>
+                          {content.explanation}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Code editor for coding questions */}
           {isCoding && (
             <>
               <div style={{ flex: 1, minHeight: 200, display: 'flex', flexDirection: 'column' }}>
-                <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
+                {!isReview && <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
                   <select
                     value={currentLang}
                     onChange={(e) => setLangMap((prev) => ({ ...prev, [qId]: e.target.value }))}
@@ -417,7 +567,7 @@ export default function TestAttempt() {
                   </button>
                   <button
                     onClick={handleCodeSubmit}
-                    disabled={submitting}
+                    disabled={submitting || !isCodeDirty}
                     style={{
                       padding: '0.35rem 0.75rem',
                       background: 'var(--color-primary)',
@@ -425,11 +575,13 @@ export default function TestAttempt() {
                       border: 'none',
                       borderRadius: '6px',
                       fontSize: '0.85rem',
+                      opacity: submitting || !isCodeDirty ? 0.7 : 1,
+                      cursor: submitting || !isCodeDirty ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {submitting ? 'Submitting...' : 'Submit'}
                   </button>
-                </div>
+                </div>}
                 <div style={{ flex: 1, border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
@@ -437,11 +589,11 @@ export default function TestAttempt() {
                     value={currentCode}
                     onChange={(v) => setCodeMap((prev) => ({ ...prev, [qId]: v ?? '' }))}
                     theme="vs-dark"
-                    options={{ minimap: { enabled: false }, fontSize: 14 }}
+                    options={{ minimap: { enabled: false }, fontSize: 14, readOnly: isReview }}
                   />
                 </div>
               </div>
-              {output && (
+              {!isReview && output && (
                 <pre
                   style={{
                     background: 'var(--color-surface)',

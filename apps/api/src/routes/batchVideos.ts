@@ -2,14 +2,14 @@ import { createReadStream } from 'fs';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createBatchVideoSchema, updateBatchVideoSchema } from '@enrich-skills/shared';
-import { requireTenant, requireAdmin, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 import { saveFile, getFilePath, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
 
 export async function batchVideoRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   app.get('/batches/:batchId/videos', async (request: FastifyRequest<{ Params: { batchId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'batches', 'view');
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const videos = await prisma.batchVideo.findMany({
@@ -21,7 +21,7 @@ export async function batchVideoRoutes(app: FastifyInstance) {
   });
 
   app.post('/batches/:batchId/videos', async (request: FastifyRequest<{ Params: { batchId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'batches', 'edit');
     const payload = request.user as { sub: string };
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
@@ -46,7 +46,7 @@ export async function batchVideoRoutes(app: FastifyInstance) {
   });
 
   app.patch('/batches/:batchId/videos/:videoId', async (request: FastifyRequest<{ Params: { batchId: string; videoId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'batches', 'edit');
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const parsed = updateBatchVideoSchema.safeParse(request.body);
@@ -66,7 +66,7 @@ export async function batchVideoRoutes(app: FastifyInstance) {
   });
 
   app.get('/batches/:batchId/videos/:videoId/stream', async (request: FastifyRequest<{ Params: { batchId: string; videoId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'batches', 'view');
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const video = await prisma.batchVideo.findFirst({
@@ -81,7 +81,7 @@ export async function batchVideoRoutes(app: FastifyInstance) {
   });
 
   app.delete('/batches/:batchId/videos/:videoId', async (request: FastifyRequest<{ Params: { batchId: string; videoId: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'batches', 'edit');
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const video = await prisma.batchVideo.findFirst({

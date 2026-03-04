@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, apiUpload } from '../lib/api';
 import { RichTextEditor } from '../components/RichTextEditor';
+import { emitToast } from '../lib/toast';
 
 interface CourseChapter {
   id: string;
@@ -147,7 +148,7 @@ export default function CourseDetail() {
       setAddChapter(false);
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -166,7 +167,7 @@ export default function CourseDetail() {
       setAddTopic(null);
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -176,7 +177,7 @@ export default function CourseDetail() {
       await api(`/courses/${id}/chapters/${chapterId}`, { method: 'DELETE' });
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -189,7 +190,7 @@ export default function CourseDetail() {
       setActivities((p) => { const next = { ...p }; delete next[topicId]; return next; });
       setEvaluations((p) => { const next = { ...p }; delete next[topicId]; return next; });
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -208,7 +209,7 @@ export default function CourseDetail() {
       setNewMaterial({ type: 'link', title: '', url: '' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -224,7 +225,7 @@ export default function CourseDetail() {
       setAddMaterial(null);
       loadTopicExtras(topicId);
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Upload failed');
+      emitToast('error', err instanceof Error ? err.message : 'Upload failed');
     }
     e.target.value = '';
   };
@@ -235,7 +236,7 @@ export default function CourseDetail() {
       await api(`/courses/${id}/chapters/${chapterId}/topics/${topicId}/materials/${materialId}`, { method: 'DELETE' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -252,7 +253,7 @@ export default function CourseDetail() {
       setNewActivity({ type: 'assignment', title: '' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -262,7 +263,7 @@ export default function CourseDetail() {
       await api(`/courses/${id}/chapters/${chapterId}/topics/${topicId}/activities/${activityId}`, { method: 'DELETE' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -279,7 +280,7 @@ export default function CourseDetail() {
       setNewEvaluation({ type: 'quiz', title: '', testId: '' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -289,7 +290,7 @@ export default function CourseDetail() {
       await api(`/courses/${id}/chapters/${chapterId}/topics/${topicId}/evaluations/${evaluationId}`, { method: 'DELETE' });
       loadTopicExtras(topicId);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -309,7 +310,7 @@ export default function CourseDetail() {
       setEditingTopicContent('');
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -340,7 +341,7 @@ export default function CourseDetail() {
       setEditingChapterTitle('');
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -371,7 +372,7 @@ export default function CourseDetail() {
       setEditingTopicTitle('');
       loadCourse();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed');
+      emitToast('error', e instanceof Error ? e.message : 'Failed');
     }
   };
 
@@ -379,11 +380,11 @@ export default function CourseDetail() {
     if (!id) return;
     const isBatch = assignType === 'batch';
     if (isBatch && !assignBatchId) {
-      alert('Select a batch');
+      emitToast('info', 'Select a batch');
       return;
     }
     if (!isBatch && !assignUserId) {
-      alert('Select a student');
+      emitToast('info', 'Select a student');
       return;
     }
     try {
@@ -403,7 +404,7 @@ export default function CourseDetail() {
       const list = await api<CourseAssignmentItem[]>(`/course-assignments?courseId=${id}`);
       setAssignments(list);
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to assign');
+      emitToast('error', e instanceof Error ? e.message : 'Failed to assign');
     }
   };
 
@@ -413,7 +414,7 @@ export default function CourseDetail() {
       await api(`/course-assignments/${assignmentId}`, { method: 'DELETE' });
       setAssignments((prev) => prev.filter((a) => a.id !== assignmentId));
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Failed to remove');
+      emitToast('error', e instanceof Error ? e.message : 'Failed to remove');
     }
   };
 

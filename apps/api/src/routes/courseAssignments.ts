@@ -1,13 +1,13 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createCourseAssignmentSchema } from '@enrich-skills/shared';
-import { requireTenant, requireAdmin, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
 export async function courseAssignmentRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireTenant(request);
+    const tenantId = await requireModuleAccess(request, 'courses', 'view');
     const query = request.query as { courseId?: string; batchId?: string; userId?: string };
     const where: { tenantId: string; courseId?: string; batchId?: string; userId?: string } = { tenantId };
     if (query.courseId) where.courseId = query.courseId;
@@ -26,7 +26,7 @@ export async function courseAssignmentRoutes(app: FastifyInstance) {
   });
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'courses', 'edit');
     const payload = request.user as { sub: string };
     const parsed = createCourseAssignmentSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -65,7 +65,7 @@ export async function courseAssignmentRoutes(app: FastifyInstance) {
   });
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'courses', 'edit');
     const existing = await prisma.courseAssignment.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Course assignment not found' });
     await prisma.courseAssignment.delete({ where: { id: request.params.id } });

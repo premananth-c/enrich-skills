@@ -1,24 +1,100 @@
-const getToken = () => localStorage.getItem('enrich_access_token');
+import { emitToast } from './toast';
+
+const TOKEN_KEY = 'enrich_access_token';
+const REFRESH_KEY = 'enrich_refresh_token';
+const TENANT_KEY = 'enrich_tenant_id';
+
+let refreshPromise: Promise<string | null> | null = null;
+
+function getSuccessMessage(method: string): string {
+  if (method === 'POST') return 'Submitted successfully';
+  if (method === 'PUT' || method === 'PATCH') return 'Updated successfully';
+  if (method === 'DELETE') return 'Deleted successfully';
+  return 'Action completed';
+}
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem(REFRESH_KEY);
+  if (!refreshToken) return null;
+
+  try {
+    const res = await fetch('/api/v1/auth/refresh', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${refreshToken}`,
+      },
+    });
+
+    if (!res.ok) return null;
+
+    const data = await res.json();
+    localStorage.setItem(TOKEN_KEY, data.accessToken);
+    return data.accessToken;
+  } catch {
+    return null;
+  }
+}
+
+function getRefreshedToken(): Promise<string | null> {
+  if (!refreshPromise) {
+    refreshPromise = refreshAccessToken().finally(() => {
+      refreshPromise = null;
+    });
+  }
+  return refreshPromise;
+}
+
+function buildHeaders(token: string | null, options: RequestInit): HeadersInit {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(token && { Authorization: `Bearer ${token}` }),
+  };
+  const tenantId = localStorage.getItem(TENANT_KEY);
+  if (tenantId) headers['X-Tenant-Id'] = tenantId;
+  if (options.headers) Object.assign(headers, options.headers);
+  return headers;
+}
 
 export async function api<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken();
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...(token && { Authorization: `Bearer ${token}` }),
-    ...options.headers,
-  };
-  const tenantId = localStorage.getItem('enrich_tenant_id');
-  if (tenantId) {
-    (headers as Record<string, string>)['X-Tenant-Id'] = tenantId;
+  const method = (options.method || 'GET').toUpperCase();
+  const isMutation = method !== 'GET';
+  const token = localStorage.getItem(TOKEN_KEY);
+  const headers = buildHeaders(token, options);
+
+  let res = await fetch(`/api/v1${path}`, { ...options, headers });
+
+  if (res.status === 401) {
+    const newToken = await getRefreshedToken();
+    if (newToken) {
+      const retryHeaders = buildHeaders(newToken, options);
+      res = await fetch(`/api/v1${path}`, { ...options, headers: retryHeaders });
+    } else {
+      localStorage.removeItem(TOKEN_KEY);
+      localStorage.removeItem(REFRESH_KEY);
+      localStorage.removeItem('enrich_user');
+      window.location.href = '/login';
+      throw new Error('Session expired');
+    }
   }
-  const res = await fetch(`/api/v1${path}`, { ...options, headers });
+
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Request failed: ${res.status}`);
+    const message = err.error || `Request failed: ${res.status}`;
+    if (isMutation) emitToast('error', message);
+    throw new Error(message);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  if (res.status === 204) {
+    if (isMutation) emitToast('success', getSuccessMessage(method));
+    return undefined as T;
+  }
+  const data = await res.json();
+  if (isMutation) {
+    const msg = typeof data?.message === 'string' && data.message.trim() ? data.message : getSuccessMessage(method);
+    emitToast('success', msg);
+  }
+  return data;
 }

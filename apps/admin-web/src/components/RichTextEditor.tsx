@@ -13,6 +13,7 @@ import { Color } from '@tiptap/extension-text-style/color';
 import { FontFamily } from '@tiptap/extension-text-style/font-family';
 import { FontSize } from '@tiptap/extension-text-style/font-size';
 import { useCallback, useEffect, useState } from 'react';
+import { emitToast } from '../lib/toast';
 
 const FONT_OPTIONS = [
   { label: 'Default', value: '' },
@@ -148,7 +149,7 @@ export function RichTextEditor({
       const file = e.target.files?.[0];
       if (!file || !editor) return;
       if (!file.type.startsWith('image/')) {
-        alert('Please select an image file.');
+        emitToast('error', 'Please select an image file.');
         return;
       }
       const reader = new FileReader();

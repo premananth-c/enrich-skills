@@ -37,7 +37,7 @@ export async function studentRoutes(app: FastifyInstance) {
     const [allocatedTests, courseAssignments, upcomingEvents, unreadCount, recentAttempts] =
       await Promise.all([
         prisma.testAllocation.findMany({
-          where: { userId },
+          where: { userId, test: { status: 'published' } },
           include: {
             test: { select: { id: true, title: true, type: true, status: true, config: true, schedule: true } },
           },
@@ -98,18 +98,63 @@ export async function studentRoutes(app: FastifyInstance) {
       },
       orderBy: { assignedAt: 'desc' },
     });
+    const publishedAllocations = allocations.filter((a) => a.test.status === 'published');
 
     const attemptCounts = await prisma.attempt.groupBy({
       by: ['testId'],
-      where: { userId, testId: { in: allocations.map((a) => a.testId) } },
+      where: { userId, testId: { in: publishedAllocations.map((a) => a.testId) } },
       _count: true,
     });
     const countMap = new Map(attemptCounts.map((c) => [c.testId, c._count]));
 
-    const tests = allocations.map((alloc) => ({
-      ...alloc,
-      attemptCount: countMap.get(alloc.testId) ?? 0,
-    }));
+    const attempts = await prisma.attempt.findMany({
+      where: { userId, testId: { in: publishedAllocations.map((a) => a.testId) } },
+      select: {
+        id: true,
+        testId: true,
+        startedAt: true,
+        submittedAt: true,
+        score: true,
+        maxScore: true,
+        status: true,
+      },
+      orderBy: { startedAt: 'desc' },
+    });
+    const attemptsByTest = new Map<string, typeof attempts>();
+    for (const attempt of attempts) {
+      const list = attemptsByTest.get(attempt.testId) ?? [];
+      list.push(attempt);
+      attemptsByTest.set(attempt.testId, list);
+    }
+
+    const tests = publishedAllocations.map((alloc) => {
+      const testAttempts = attemptsByTest.get(alloc.testId) ?? [];
+      const completedAttempts = testAttempts.filter((a) => a.submittedAt);
+      const latestCompleted = completedAttempts[0] ?? null;
+      const testConfig = alloc.test.config as {
+        attemptLimit?: number;
+        passPercentage?: number;
+      };
+      const passPercentage = testConfig.passPercentage ?? 40;
+      const percentage =
+        latestCompleted?.maxScore && latestCompleted.maxScore > 0
+          ? ((latestCompleted.score ?? 0) / latestCompleted.maxScore) * 100
+          : null;
+
+      return {
+        ...alloc,
+        attemptCount: countMap.get(alloc.testId) ?? 0,
+        attempts: testAttempts,
+        latestCompletedAttempt: latestCompleted
+          ? {
+              ...latestCompleted,
+              percentage,
+              passPercentage,
+              result: percentage != null && percentage >= passPercentage ? 'pass' : 'fail',
+            }
+          : null,
+      };
+    });
 
     return reply.send(tests);
   });

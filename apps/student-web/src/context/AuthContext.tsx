@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { emitToast } from '../lib/toast';
 
 interface User {
   id: string;
@@ -22,6 +23,7 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | null>(null);
 
 const TOKEN_KEY = 'enrich_access_token';
+const REFRESH_KEY = 'enrich_refresh_token';
 const USER_KEY = 'enrich_user';
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -38,17 +40,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setAccessToken(token);
       } catch {
         localStorage.removeItem(TOKEN_KEY);
+        localStorage.removeItem(REFRESH_KEY);
         localStorage.removeItem(USER_KEY);
       }
     }
     setLoading(false);
   }, []);
 
-  const setAuth = useCallback((u: User, token: string) => {
+  const setAuth = useCallback((u: User, token: string, refresh?: string) => {
     setUser(u);
     setAccessToken(token);
     localStorage.setItem(TOKEN_KEY, token);
     localStorage.setItem(USER_KEY, JSON.stringify(u));
+    if (refresh) localStorage.setItem(REFRESH_KEY, refresh);
     if (u.tenantId) localStorage.setItem('enrich_tenant_id', u.tenantId);
   }, []);
 
@@ -60,10 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Login failed');
       throw new Error(err.error || 'Login failed');
     }
     const data = await res.json();
-    setAuth(data.user, data.accessToken);
+    setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Signed in successfully');
   }, [setAuth]);
 
   const register = useCallback(async (email: string, password: string, name: string, tenantId?: string) => {
@@ -74,10 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Registration failed');
       throw new Error(err.error || 'Registration failed');
     }
     const data = await res.json();
-    setAuth(data.user, data.accessToken);
+    setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Account created successfully');
   }, [setAuth]);
 
   const registerWithInvite = useCallback(async (token: string, password: string, name: string, phoneNumber: string, address: string) => {
@@ -88,16 +96,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Sign up failed');
       throw new Error(err.error || 'Sign up failed');
     }
     const data = await res.json();
-    setAuth(data.user, data.accessToken);
+    setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Account created successfully');
   }, [setAuth]);
 
   const logout = useCallback(() => {
     setUser(null);
     setAccessToken(null);
     localStorage.removeItem(TOKEN_KEY);
+    localStorage.removeItem(REFRESH_KEY);
     localStorage.removeItem(USER_KEY);
     localStorage.removeItem('enrich_tenant_id');
   }, []);
