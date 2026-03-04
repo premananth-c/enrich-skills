@@ -12,6 +12,7 @@ import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
+import ToastViewport from './components/ToastViewport';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -51,7 +52,10 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <AppRoutes />
+      <>
+        <AppRoutes />
+        <ToastViewport />
+      </>
     </AuthProvider>
   );
 }

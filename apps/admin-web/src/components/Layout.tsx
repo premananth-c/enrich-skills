@@ -13,7 +13,7 @@ const navLinkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties 
 });
 
 export default function Layout() {
-  const { user, logout } = useAuth();
+  const { user, logout, canView, isSuperAdmin } = useAuth();
   const navigate = useNavigate();
 
   return (
@@ -22,12 +22,13 @@ export default function Layout() {
         <Link to="/" style={{ color: 'inherit', textDecoration: 'none', fontSize: '1.25rem', fontWeight: 600 }}>Admin</Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>
-          <NavLink to="/courses" style={navLinkStyle}>Courses</NavLink>
-          <NavLink to="/batches" style={navLinkStyle}>Batches</NavLink>
-          <NavLink to="/tests" style={navLinkStyle}>Tests</NavLink>
-          <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>
-          <NavLink to="/students" style={navLinkStyle}>Students</NavLink>
-          <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>
+          {canView('courses') && <NavLink to="/courses" style={navLinkStyle}>Courses</NavLink>}
+          {canView('batches') && <NavLink to="/batches" style={navLinkStyle}>Batches</NavLink>}
+          {canView('tests') && <NavLink to="/tests" style={navLinkStyle}>Tests</NavLink>}
+          {canView('questions') && <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>}
+          {canView('students') && <NavLink to="/students" style={navLinkStyle}>Students</NavLink>}
+          {canView('reports') && <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>}
+          {isSuperAdmin && <NavLink to="/manage-users" style={navLinkStyle}>Manage Users</NavLink>}
         </nav>
         <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>
           <span style={{ fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>{user?.email}</span>

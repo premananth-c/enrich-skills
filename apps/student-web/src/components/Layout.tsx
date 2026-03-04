@@ -37,13 +37,14 @@ export default function Layout() {
     display: 'flex',
     alignItems: 'center',
     gap: '0.75rem',
-    padding: '0.65rem 1rem',
-    borderRadius: '8px',
-    color: isActive ? 'var(--color-text)' : 'var(--color-text-muted)',
-    background: isActive ? 'var(--color-primary)' : 'transparent',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '6px',
+    color: isActive ? 'var(--color-primary)' : 'var(--color-text-muted)',
+    background: isActive ? 'var(--color-bg)' : 'transparent',
     textDecoration: 'none',
     fontSize: '0.95rem',
     fontWeight: isActive ? 600 : 400,
+    borderLeft: isActive ? '3px solid var(--color-primary)' : '3px solid transparent',
     transition: 'background 0.15s, color 0.15s',
   });
 

@@ -32,12 +32,12 @@ model Tenant {
 model User {
   id           String   @id @default(uuid())
   tenantId     String
-  email        String
+  email        String?
   passwordHash String
   name         String
   phoneNumber  String?
   address      String?
-  role         String   @default("student") // student, admin, proctor, content_author, platform_operator
+  role         String   @default("student") // student, admin, super_admin, or custom roleKey
   cohortIds    String[] @default([])
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
@@ -54,6 +54,20 @@ model User {
   activitySubmissions  ActivitySubmission[]
 
   @@unique([tenantId, email])
+  @@index([tenantId])
+}
+
+model RoleDefinition {
+  id          String   @id @default(uuid())
+  tenantId    String
+  roleKey     String
+  displayName String
+  permissions Json
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([tenantId, roleKey])
   @@index([tenantId])
 }
 
@@ -265,6 +279,7 @@ model Batch {
   tenantId    String
   name        String
   description String?
+  isArchived  Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

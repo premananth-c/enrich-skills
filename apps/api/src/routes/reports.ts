@@ -1,12 +1,12 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { requireTenant, requireAdmin, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
 export async function reportsRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
 
   app.get('/', async (request: FastifyRequest<{ Querystring: { type: string; batchId?: string; testId?: string; userId?: string; q?: string } }>, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'reports', 'view');
     const { type, batchId, testId, userId, q } = request.query;
     if (!type) return reply.status(400).send({ error: 'type is required: batch | test | student' });
 

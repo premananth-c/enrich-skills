@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
+import { formatStatusLabel } from '../lib/status';
 
 interface QuestionItem {
   id: string;
@@ -34,6 +35,11 @@ interface TestData {
   config: {
     durationMinutes: number;
     attemptLimit: number;
+    shuffleQuestions: boolean;
+    showResultsImmediately: boolean;
+    partialScoring: boolean;
+    proctoringEnabled: boolean;
+    aiFeedbackEnabled: boolean;
     passPercentage?: number;
     scoreDistribution?: 'equal' | 'custom';
     questionWeights?: Record<string, number>;
@@ -72,6 +78,46 @@ interface StudentItem {
   email: string;
 }
 
+const defaultConfig: TestData['config'] = {
+  durationMinutes: 60,
+  attemptLimit: 3,
+  shuffleQuestions: false,
+  showResultsImmediately: true,
+  partialScoring: true,
+  proctoringEnabled: false,
+  aiFeedbackEnabled: false,
+  passPercentage: 40,
+  scoreDistribution: 'equal',
+  questionWeights: {},
+};
+
+function clampNumberInput(raw: string, min: number, max: number, fallback: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+function buildUpdateSnapshot(input: {
+  title: string;
+  type: 'mcq' | 'coding';
+  status: 'draft' | 'published' | 'archived';
+  config: TestData['config'];
+  scheduleEnabled: boolean;
+  startAt: string;
+  endAt: string;
+}) {
+  return JSON.stringify({
+    title: input.title.trim(),
+    type: input.type,
+    status: input.status,
+    config: {
+      ...input.config,
+      questionWeights: input.config.questionWeights ?? {},
+    },
+    schedule: input.scheduleEnabled ? { startAt: input.startAt || '', endAt: input.endAt || '' } : null,
+  });
+}
+
 export default function TestDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -105,18 +151,16 @@ export default function TestDetail() {
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'mcq' | 'coding'>('mcq');
   const [status, setStatus] = useState<'draft' | 'published' | 'archived'>('draft');
-  const [config, setConfig] = useState<TestData['config']>({
-    durationMinutes: 60,
-    attemptLimit: 3,
-    passPercentage: 40,
-    scoreDistribution: 'equal',
-    questionWeights: {},
-  });
+  const [config, setConfig] = useState<TestData['config']>(defaultConfig);
+  const [durationInput, setDurationInput] = useState(String(defaultConfig.durationMinutes));
+  const [attemptLimitInput, setAttemptLimitInput] = useState(String(defaultConfig.attemptLimit));
+  const [passPercentageInput, setPassPercentageInput] = useState(String(defaultConfig.passPercentage ?? 40));
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [saveError, setSaveError] = useState('');
   const [saving, setSaving] = useState(false);
+  const [initialUpdateSnapshot, setInitialUpdateSnapshot] = useState('');
 
   const loadTest = useCallback(async () => {
     if (!id) return;
@@ -134,12 +178,15 @@ export default function TestDetail() {
       setType(t.type as 'mcq' | 'coding');
       setStatus(t.status as 'draft' | 'published' | 'archived');
       setConfig({
-        durationMinutes: t.config.durationMinutes,
-        attemptLimit: t.config.attemptLimit,
+        ...defaultConfig,
+        ...t.config,
         passPercentage: t.config.passPercentage ?? 40,
         scoreDistribution: t.config.scoreDistribution ?? 'equal',
         questionWeights: t.config.questionWeights ?? {},
       });
+      setDurationInput(String(t.config.durationMinutes ?? defaultConfig.durationMinutes));
+      setAttemptLimitInput(String(t.config.attemptLimit ?? defaultConfig.attemptLimit));
+      setPassPercentageInput(String(t.config.passPercentage ?? 40));
       if (t.schedule?.startAt && t.schedule?.endAt) {
         setScheduleEnabled(true);
         setStartAt(t.schedule.startAt.slice(0, 16));
@@ -149,6 +196,23 @@ export default function TestDetail() {
         setStartAt('');
         setEndAt('');
       }
+      setInitialUpdateSnapshot(
+        buildUpdateSnapshot({
+          title: t.title,
+          type: t.type as 'mcq' | 'coding',
+          status: t.status as 'draft' | 'published' | 'archived',
+          config: {
+            ...defaultConfig,
+            ...t.config,
+            passPercentage: t.config.passPercentage ?? 40,
+            scoreDistribution: t.config.scoreDistribution ?? 'equal',
+            questionWeights: t.config.questionWeights ?? {},
+          },
+          scheduleEnabled: Boolean(t.schedule?.startAt && t.schedule?.endAt),
+          startAt: t.schedule?.startAt?.slice(0, 16) || '',
+          endAt: t.schedule?.endAt?.slice(0, 16) || '',
+        })
+      );
     } catch {
       setTest(null);
     } finally {
@@ -281,6 +345,10 @@ export default function TestDetail() {
 
   const variants = test.variants || [];
   const isCustomWeights = test.config.scoreDistribution === 'custom';
+  const currentUpdateSnapshot = buildUpdateSnapshot({ title, type, status, config, scheduleEnabled, startAt, endAt });
+  const isUpdateDirty = currentUpdateSnapshot !== initialUpdateSnapshot;
+  const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
+  const canUpdateTest = !saving && title.trim().length >= 2 && hasRequiredSchedule && isUpdateDirty;
 
   const updateQuestionWeight = async (questionId: string, nextWeight: number) => {
     if (!test) return;
@@ -312,11 +380,22 @@ export default function TestDetail() {
     setSaveError('');
     setSaving(true);
     try {
+      const normalizedConfig: TestData['config'] = {
+        ...config,
+        durationMinutes: clampNumberInput(durationInput, 1, 480, config.durationMinutes),
+        attemptLimit: clampNumberInput(attemptLimitInput, 1, 100, config.attemptLimit),
+        passPercentage: clampNumberInput(passPercentageInput, 0, 100, config.passPercentage ?? 40),
+      };
+      setConfig(normalizedConfig);
+      setDurationInput(String(normalizedConfig.durationMinutes));
+      setAttemptLimitInput(String(normalizedConfig.attemptLimit));
+      setPassPercentageInput(String(normalizedConfig.passPercentage ?? 40));
+
       const payload: Record<string, unknown> = {
         title,
         type,
         status,
-        config,
+        config: normalizedConfig,
       };
       if (scheduleEnabled && startAt && endAt) {
         payload.schedule = { startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() };
@@ -336,12 +415,15 @@ export default function TestDetail() {
     setType(test.type as 'mcq' | 'coding');
     setStatus(test.status as 'draft' | 'published' | 'archived');
     setConfig({
-      durationMinutes: test.config.durationMinutes,
-      attemptLimit: test.config.attemptLimit,
+      ...defaultConfig,
+      ...test.config,
       passPercentage: test.config.passPercentage ?? 40,
       scoreDistribution: test.config.scoreDistribution ?? 'equal',
       questionWeights: test.config.questionWeights ?? {},
     });
+    setDurationInput(String(test.config.durationMinutes ?? defaultConfig.durationMinutes));
+    setAttemptLimitInput(String(test.config.attemptLimit ?? defaultConfig.attemptLimit));
+    setPassPercentageInput(String(test.config.passPercentage ?? 40));
     if (test.schedule?.startAt && test.schedule?.endAt) {
       setScheduleEnabled(true);
       setStartAt(test.schedule.startAt.slice(0, 16));
@@ -394,15 +476,75 @@ export default function TestDetail() {
           </div>
           <div>
             <label style={labelStyle}>Duration (minutes)</label>
-            <input type="number" min={1} max={480} value={config.durationMinutes} onChange={(e) => setConfig({ ...config, durationMinutes: +e.target.value })} style={inputStyle} />
+            <input
+              type="number"
+              min={1}
+              max={480}
+              value={durationInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setDurationInput(raw);
+                if (raw === '') return;
+                const parsed = Number(raw);
+                if (Number.isFinite(parsed)) {
+                  setConfig({ ...config, durationMinutes: clampNumberInput(raw, 1, 480, config.durationMinutes) });
+                }
+              }}
+              onBlur={() => {
+                const next = clampNumberInput(durationInput, 1, 480, config.durationMinutes);
+                setConfig({ ...config, durationMinutes: next });
+                setDurationInput(String(next));
+              }}
+              style={inputStyle}
+            />
           </div>
           <div>
             <label style={labelStyle}>Attempt Limit</label>
-            <input type="number" min={1} max={100} value={config.attemptLimit} onChange={(e) => setConfig({ ...config, attemptLimit: +e.target.value })} style={inputStyle} />
+            <input
+              type="number"
+              min={1}
+              max={100}
+              value={attemptLimitInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setAttemptLimitInput(raw);
+                if (raw === '') return;
+                const parsed = Number(raw);
+                if (Number.isFinite(parsed)) {
+                  setConfig({ ...config, attemptLimit: clampNumberInput(raw, 1, 100, config.attemptLimit) });
+                }
+              }}
+              onBlur={() => {
+                const next = clampNumberInput(attemptLimitInput, 1, 100, config.attemptLimit);
+                setConfig({ ...config, attemptLimit: next });
+                setAttemptLimitInput(String(next));
+              }}
+              style={inputStyle}
+            />
           </div>
           <div>
             <label style={labelStyle}>Minimum Pass Percentage</label>
-            <input type="number" min={0} max={100} value={config.passPercentage ?? 40} onChange={(e) => setConfig({ ...config, passPercentage: Math.max(0, Math.min(100, +e.target.value || 0)) })} style={inputStyle} />
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={passPercentageInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setPassPercentageInput(raw);
+                if (raw === '') return;
+                const parsed = Number(raw);
+                if (Number.isFinite(parsed)) {
+                  setConfig({ ...config, passPercentage: clampNumberInput(raw, 0, 100, config.passPercentage ?? 40) });
+                }
+              }}
+              onBlur={() => {
+                const next = clampNumberInput(passPercentageInput, 0, 100, config.passPercentage ?? 40);
+                setConfig({ ...config, passPercentage: next });
+                setPassPercentageInput(String(next));
+              }}
+              style={inputStyle}
+            />
           </div>
           <div>
             <label style={labelStyle}>Score Distribution</label>
@@ -445,7 +587,7 @@ export default function TestDetail() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" disabled={saving} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+          <button type="submit" disabled={!canUpdateTest} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canUpdateTest ? 1 : 0.65, cursor: canUpdateTest ? 'pointer' : 'not-allowed' }}>
             {saving ? 'Saving...' : 'Update Test'}
           </button>
           <button type="button" onClick={resetForm} style={{ padding: '0.6rem 1.5rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>
@@ -461,7 +603,7 @@ export default function TestDetail() {
         </div>
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Status</div>
-          <div><span style={badgeStyle(test.status)}>{test.status}</span></div>
+          <div><span style={badgeStyle(test.status)}>{formatStatusLabel(test.status)}</span></div>
         </div>
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Duration</div>
@@ -641,7 +783,7 @@ export default function TestDetail() {
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{s.attemptCount}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <span style={badgeStyle(s.latestStatus === 'submitted' || s.latestStatus === 'graded' ? 'published' : s.latestStatus === 'in_progress' ? 'draft' : 'archived')}>
-                        {s.latestStatus.replace('_', ' ')}
+                        {formatStatusLabel(s.latestStatus)}
                       </span>
                     </td>
                     <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>

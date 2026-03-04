@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 
 interface Course {
@@ -33,7 +34,17 @@ export default function Courses() {
       await api(`/courses/${id}/archive`, { method: 'PATCH' });
       loadCourses();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Archive failed');
+      emitToast('error', e instanceof Error ? e.message : 'Archive failed');
+    }
+  };
+
+  const handleRevoke = async (id: string, title: string) => {
+    if (!confirm(`Revoke archive for course "${title}"?`)) return;
+    try {
+      await api(`/courses/${id}/revoke`, { method: 'PATCH' });
+      loadCourses();
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Revoke failed');
     }
   };
 
@@ -62,7 +73,7 @@ export default function Courses() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search courses by title or description"
-          style={{ width: 360, padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)' }}
+          style={{ width: 380, padding: '0.6rem 0.85rem', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, color: '#111827', fontWeight: 600 }}
         />
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
@@ -112,7 +123,10 @@ export default function Courses() {
                 <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{c.title}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
-                    <button onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button onClick={() => handleRevoke(c.id, c.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
+                      <button onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                    </div>
                   </td>
                 </tr>
               ))}

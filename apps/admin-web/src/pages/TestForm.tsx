@@ -36,6 +36,34 @@ const defaultConfig: TestData['config'] = {
   questionWeights: {},
 };
 
+function clampNumberInput(raw: string, min: number, max: number, fallback: number): number {
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return fallback;
+  return Math.max(min, Math.min(max, Math.round(parsed)));
+}
+
+function buildFormSnapshot(input: {
+  title: string;
+  type: string;
+  status: string;
+  config: TestData['config'];
+  scheduleEnabled: boolean;
+  startAt: string;
+  endAt: string;
+}) {
+  const normalized = {
+    title: input.title.trim(),
+    type: input.type,
+    status: input.status,
+    config: {
+      ...input.config,
+      questionWeights: input.config.questionWeights ?? {},
+    },
+    schedule: input.scheduleEnabled ? { startAt: input.startAt || '', endAt: input.endAt || '' } : null,
+  };
+  return JSON.stringify(normalized);
+}
+
 export default function TestForm() {
   const { id } = useParams<{ id: string }>();
   const isEdit = Boolean(id);
@@ -45,12 +73,16 @@ export default function TestForm() {
   const [type, setType] = useState('mcq');
   const [status, setStatus] = useState('draft');
   const [config, setConfig] = useState(defaultConfig);
+  const [durationInput, setDurationInput] = useState(String(defaultConfig.durationMinutes));
+  const [attemptLimitInput, setAttemptLimitInput] = useState(String(defaultConfig.attemptLimit));
+  const [passPercentageInput, setPassPercentageInput] = useState(String(defaultConfig.passPercentage));
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [startAt, setStartAt] = useState('');
   const [endAt, setEndAt] = useState('');
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
+  const [initialSnapshot, setInitialSnapshot] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -60,11 +92,26 @@ export default function TestForm() {
         setType(t.type);
         setStatus(t.status);
         setConfig({ ...defaultConfig, ...t.config });
+        setDurationInput(String(t.config.durationMinutes ?? defaultConfig.durationMinutes));
+        setAttemptLimitInput(String(t.config.attemptLimit ?? defaultConfig.attemptLimit));
+        setPassPercentageInput(String(t.config.passPercentage ?? defaultConfig.passPercentage));
         if (t.schedule) {
           setScheduleEnabled(true);
           setStartAt(t.schedule.startAt?.slice(0, 16) || '');
           setEndAt(t.schedule.endAt?.slice(0, 16) || '');
         }
+        const configWithDefaults = { ...defaultConfig, ...t.config };
+        setInitialSnapshot(
+          buildFormSnapshot({
+            title: t.title,
+            type: t.type,
+            status: t.status,
+            config: configWithDefaults,
+            scheduleEnabled: Boolean(t.schedule),
+            startAt: t.schedule?.startAt?.slice(0, 16) || '',
+            endAt: t.schedule?.endAt?.slice(0, 16) || '',
+          })
+        );
       })
       .catch(() => setError('Failed to load test'))
       .finally(() => setLoading(false));
@@ -75,10 +122,21 @@ export default function TestForm() {
     setSaving(true);
     setError('');
     try {
+      const normalizedConfig: TestData['config'] = {
+        ...config,
+        durationMinutes: clampNumberInput(durationInput, 1, 480, config.durationMinutes),
+        attemptLimit: clampNumberInput(attemptLimitInput, 1, 100, config.attemptLimit),
+        passPercentage: clampNumberInput(passPercentageInput, 0, 100, config.passPercentage),
+      };
+      setConfig(normalizedConfig);
+      setDurationInput(String(normalizedConfig.durationMinutes));
+      setAttemptLimitInput(String(normalizedConfig.attemptLimit));
+      setPassPercentageInput(String(normalizedConfig.passPercentage));
+
       const payload: Record<string, unknown> = {
         title,
         type,
-        config,
+        config: normalizedConfig,
       };
       if (scheduleEnabled && startAt && endAt) {
         payload.schedule = { startAt: new Date(startAt).toISOString(), endAt: new Date(endAt).toISOString() };
@@ -102,6 +160,10 @@ export default function TestForm() {
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
+  const currentSnapshot = buildFormSnapshot({ title, type, status, config, scheduleEnabled, startAt, endAt });
+  const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
+  const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
+  const canSubmit = !saving && title.trim().length >= 2 && hasRequiredSchedule && isDirty;
 
   return (
     <div style={{ maxWidth: 640 }}>
@@ -137,11 +199,51 @@ export default function TestForm() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
             <div>
               <label style={labelStyle}>Duration (minutes)</label>
-              <input type="number" min={1} max={480} value={config.durationMinutes} onChange={(e) => setConfig({ ...config, durationMinutes: +e.target.value })} style={inputStyle} />
+              <input
+                type="number"
+                min={1}
+                max={480}
+                value={durationInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setDurationInput(raw);
+                  if (raw === '') return;
+                  const parsed = Number(raw);
+                  if (Number.isFinite(parsed)) {
+                    setConfig({ ...config, durationMinutes: clampNumberInput(raw, 1, 480, config.durationMinutes) });
+                  }
+                }}
+                onBlur={() => {
+                  const next = clampNumberInput(durationInput, 1, 480, config.durationMinutes);
+                  setConfig({ ...config, durationMinutes: next });
+                  setDurationInput(String(next));
+                }}
+                style={inputStyle}
+              />
             </div>
             <div>
               <label style={labelStyle}>Attempt Limit</label>
-              <input type="number" min={1} max={100} value={config.attemptLimit} onChange={(e) => setConfig({ ...config, attemptLimit: +e.target.value })} style={inputStyle} />
+              <input
+                type="number"
+                min={1}
+                max={100}
+                value={attemptLimitInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setAttemptLimitInput(raw);
+                  if (raw === '') return;
+                  const parsed = Number(raw);
+                  if (Number.isFinite(parsed)) {
+                    setConfig({ ...config, attemptLimit: clampNumberInput(raw, 1, 100, config.attemptLimit) });
+                  }
+                }}
+                onBlur={() => {
+                  const next = clampNumberInput(attemptLimitInput, 1, 100, config.attemptLimit);
+                  setConfig({ ...config, attemptLimit: next });
+                  setAttemptLimitInput(String(next));
+                }}
+                style={inputStyle}
+              />
             </div>
             <div>
               <label style={labelStyle}>Minimum Pass Percentage</label>
@@ -149,8 +251,21 @@ export default function TestForm() {
                 type="number"
                 min={0}
                 max={100}
-                value={config.passPercentage}
-                onChange={(e) => setConfig({ ...config, passPercentage: Math.max(0, Math.min(100, +e.target.value || 0)) })}
+                value={passPercentageInput}
+                onChange={(e) => {
+                  const raw = e.target.value;
+                  setPassPercentageInput(raw);
+                  if (raw === '') return;
+                  const parsed = Number(raw);
+                  if (Number.isFinite(parsed)) {
+                    setConfig({ ...config, passPercentage: clampNumberInput(raw, 0, 100, config.passPercentage) });
+                  }
+                }}
+                onBlur={() => {
+                  const next = clampNumberInput(passPercentageInput, 0, 100, config.passPercentage);
+                  setConfig({ ...config, passPercentage: next });
+                  setPassPercentageInput(String(next));
+                }}
                 style={inputStyle}
               />
             </div>
@@ -203,7 +318,7 @@ export default function TestForm() {
         </fieldset>
 
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" disabled={saving} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: saving ? 0.7 : 1 }}>
+          <button type="submit" disabled={!canSubmit} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSubmit ? 1 : 0.65, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
             {saving ? 'Saving...' : isEdit ? 'Update Test' : 'Create Test'}
           </button>
           <button type="button" onClick={() => navigate(isEdit ? `/tests/${id}` : '/tests')} style={{ padding: '0.6rem 1.5rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>

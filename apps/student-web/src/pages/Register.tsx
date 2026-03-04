@@ -9,6 +9,7 @@ export default function Register() {
   const [error, setError] = useState('');
   const { register } = useAuth();
   const navigate = useNavigate();
+  const canSubmit = name.trim().length >= 2 && email.trim().length > 0 && password.length >= 8;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -116,6 +117,7 @@ export default function Register() {
           />
           <button
             type="submit"
+            disabled={!canSubmit}
             style={{
               width: '100%',
               padding: '0.75rem',
@@ -125,6 +127,8 @@ export default function Register() {
               borderRadius: '6px',
               fontSize: '1rem',
               fontWeight: 500,
+              opacity: canSubmit ? 1 : 0.65,
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
             }}
           >
             Sign up

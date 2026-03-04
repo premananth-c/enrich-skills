@@ -10,7 +10,7 @@ interface RevisionLogEntry {
 }
 
 interface Props {
-  module: 'tests' | 'students' | 'courses' | 'questions';
+  module: 'tests' | 'students' | 'courses' | 'questions' | 'batches';
   entityId: string;
   entityLabel: string;
   onClose: () => void;

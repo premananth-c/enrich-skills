@@ -2,7 +2,7 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
 import { prisma } from '../lib/prisma.js';
 import { createInviteSchema } from '@enrich-skills/shared';
-import { requireAdmin } from '../lib/tenant.js';
+import { requireModuleAccess } from '../lib/tenant.js';
 import { sendInviteEmail } from '../lib/email.js';
 
 const INVITE_EXPIRY_DAYS = 2;
@@ -47,7 +47,7 @@ export async function inviteRoutes(app: FastifyInstance) {
   });
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'students', 'edit');
     const admin = request.user as { sub: string };
 
     const parsed = createInviteSchema.safeParse(request.body);
@@ -104,7 +104,7 @@ export async function inviteRoutes(app: FastifyInstance) {
   });
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
-    const tenantId = requireAdmin(request);
+    const tenantId = await requireModuleAccess(request, 'students', 'view');
     const invites = await prisma.invite.findMany({
       where: { tenantId },
       include: {

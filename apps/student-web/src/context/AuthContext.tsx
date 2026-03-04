@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { emitToast } from '../lib/toast';
 
 interface User {
   id: string;
@@ -63,10 +64,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Login failed');
       throw new Error(err.error || 'Login failed');
     }
     const data = await res.json();
     setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Signed in successfully');
   }, [setAuth]);
 
   const register = useCallback(async (email: string, password: string, name: string, tenantId?: string) => {
@@ -77,10 +80,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Registration failed');
       throw new Error(err.error || 'Registration failed');
     }
     const data = await res.json();
     setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Account created successfully');
   }, [setAuth]);
 
   const registerWithInvite = useCallback(async (token: string, password: string, name: string, phoneNumber: string, address: string) => {
@@ -91,10 +96,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
+      emitToast('error', err.error || 'Sign up failed');
       throw new Error(err.error || 'Sign up failed');
     }
     const data = await res.json();
     setAuth(data.user, data.accessToken, data.refreshToken);
+    emitToast('success', 'Account created successfully');
   }, [setAuth]);
 
   const logout = useCallback(() => {

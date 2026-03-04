@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { requireAdmin, authenticate } from '../lib/tenant.js';
+import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
 export async function revisionRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -11,7 +11,7 @@ export async function revisionRoutes(app: FastifyInstance) {
       request: FastifyRequest<{ Querystring: { module?: string; entityId?: string } }>,
       reply: FastifyReply
     ) => {
-      const tenantId = requireAdmin(request);
+      const tenantId = await requireModuleAccess(request, 'reports', 'view');
       const { module, entityId } = request.query;
       const logs = await prisma.revisionLog.findMany({
         where: {

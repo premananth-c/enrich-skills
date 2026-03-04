@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
+import { formatStatusLabel } from '../lib/status';
+import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 
 interface Test {
@@ -34,7 +36,17 @@ export default function Tests() {
       await api(`/tests/${id}`, { method: 'PATCH', body: JSON.stringify({ status: 'archived' }) });
       loadTests();
     } catch (e) {
-      alert(e instanceof Error ? e.message : 'Archive failed');
+      emitToast('error', e instanceof Error ? e.message : 'Archive failed');
+    }
+  };
+
+  const handleRevoke = async (id: string, title: string) => {
+    if (!confirm(`Revoke archive for test "${title}"?`)) return;
+    try {
+      await api(`/tests/${id}/revoke`, { method: 'PATCH' });
+      loadTests();
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Revoke failed');
     }
   };
 
@@ -72,7 +84,7 @@ export default function Tests() {
             <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: '0.85rem' }}>{t.type}</td>
             <td style={{ padding: '0.75rem 1rem' }}>
               <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: t.status === 'published' ? '#16a34a22' : t.status === 'draft' ? '#eab30822' : '#71717a22', color: t.status === 'published' ? '#4ade80' : t.status === 'draft' ? '#fbbf24' : '#a1a1aa' }}>
-                {t.status}
+                {formatStatusLabel(t.status)}
               </span>
             </td>
             <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{t.config.durationMinutes} min</td>
@@ -81,6 +93,9 @@ export default function Tests() {
                 <button onClick={() => navigate(`/tests/${t.id}`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
                 {t.status !== 'archived' && (
                   <button onClick={() => handleArchive(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Archive</button>
+                )}
+                {t.status === 'archived' && (
+                  <button onClick={() => handleRevoke(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
                 )}
                 <button onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
               </div>
@@ -107,7 +122,7 @@ export default function Tests() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search tests by title, type, status"
-          style={{ width: 360, padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)' }}
+          style={{ width: 380, padding: '0.6rem 0.85rem', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, color: '#111827', fontWeight: 600 }}
         />
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>

@@ -151,6 +151,8 @@ export default function TestAttempt() {
   const qId = current?.question.id || '';
   const currentCode = codeMap[qId] || DEFAULT_CODE.python;
   const currentLang = langMap[qId] || 'python';
+  const savedCode = submission?.code || DEFAULT_CODE[submission?.language || 'python'] || DEFAULT_CODE.python;
+  const savedLang = submission?.language || 'python';
 
   const handleCodeSubmit = async () => {
     if (!current || current.question.type !== 'coding') return;
@@ -216,6 +218,12 @@ export default function TestAttempt() {
   const isMcq = current?.question.type === 'mcq';
   const showImmediate = attempt.test.config.showResultsImmediately;
   const isReview = reviewMode || attempt.status !== 'in_progress';
+  const hasAnyResponse = attempt.submissions.some((sub) => {
+    if (sub.selectedOptionId) return true;
+    if (sub.code && sub.code.trim().length > 0) return true;
+    return false;
+  });
+  const isCodeDirty = currentCode !== savedCode || currentLang !== savedLang;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -251,7 +259,7 @@ export default function TestAttempt() {
             />
             <button
               onClick={handleFinish}
-              disabled={finishing}
+              disabled={finishing || !hasAnyResponse}
               style={{
                 padding: '0.5rem 1rem',
                 background: '#22c55e',
@@ -259,6 +267,8 @@ export default function TestAttempt() {
                 border: 'none',
                 borderRadius: '6px',
                 fontWeight: 500,
+                opacity: finishing || !hasAnyResponse ? 0.7 : 1,
+                cursor: finishing || !hasAnyResponse ? 'not-allowed' : 'pointer',
               }}
             >
               {finishing ? 'Submitting...' : 'Submit Test'}
@@ -439,7 +449,7 @@ export default function TestAttempt() {
                   {!isSubmitted && !isReview && localSelection && (
                     <button
                       onClick={handleMcqSubmit}
-                      disabled={submitting}
+                      disabled={submitting || localSelection === submission?.selectedOptionId}
                       style={{
                         marginTop: '0.75rem',
                         padding: '0.6rem 1.5rem',
@@ -449,7 +459,8 @@ export default function TestAttempt() {
                         borderRadius: '6px',
                         fontWeight: 500,
                         fontSize: '0.9rem',
-                        cursor: 'pointer',
+                        cursor: submitting || localSelection === submission?.selectedOptionId ? 'not-allowed' : 'pointer',
+                        opacity: submitting || localSelection === submission?.selectedOptionId ? 0.7 : 1,
                       }}
                     >
                       {submitting ? 'Submitting...' : 'Submit Answer'}
@@ -556,7 +567,7 @@ export default function TestAttempt() {
                   </button>
                   <button
                     onClick={handleCodeSubmit}
-                    disabled={submitting}
+                    disabled={submitting || !isCodeDirty}
                     style={{
                       padding: '0.35rem 0.75rem',
                       background: 'var(--color-primary)',
@@ -564,6 +575,8 @@ export default function TestAttempt() {
                       border: 'none',
                       borderRadius: '6px',
                       fontSize: '0.85rem',
+                      opacity: submitting || !isCodeDirty ? 0.7 : 1,
+                      cursor: submitting || !isCodeDirty ? 'not-allowed' : 'pointer',
                     }}
                   >
                     {submitting ? 'Submitting...' : 'Submit'}

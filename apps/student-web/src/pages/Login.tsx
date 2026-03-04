@@ -8,6 +8,7 @@ export default function Login() {
   const [error, setError] = useState('');
   const { login } = useAuth();
   const navigate = useNavigate();
+  const canSubmit = email.trim().length > 0 && password.length > 0;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -95,6 +96,7 @@ export default function Login() {
           />
           <button
             type="submit"
+            disabled={!canSubmit}
             style={{
               width: '100%',
               padding: '0.75rem',
@@ -104,6 +106,8 @@ export default function Login() {
               borderRadius: '6px',
               fontSize: '1rem',
               fontWeight: 500,
+              opacity: canSubmit ? 1 : 0.65,
+              cursor: canSubmit ? 'pointer' : 'not-allowed',
             }}
           >
             Sign in

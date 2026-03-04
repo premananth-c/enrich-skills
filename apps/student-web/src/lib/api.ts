@@ -1,8 +1,17 @@
+import { emitToast } from './toast';
+
 const TOKEN_KEY = 'enrich_access_token';
 const REFRESH_KEY = 'enrich_refresh_token';
 const TENANT_KEY = 'enrich_tenant_id';
 
 let refreshPromise: Promise<string | null> | null = null;
+
+function getSuccessMessage(method: string): string {
+  if (method === 'POST') return 'Submitted successfully';
+  if (method === 'PUT' || method === 'PATCH') return 'Updated successfully';
+  if (method === 'DELETE') return 'Deleted successfully';
+  return 'Action completed';
+}
 
 async function refreshAccessToken(): Promise<string | null> {
   const refreshToken = localStorage.getItem(REFRESH_KEY);
@@ -51,6 +60,8 @@ export async function api<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
+  const method = (options.method || 'GET').toUpperCase();
+  const isMutation = method !== 'GET';
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = buildHeaders(token, options);
 
@@ -72,8 +83,18 @@ export async function api<T>(
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Request failed: ${res.status}`);
+    const message = err.error || `Request failed: ${res.status}`;
+    if (isMutation) emitToast('error', message);
+    throw new Error(message);
   }
-  if (res.status === 204) return undefined as T;
-  return res.json();
+  if (res.status === 204) {
+    if (isMutation) emitToast('success', getSuccessMessage(method));
+    return undefined as T;
+  }
+  const data = await res.json();
+  if (isMutation) {
+    const msg = typeof data?.message === 'string' && data.message.trim() ? data.message : getSuccessMessage(method);
+    emitToast('success', msg);
+  }
+  return data;
 }

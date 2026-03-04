@@ -1,7 +1,7 @@
 import { prisma } from './prisma.js';
 import type { Prisma } from '@prisma/client';
 
-type RevisionModule = 'tests' | 'students' | 'courses' | 'questions';
+type RevisionModule = 'tests' | 'students' | 'courses' | 'questions' | 'batches';
 type RevisionAction = 'created' | 'updated' | 'archived';
 
 interface LogRevisionInput {

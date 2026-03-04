@@ -46,6 +46,12 @@ export default function InviteSignup() {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [address, setAddress] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  const canSubmit =
+    !submitting &&
+    password.length >= 8 &&
+    name.trim().length >= 2 &&
+    phoneNumber.trim().length > 0 &&
+    address.trim().length > 0;
 
   useEffect(() => {
     if (!token) {
@@ -138,7 +144,7 @@ export default function InviteSignup() {
           <input type="tel" value={phoneNumber} onChange={(e) => setPhoneNumber(e.target.value)} required style={inputStyle} placeholder="e.g. +1 234 567 8900" />
           <label style={{ display: 'block', marginBottom: '0.5rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>Address</label>
           <textarea value={address} onChange={(e) => setAddress(e.target.value)} required rows={2} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Street, city, state, country" />
-          <button type="submit" disabled={submitting} style={{ width: '100%', padding: '0.75rem', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, opacity: submitting ? 0.7 : 1 }}>
+          <button type="submit" disabled={!canSubmit} style={{ width: '100%', padding: '0.75rem', background: 'var(--color-primary)', color: 'white', border: 'none', borderRadius: '6px', fontSize: '1rem', fontWeight: 500, opacity: canSubmit ? 1 : 0.65, cursor: canSubmit ? 'pointer' : 'not-allowed' }}>
             {submitting ? 'Creating account...' : 'Sign up'}
           </button>
         </form>

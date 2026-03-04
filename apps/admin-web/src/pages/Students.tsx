@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
+import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import { useAuth } from '../context/AuthContext';
 
 interface Student {
   id: string;
@@ -21,6 +23,7 @@ interface TestOption {
 }
 
 export default function Students() {
+  const { isSuperAdmin, canEdit } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [inviteOpen, setInviteOpen] = useState(false);
@@ -33,10 +36,13 @@ export default function Students() {
   const [editOpen, setEditOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phoneNumber: '', address: '', isActive: true });
+  const [initialEditForm, setInitialEditForm] = useState({ name: '', email: '', phoneNumber: '', address: '', isActive: true });
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [search, setSearch] = useState('');
   const [historyTarget, setHistoryTarget] = useState<{ id: string; name: string } | null>(null);
+  const [directOpen, setDirectOpen] = useState(false);
+  const [directForm, setDirectForm] = useState({ name: '', email: '', password: '', phoneNumber: '', address: '' });
 
   const loadStudents = () => {
     api<Student[]>('/users?role=student')
@@ -88,14 +94,16 @@ export default function Students() {
   };
 
   const openEdit = (s: Student) => {
-    setEditingStudent(s);
-    setEditForm({
+    const next = {
       name: s.name ?? '',
       email: s.email ?? '',
       phoneNumber: s.phoneNumber ?? '',
       address: s.address ?? '',
       isActive: s.isActive ?? true,
-    });
+    };
+    setEditingStudent(s);
+    setEditForm(next);
+    setInitialEditForm(next);
     setEditError('');
     setEditOpen(true);
   };
@@ -132,12 +140,41 @@ export default function Students() {
       const archived = await api<Student>('/users/' + student.id + '/archive', { method: 'PATCH' });
       setStudents((prev) => prev.map((s) => (s.id === archived.id ? archived : s)));
     } catch (err) {
-      alert(err instanceof Error ? err.message : 'Failed to archive student');
+      emitToast('error', err instanceof Error ? err.message : 'Failed to archive student');
     }
+  };
+
+  const handleRevoke = async (student: Student) => {
+    if (!confirm(`Revoke archive for student "${student.name}"?`)) return;
+    try {
+      const restored = await api<Student>('/users/' + student.id + '/revoke', { method: 'PATCH' });
+      setStudents((prev) => prev.map((s) => (s.id === restored.id ? restored : s)));
+    } catch (err) {
+      emitToast('error', err instanceof Error ? err.message : 'Failed to revoke archive');
+    }
+  };
+
+  const handleCreateDirectStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await api<Student>('/users/students/direct', {
+      method: 'POST',
+      body: JSON.stringify(directForm),
+    });
+    setDirectOpen(false);
+    setDirectForm({ name: '', email: '', password: '', phoneNumber: '', address: '' });
+    loadStudents();
   };
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
+  const canInvite = !inviteSending && inviteEmail.trim().length > 0;
+  const isEditDirty =
+    editForm.name !== initialEditForm.name ||
+    editForm.email !== initialEditForm.email ||
+    editForm.phoneNumber !== initialEditForm.phoneNumber ||
+    editForm.address !== initialEditForm.address ||
+    editForm.isActive !== initialEditForm.isActive;
+  const canSaveEdit = !editSaving && editForm.email.trim().length > 0 && isEditDirty;
   const filtered = students.filter((s) => {
     const q = search.trim().toLowerCase();
     if (!q) return true;
@@ -152,19 +189,31 @@ export default function Students() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Students</h1>
-        <button
-          onClick={() => { setInviteOpen(true); setInviteError(''); }}
-          style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-        >
-          Invite Student
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          {isSuperAdmin && (
+            <button
+              onClick={() => setDirectOpen(true)}
+              disabled={!canEdit('students')}
+              style={{ padding: '0.5rem 1rem', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontWeight: 500 }}
+            >
+              Add Student Directly
+            </button>
+          )}
+          <button
+            onClick={() => { setInviteOpen(true); setInviteError(''); }}
+            disabled={!canEdit('students')}
+            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
+          >
+            Invite Student
+          </button>
+        </div>
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search students by name or email"
-          style={{ width: 360, padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)' }}
+          style={{ width: 380, padding: '0.6rem 0.85rem', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, color: '#111827', fontWeight: 600 }}
         />
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
@@ -194,8 +243,8 @@ export default function Students() {
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => openEdit(s)} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: 'pointer' }}>Edit</button>
-                      <button type="button" onClick={() => handleArchive(s)} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: 'pointer' }}>Archive</button>
+                      <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Edit</button>
+                      <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Archive</button>
                       <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
                     </div>
                   </td>
@@ -230,7 +279,10 @@ export default function Students() {
                     </span>
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
-                    <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
+                    <div style={{ display: 'flex', gap: '0.5rem' }}>
+                      <button type="button" onClick={() => handleRevoke(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 6, color: '#4ade80', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Revoke</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -274,7 +326,44 @@ export default function Students() {
               ) : null}
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" onClick={() => setInviteOpen(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-                <button type="submit" disabled={inviteSending} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: inviteSending ? 0.7 : 1 }}>{inviteSending ? 'Sending...' : 'Send invite'}</button>
+                <button type="submit" disabled={!canInvite} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canInvite ? 1 : 0.65, cursor: canInvite ? 'pointer' : 'not-allowed' }}>{inviteSending ? 'Sending...' : 'Send invite'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {directOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 440, padding: '1.5rem' }}>
+            <h3 style={{ margin: '0 0 1rem' }}>Add Student Directly</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              Create a student account immediately and share credentials offline. Email is optional.
+            </p>
+            <form onSubmit={handleCreateDirectStudent}>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <label style={labelStyle}>Name *</label>
+                <input value={directForm.name} onChange={(e) => setDirectForm((f) => ({ ...f, name: e.target.value }))} required style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <label style={labelStyle}>Email (optional)</label>
+                <input type="email" value={directForm.email} onChange={(e) => setDirectForm((f) => ({ ...f, email: e.target.value }))} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <label style={labelStyle}>Password *</label>
+                <input type="password" minLength={8} required value={directForm.password} onChange={(e) => setDirectForm((f) => ({ ...f, password: e.target.value }))} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <label style={labelStyle}>Phone</label>
+                <input value={directForm.phoneNumber} onChange={(e) => setDirectForm((f) => ({ ...f, phoneNumber: e.target.value }))} style={inputStyle} />
+              </div>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <label style={labelStyle}>Address</label>
+                <input value={directForm.address} onChange={(e) => setDirectForm((f) => ({ ...f, address: e.target.value }))} style={inputStyle} />
+              </div>
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
+                <button type="button" onClick={() => setDirectOpen(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
+                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}>Create Student</button>
               </div>
             </form>
           </div>
@@ -309,7 +398,7 @@ export default function Students() {
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" onClick={() => { setEditOpen(false); setEditingStudent(null); }} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-                <button type="submit" disabled={editSaving} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: editSaving ? 0.7 : 1 }}>{editSaving ? 'Saving...' : 'Save'}</button>
+                <button type="submit" disabled={!canSaveEdit} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSaveEdit ? 1 : 0.65, cursor: canSaveEdit ? 'pointer' : 'not-allowed' }}>{editSaving ? 'Saving...' : 'Save'}</button>
               </div>
             </form>
           </div>
