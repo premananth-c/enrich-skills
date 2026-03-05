@@ -22,9 +22,9 @@ export async function sendInviteEmail(to: string, token: string, testTitle?: str
   const inviteUrl = `${INVITE_BASE_URL}/invite?token=${encodeURIComponent(token)}`;
   const subject = testTitle
     ? `You're invited to take a test: ${testTitle}`
-    : "You're invited to join Enrich Skills";
+    : "You're invited to join Ranker Ship (by Vihaan Digital Solutions)";
   const html = `
-    <p>You have been invited to join Enrich Skills.</p>
+    <p>You have been invited to join Ranker Ship (by Vihaan Digital Solutions).</p>
     ${testTitle ? `<p>You have been assigned to the test: <strong>${testTitle}</strong>.</p>` : ''}
     <p>Click the link below to create your account and complete your profile. This link expires in 2 days.</p>
     <p><a href="${inviteUrl}" style="display:inline-block;padding:10px 20px;background:#8b5cf6;color:#fff;text-decoration:none;border-radius:6px;">Accept invite & sign up</a></p>

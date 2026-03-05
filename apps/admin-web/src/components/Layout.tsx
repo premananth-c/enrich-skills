@@ -19,7 +19,10 @@ export default function Layout() {
   return (
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <aside style={{ width: 220, background: 'var(--color-surface)', borderRight: '1px solid var(--color-border)', padding: '1rem', display: 'flex', flexDirection: 'column' }}>
-        <Link to="/" style={{ color: 'inherit', textDecoration: 'none', fontSize: '1.25rem', fontWeight: 600 }}>Admin</Link>
+        <Link to="/" style={{ color: 'inherit', textDecoration: 'none' }}>
+          <span style={{ fontSize: '1.25rem', fontWeight: 600 }}>Ranker Ship</span>
+          <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)' }}>Vihaan Digital Solutions</div>
+        </Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
           <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>
           {canView('courses') && <NavLink to="/courses" style={navLinkStyle}>Courses</NavLink>}
@@ -28,6 +31,7 @@ export default function Layout() {
           {canView('questions') && <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>}
           {canView('students') && <NavLink to="/students" style={navLinkStyle}>Students</NavLink>}
           {canView('reports') && <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>}
+          {isSuperAdmin && <NavLink to="/enquiries" style={navLinkStyle}>Enquiries</NavLink>}
           {isSuperAdmin && <NavLink to="/manage-users" style={navLinkStyle}>Manage Users</NavLink>}
         </nav>
         <div style={{ marginTop: 'auto', paddingTop: '1rem' }}>

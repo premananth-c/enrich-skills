@@ -8,6 +8,7 @@
     "dev:api": "pnpm --filter @enrich-skills/api dev",
     "dev:student": "pnpm --filter @enrich-skills/student-web dev",
     "dev:admin": "pnpm --filter @enrich-skills/admin-web dev",
+    "dev:landing": "pnpm --filter @enrich-skills/landing-web dev",
     "build": "pnpm -r run build",
     "db:generate": "pnpm --filter @enrich-skills/api exec prisma generate",
     "db:push": "pnpm --filter @enrich-skills/api exec prisma db push",

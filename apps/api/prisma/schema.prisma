@@ -537,3 +537,18 @@ model RevisionLog {
   @@index([createdAt])
 }
 
+// ----- Business Enquiries (from landing page) -----
+model Enquiry {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String
+  category  String   // student | college | corporate | academic
+  message   String   @db.Text
+  status    String   @default("new") // new | contacted | closed
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+

@@ -63,9 +63,10 @@ export default function Layout() {
         }}
       >
         <div style={{ padding: '1.25rem 1rem', borderBottom: '1px solid var(--color-border)' }}>
-          <span style={{ fontWeight: 700, fontSize: '1.2rem', whiteSpace: 'nowrap' }}>
-            Enrich Skills
-          </span>
+          <div>
+            <span style={{ fontWeight: 700, fontSize: '1.2rem', whiteSpace: 'nowrap' }}>Ranker Ship</span>
+            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.15rem' }}>Vihaan Digital Solutions</div>
+          </div>
         </div>
 
         <nav style={{ flex: 1, padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>

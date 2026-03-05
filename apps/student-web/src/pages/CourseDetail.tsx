@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 
 interface Material {
@@ -201,7 +202,7 @@ export default function CourseDetail() {
                           {topic.content && (
                             <div
                               style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '0.75rem', lineHeight: 1.6 }}
-                              dangerouslySetInnerHTML={{ __html: topic.content }}
+                              dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(topic.content) }}
                             />
                           )}
 
