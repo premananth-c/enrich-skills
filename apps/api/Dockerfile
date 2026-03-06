@@ -18,6 +18,7 @@ RUN pnpm --filter @enrich-skills/api build
 
 
 FROM node:20-slim AS runtime
+RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=build /app/apps/api/dist ./apps/api/dist
 COPY --from=build /app/apps/api/prisma ./apps/api/prisma
