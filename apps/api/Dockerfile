@@ -13,8 +13,9 @@ FROM deps AS build
 COPY packages/shared/ packages/shared/
 COPY apps/api/ apps/api/
 RUN pnpm --filter @enrich-skills/shared build
-RUN pnpm --filter @enrich-skills/api build
 RUN pnpm --filter @enrich-skills/api exec prisma generate
+RUN pnpm --filter @enrich-skills/api build
+
 
 FROM node:20-slim AS runtime
 WORKDIR /app
