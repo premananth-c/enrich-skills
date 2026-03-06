@@ -1,47 +1,45 @@
-const INVITE_BASE_URL = process.env.INVITE_BASE_URL || 'http://localhost:5173';
-const SMTP_HOST = process.env.SMTP_HOST;
-const SMTP_PORT = process.env.SMTP_PORT;
-const SMTP_USER = process.env.SMTP_USER;
-const SMTP_PASS = process.env.SMTP_PASS;
-const SMTP_FROM = process.env.SMTP_FROM || 'noreply@enrich-skills.local';
+import { Resend } from 'resend';
 
-async function getTransporter() {
-  if (SMTP_HOST && SMTP_USER && SMTP_PASS) {
-    const nodemailer = await import('nodemailer');
-    return nodemailer.default.createTransport({
-      host: SMTP_HOST,
-      port: parseInt(SMTP_PORT || '587', 10),
-      secure: SMTP_PORT === '465',
-      auth: { user: SMTP_USER, pass: SMTP_PASS },
-    });
-  }
-  return null;
-}
+const RESEND_API_KEY = process.env.RESEND_API_KEY;
+const EMAIL_FROM = process.env.EMAIL_FROM || 'noreply@enrich-skills.local';
+const INVITE_BASE_URL = process.env.INVITE_BASE_URL || 'http://localhost:5173';
+
+const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
 export async function sendInviteEmail(to: string, token: string, testTitle?: string): Promise<void> {
   const inviteUrl = `${INVITE_BASE_URL}/invite?token=${encodeURIComponent(token)}`;
   const subject = testTitle
     ? `You're invited to take a test: ${testTitle}`
-    : "You're invited to join Enrich Skills";
+    : "You're invited to join Ranker Ship (by Vihaan Digital Solutions)";
+
   const html = `
-    <p>You have been invited to join Enrich Skills.</p>
+    <p>You have been invited to join Ranker Ship (by Vihaan Digital Solutions).</p>
     ${testTitle ? `<p>You have been assigned to the test: <strong>${testTitle}</strong>.</p>` : ''}
     <p>Click the link below to create your account and complete your profile. This link expires in 2 days.</p>
-    <p><a href="${inviteUrl}" style="display:inline-block;padding:10px 20px;background:#8b5cf6;color:#fff;text-decoration:none;border-radius:6px;">Accept invite & sign up</a></p>
+    <p>
+      <a href="${inviteUrl}" style="display:inline-block;padding:10px 20px;background:#8b5cf6;color:#fff;text-decoration:none;border-radius:6px;">
+        Accept invite &amp; sign up
+      </a>
+    </p>
     <p>Or copy this link: ${inviteUrl}</p>
     <p>If you didn't expect this email, you can ignore it.</p>
   `;
 
-  const transporter = await getTransporter();
-  if (transporter) {
-    await transporter.sendMail({
-      from: SMTP_FROM,
-      to,
-      subject,
-      html,
-    });
-  } else {
-    // Dev fallback: log the link (no nodemailer required)
-    console.log('[Invite email not configured - invite link for', to, ']:', inviteUrl);
+  if (!resend) {
+    // Dev fallback — no API key configured yet
+    console.log('[email] RESEND_API_KEY not set — invite link for', to, ':', inviteUrl);
+    return;
+  }
+
+  const { error } = await resend.emails.send({
+    from: EMAIL_FROM,
+    to,
+    subject,
+    html,
+  });
+
+  if (error) {
+    console.error('[email] Resend error:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
   }
 }

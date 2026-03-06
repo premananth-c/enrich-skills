@@ -1,5 +1,6 @@
 import { emitToast } from './toast';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
 const TOKEN_KEY = 'enrich_access_token';
 const REFRESH_KEY = 'enrich_refresh_token';
 const TENANT_KEY = 'enrich_tenant_id';
@@ -18,7 +19,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshToken) return null;
 
   try {
-    const res = await fetch('/api/v1/auth/refresh', {
+    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -65,13 +66,13 @@ export async function api<T>(
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = buildHeaders(token, options);
 
-  let res = await fetch(`/api/v1${path}`, { ...options, headers });
+  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers });
 
   if (res.status === 401) {
     const newToken = await getRefreshedToken();
     if (newToken) {
       const retryHeaders = buildHeaders(newToken, options);
-      res = await fetch(`/api/v1${path}`, { ...options, headers: retryHeaders });
+      res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers: retryHeaders });
     } else {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_KEY);

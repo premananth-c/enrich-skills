@@ -1,9 +1,8 @@
-import { createReadStream } from 'fs';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createBatchVideoSchema, updateBatchVideoSchema } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
-import { saveFile, getFilePath, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
+import { saveFile, getFileUrl, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
 
 export async function batchVideoRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -28,7 +27,13 @@ export async function batchVideoRoutes(app: FastifyInstance) {
     const data = await (request as unknown as { file: () => Promise<{ toBuffer: () => Promise<Buffer>; filename: string; mimetype: string } | undefined> }).file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
     const buffer = await data.toBuffer();
-    const key = await saveFile(STORAGE_KEYS.VIDEOS, data.filename, buffer, data.mimetype);
+    const key = await saveFile(
+      STORAGE_KEYS.VIDEOS,
+      data.filename,
+      buffer,
+      data.mimetype,
+      { tenantId, batchId: request.params.batchId }
+    );
     const count = await prisma.batchVideo.count({ where: { batchId: request.params.batchId } });
     const video = await prisma.batchVideo.create({
       data: {
@@ -65,6 +70,7 @@ export async function batchVideoRoutes(app: FastifyInstance) {
     return reply.send(video);
   });
 
+  // Returns a short-lived presigned R2 URL; the client plays or downloads directly from R2
   app.get('/batches/:batchId/videos/:videoId/stream', async (request: FastifyRequest<{ Params: { batchId: string; videoId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
@@ -73,11 +79,9 @@ export async function batchVideoRoutes(app: FastifyInstance) {
       where: { id: request.params.videoId, batchId: request.params.batchId },
     });
     if (!video) return reply.status(404).send({ error: 'Video not found' });
-    const filePath = await getFilePath(video.storageKey);
-    if (!filePath) return reply.status(404).send({ error: 'File not found' });
-    return reply
-      .header('Content-Type', video.mimeType)
-      .send(createReadStream(filePath));
+    const url = await getFileUrl(video.storageKey);
+    if (!url) return reply.status(404).send({ error: 'File not found in storage' });
+    return reply.redirect(302, url);
   });
 
   app.delete('/batches/:batchId/videos/:videoId', async (request: FastifyRequest<{ Params: { batchId: string; videoId: string } }>, reply: FastifyReply) => {

@@ -272,6 +272,8 @@ directory = "./dist"
 
 Deploy with: `wrangler deploy`
 
+**Frontend apps:** Three SPAs — `student-web`, `admin-web`, and `landing-web`. For RankerShip.com: deploy `landing-web` to the root domain (ranksership.com), `student-web` to student.ranksership.com, and `admin-web` to admin.ranksership.com.
+
 **The architecture is future-proof.** Whether it's called Pages or Workers, the result is identical: static React bundles served from 300+ Cloudflare edge locations with automatic SSL, zero bandwidth cost, and sub-50ms load times globally.
 
 ### 6.6 File Storage — Cloudflare R2

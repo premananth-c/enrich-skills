@@ -40,8 +40,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false);
   }, []);
 
+  const apiBase = import.meta.env.VITE_API_URL ?? '';
+
   const login = useCallback(async (email: string, password: string, tenantId?: string) => {
-    const res = await fetch('/api/v1/auth/login', {
+    const res = await fetch(`${apiBase}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(tenantId && { 'X-Tenant-Id': tenantId }) },
       body: JSON.stringify({ email, password }),

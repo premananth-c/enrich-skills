@@ -1,0 +1,25 @@
+# Dependencies and build output
+node_modules
+**/node_modules
+dist
+**/dist
+.git
+.gitignore
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Docs and misc
+*.md
+docs
+.DS_Store
+
+# Frontends (API image only needs api + shared)
+apps/student-web
+apps/admin-web
+apps/landing-web
+
+# Services not used in API build
+services

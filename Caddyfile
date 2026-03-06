@@ -1,0 +1,4 @@
+# RankerShip API — Caddy reverse proxy with automatic HTTPS (Let's Encrypt)
+api.rankership.com {
+    reverse_proxy api:3000
+}

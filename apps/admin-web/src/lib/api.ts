@@ -1,5 +1,6 @@
 import { emitToast } from './toast';
 
+const API_BASE = import.meta.env.VITE_API_URL ?? '';
 const TOKEN_KEY = 'enrich_admin_token';
 const REFRESH_KEY = 'enrich_admin_refresh_token';
 const TENANT_KEY = 'enrich_tenant_id';
@@ -11,7 +12,7 @@ async function refreshAccessToken(): Promise<string | null> {
   if (!refreshToken) return null;
 
   try {
-    const res = await fetch('/api/v1/auth/refresh', {
+    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -94,7 +95,7 @@ async function handleUnauthorized<T>(
   const newToken = await getRefreshedToken();
   if (newToken) {
     const retryHeaders = { ...buildHeaders(newToken, body), ...options.headers };
-    return fetch(`/api/v1${path}`, { ...options, headers: retryHeaders, body });
+    return fetch(`${API_BASE}/api/v1${path}`, { ...options, headers: retryHeaders, body });
   }
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(REFRESH_KEY);
@@ -115,7 +116,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   const method = (options.method || 'GET').toUpperCase();
   const isMutation = method !== 'GET';
   const headers = { ...getHeaders(body), ...options.headers };
-  let res = await fetch(`/api/v1${path}`, { ...options, headers, body });
+  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers, body });
 
   if (res.status === 401) {
     const retryRes = await handleUnauthorized<T>(path, options, body);
@@ -144,7 +145,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
 export async function apiUpload<T>(path: string, formData: FormData): Promise<T> {
   const method = 'POST';
   const headers = getHeaders(formData);
-  let res = await fetch(`/api/v1${path}`, { method: 'POST', headers, body: formData });
+  let res = await fetch(`${API_BASE}/api/v1${path}`, { method: 'POST', headers, body: formData });
 
   if (res.status === 401) {
     const retryRes = await handleUnauthorized<T>(path, { method: 'POST' }, formData);

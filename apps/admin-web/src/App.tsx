@@ -18,6 +18,7 @@ import CourseDetail from './pages/CourseDetail';
 import Reports from './pages/Reports';
 import ToastViewport from './components/ToastViewport';
 import ManageUsers from './pages/ManageUsers';
+import Enquiries from './pages/Enquiries';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="courses/:id/edit" element={<ModuleRoute moduleKey="courses" access="edit"><CourseForm /></ModuleRoute>} />
             <Route path="reports" element={<ModuleRoute moduleKey="reports"><Reports /></ModuleRoute>} />
             <Route path="manage-users" element={<SuperAdminRoute><ManageUsers /></SuperAdminRoute>} />
+            <Route path="enquiries" element={<SuperAdminRoute><Enquiries /></SuperAdminRoute>} />
           </Route>
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

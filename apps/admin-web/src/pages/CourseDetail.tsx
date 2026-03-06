@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
+import DOMPurify from 'dompurify';
 import { api, apiUpload } from '../lib/api';
 import { RichTextEditor } from '../components/RichTextEditor';
 import { emitToast } from '../lib/toast';
@@ -498,7 +499,7 @@ export default function CourseDetail() {
                                 <div
                                   className="rich-text-readonly"
                                   style={{ marginTop: '0.25rem', padding: '0.5rem', background: 'var(--color-bg)', borderRadius: 6, border: '1px solid var(--color-border)', fontSize: '0.9rem', lineHeight: 1.6 }}
-                                  dangerouslySetInnerHTML={{ __html: topic.content }}
+                                  dangerouslySetInnerHTML={{ __html: DOMPurify.sanitize(topic.content ?? '') }}
                                 />
                               ) : (
                                 <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No content yet.</span>
@@ -512,7 +513,7 @@ export default function CourseDetail() {
                           {(materials[topic.id] ?? []).map((m) => (
                             <span key={m.id} style={{ marginRight: '0.5rem' }}>
                               {m.type === 'pdf' ? (
-                                <a href={`/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
                               ) : (
                                 <a href={m.url ?? '#'} target="_blank" rel="noopener noreferrer">{m.title}</a>
                               )}

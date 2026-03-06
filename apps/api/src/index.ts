@@ -18,18 +18,39 @@ import { schedulerNotesRoutes } from './routes/schedulerNotes.js';
 import { batchVideoRoutes } from './routes/batchVideos.js';
 import { reportsRoutes } from './routes/reports.js';
 import { revisionRoutes } from './routes/revisions.js';
+import { enquiryRoutes } from './routes/enquiries.js';
 import { prisma } from './lib/prisma.js';
 
 const app = Fastify({ logger: true });
 
+const CORS_ORIGINS = [
+  'https://rankership.com',
+  'https://www.rankership.com',
+  'https://student.rankership.com',
+  'https://admin.rankership.com',
+  'http://localhost:5173',
+  'http://localhost:5174',
+  'http://localhost:5175',
+];
+
 async function main() {
-  await app.register(cors, { origin: true });
+  await app.register(cors, { origin: CORS_ORIGINS });
   await app.register(jwt, {
     secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
   });
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
 
   app.get('/health', async () => ({ status: 'ok' }));
+
+  app.get('/ready', async (request, reply) => {
+    try {
+      await prisma.$queryRaw`SELECT 1`;
+      return { status: 'ready', db: 'ok' };
+    } catch (e) {
+      reply.code(503);
+      return { status: 'degraded', db: 'error', error: String(e) };
+    }
+  });
 
   app.register(authRoutes, { prefix: '/api/v1/auth' });
   app.register(tenantRoutes, { prefix: '/api/v1/tenants' });
@@ -47,6 +68,7 @@ async function main() {
   app.register(batchVideoRoutes, { prefix: '/api/v1/schedule' });
   app.register(reportsRoutes, { prefix: '/api/v1/reports' });
   app.register(revisionRoutes, { prefix: '/api/v1/revisions' });
+  app.register(enquiryRoutes, { prefix: '/api/v1/enquiries' });
 
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });

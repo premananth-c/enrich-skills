@@ -504,7 +504,7 @@ export default function BatchDetail() {
                   <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{new Date(v.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <a href={`/api/v1/schedule/batches/${id}/videos/${v.id}/stream`} target="_blank" rel="noopener noreferrer" style={{ padding: '4px 10px', background: 'var(--color-primary)', color: '#fff', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Play</a>
+                  <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/schedule/batches/${id}/videos/${v.id}/stream`} target="_blank" rel="noopener noreferrer" style={{ padding: '4px 10px', background: 'var(--color-primary)', color: '#fff', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Play</a>
                   <button onClick={() => deleteVideo(v.id)} style={{ padding: '4px 10px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Delete</button>
                 </div>
               </div>
