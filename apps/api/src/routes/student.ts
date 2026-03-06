@@ -1,9 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { requireTenant } from '../lib/tenant.js';
-import { randomUUID } from 'crypto';
-import { join } from 'path';
-import { mkdir, writeFile } from 'fs/promises';
+import { saveFile, STORAGE_KEYS } from '../lib/storage.js';
 
 async function authenticate(request: FastifyRequest, reply: FastifyReply) {
   try {
@@ -351,10 +349,11 @@ export async function studentRoutes(app: FastifyInstance) {
     }
   );
 
-  // POST /activities/:activityId/submit — file upload
+  // POST /activities/:activityId/submit — file upload to R2
   app.post(
     '/activities/:activityId/submit',
     async (request: FastifyRequest<{ Params: { activityId: string } }>, reply: FastifyReply) => {
+      const tenantId = requireTenant(request);
       const userId = getUserId(request);
       const { activityId } = request.params;
 
@@ -364,16 +363,14 @@ export async function studentRoutes(app: FastifyInstance) {
       const data = await request.file();
       if (!data) return reply.status(400).send({ error: 'No file uploaded' });
 
-      const uploadDir = process.env.UPLOAD_DIR || join(process.cwd(), 'uploads');
-      const dir = join(uploadDir, 'activity-submissions');
-      await mkdir(dir, { recursive: true });
-
-      const ext = data.filename.split('.').pop() || 'bin';
-      const storageKey = `activity-submissions/${randomUUID()}.${ext}`;
-      const filePath = join(uploadDir, storageKey);
-
       const buffer = await data.toBuffer();
-      await writeFile(filePath, buffer);
+      const storageKey = await saveFile(
+        STORAGE_KEYS.SUBMISSIONS,
+        data.filename,
+        buffer,
+        data.mimetype,
+        { tenantId, activityId, userId }
+      );
 
       const submission = await prisma.activitySubmission.upsert({
         where: { activityId_userId: { activityId, userId } },

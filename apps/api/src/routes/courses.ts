@@ -1,4 +1,3 @@
-import { createReadStream } from 'fs';
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import {
@@ -16,7 +15,7 @@ import {
   updateEvaluationSchema,
 } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
-import { saveFile, getFilePath, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
+import { saveFile, getFileUrl, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
 import { logRevision } from '../lib/revision.js';
 
 export async function courseRoutes(app: FastifyInstance) {
@@ -435,7 +434,7 @@ export async function courseRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  // --- Material download (PDF by storageKey) ---
+  // --- Material download — redirects to a short-lived R2 presigned URL ---
   app.get('/:id/chapters/:chapterId/topics/:topicId/materials/:materialId/download', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; materialId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
@@ -444,15 +443,12 @@ export async function courseRoutes(app: FastifyInstance) {
       where: { id: request.params.materialId, topicId: request.params.topicId, storageKey: { not: null } },
     });
     if (!material?.storageKey) return reply.status(404).send({ error: 'Material or file not found' });
-    const filePath = await getFilePath(material.storageKey);
-    if (!filePath) return reply.status(404).send({ error: 'File not found' });
-    return reply
-      .header('Content-Type', 'application/pdf')
-      .header('Content-Disposition', `attachment; filename="${encodeURIComponent(material.title)}"`)
-      .send(createReadStream(filePath));
+    const url = await getFileUrl(material.storageKey);
+    if (!url) return reply.status(404).send({ error: 'File not found in storage' });
+    return reply.redirect(302, url);
   });
 
-  // --- Material PDF upload (multipart) ---
+  // --- Material file upload (multipart) — PDFs, images, docs stored in R2 ---
   app.post('/:id/chapters/:chapterId/topics/:topicId/materials/upload', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
@@ -460,7 +456,13 @@ export async function courseRoutes(app: FastifyInstance) {
     const data = await (request as unknown as { file: () => Promise<{ toBuffer: () => Promise<Buffer>; filename: string; mimetype: string } | undefined> }).file();
     if (!data) return reply.status(400).send({ error: 'No file uploaded' });
     const buffer = await data.toBuffer();
-    const key = await saveFile(STORAGE_KEYS.MATERIALS, data.filename, buffer, data.mimetype);
+    const key = await saveFile(
+      STORAGE_KEYS.MATERIALS,
+      data.filename,
+      buffer,
+      data.mimetype,
+      { tenantId, courseId: request.params.id, topicId: request.params.topicId }
+    );
     const count = await prisma.courseMaterial.count({ where: { topicId: request.params.topicId } });
     const material = await prisma.courseMaterial.create({
       data: {

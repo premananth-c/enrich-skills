@@ -513,7 +513,7 @@ export default function CourseDetail() {
                           {(materials[topic.id] ?? []).map((m) => (
                             <span key={m.id} style={{ marginRight: '0.5rem' }}>
                               {m.type === 'pdf' ? (
-                                <a href={`/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
                               ) : (
                                 <a href={m.url ?? '#'} target="_blank" rel="noopener noreferrer">{m.title}</a>
                               )}
