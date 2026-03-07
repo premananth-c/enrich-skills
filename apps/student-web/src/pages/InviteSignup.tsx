@@ -36,6 +36,8 @@ export default function InviteSignup() {
   const navigate = useNavigate();
   const { registerWithInvite } = useAuth();
 
+  const apiBase = import.meta.env.VITE_API_URL ?? '';
+
   const [status, setStatus] = useState<'loading' | 'valid' | 'invalid'>('loading');
   const [inviteEmail, setInviteEmail] = useState('');
   const [testTitle, setTestTitle] = useState<string | null>(null);
@@ -59,7 +61,7 @@ export default function InviteSignup() {
       setError('Missing invite token');
       return;
     }
-    fetch(`/api/v1/invites/validate?token=${encodeURIComponent(token)}`)
+    fetch(`${apiBase}/api/v1/invites/validate?token=${encodeURIComponent(token)}`)
       .then((res) => res.json())
       .then((data: unknown) => {
         if (

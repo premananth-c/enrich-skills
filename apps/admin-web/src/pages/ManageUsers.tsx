@@ -149,6 +149,16 @@ export default function ManageUsers() {
     await load();
   };
 
+  const handleDeleteAdmin = async (user: UserRow) => {
+    if (!confirm(`Permanently delete admin user "${user.name}"? This action cannot be undone.`)) return;
+    try {
+      await api(`/users/admins/${user.id}`, { method: 'DELETE' });
+      await load();
+    } catch {
+      // toast is already emitted by the api() wrapper
+    }
+  };
+
   const handleEmailChange = async (userId: string) => {
     setEditError('');
     try {
@@ -279,12 +289,22 @@ export default function ManageUsers() {
                 <td style={{ padding: '0.75rem 1rem' }}>{u.isActive ? 'Active' : 'Inactive'}</td>
                 <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td style={{ padding: '0.75rem 1rem' }}>
-                  <button
-                    onClick={() => { setEditUserId(editUserId === u.id ? null : u.id); setEditEmail(u.email ?? ''); setEditPassword(''); setEditError(''); }}
-                    style={{ padding: '0.3rem 0.6rem', borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '0.8rem', cursor: 'pointer' }}
-                  >
-                    {editUserId === u.id ? 'Close' : 'Edit'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '0.5rem' }}>
+                    <button
+                      onClick={() => { setEditUserId(editUserId === u.id ? null : u.id); setEditEmail(u.email ?? ''); setEditPassword(''); setEditError(''); }}
+                      style={{ padding: '0.3rem 0.6rem', borderRadius: 4, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontSize: '0.8rem', cursor: 'pointer' }}
+                    >
+                      {editUserId === u.id ? 'Close' : 'Edit'}
+                    </button>
+                    {u.role !== 'super_admin' && (
+                      <button
+                        onClick={() => handleDeleteAdmin(u)}
+                        style={{ padding: '0.3rem 0.6rem', borderRadius: 4, border: '1px solid #ef444444', background: '#ef444422', color: '#f87171', fontSize: '0.8rem', cursor: 'pointer' }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             ))}

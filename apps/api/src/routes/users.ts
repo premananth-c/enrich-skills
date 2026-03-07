@@ -576,4 +576,72 @@ export async function userRoutes(app: FastifyInstance) {
     });
     return reply.send(restored);
   });
+
+  app.delete('/admins/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: 'Only super admins can delete admin users' });
+    }
+    const tenantId = requireTenant(request);
+    const actor = request.user as { sub: string };
+    const user = await prisma.user.findFirst({
+      where: { id: request.params.id, tenantId },
+      select: { id: true, name: true, email: true, role: true },
+    });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    if (user.role === 'super_admin') {
+      return reply.status(403).send({ error: 'Cannot delete a super admin user' });
+    }
+    if (user.role === 'student') {
+      return reply.status(400).send({ error: 'Use the student delete endpoint instead' });
+    }
+    if (user.id === actor.sub) {
+      return reply.status(400).send({ error: 'Cannot delete your own account' });
+    }
+
+    await prisma.$transaction([
+      prisma.testAllocation.deleteMany({ where: { userId: user.id } }),
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'deleted',
+      userId: actor.sub,
+      details: { name: user.name, email: user.email, role: user.role },
+    });
+    return reply.send({ message: `Admin user "${user.name}" has been permanently deleted` });
+  });
+
+  app.delete('/:id/permanent', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const actor = request.user as { sub: string };
+    const user = await prisma.user.findFirst({
+      where: { id: request.params.id, tenantId },
+      select: { id: true, name: true, email: true, role: true, isActive: true },
+    });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    if (user.role !== 'student') {
+      return reply.status(403).send({ error: 'Only students can be deleted here' });
+    }
+    if (user.isActive) {
+      return reply.status(400).send({ error: 'Student must be archived before permanent deletion' });
+    }
+
+    await prisma.$transaction([
+      prisma.testAllocation.deleteMany({ where: { userId: user.id } }),
+      prisma.user.delete({ where: { id: user.id } }),
+    ]);
+
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'deleted',
+      userId: actor.sub,
+      details: { name: user.name, email: user.email },
+    });
+    return reply.send({ message: `Student "${user.name}" has been permanently deleted` });
+  });
 }

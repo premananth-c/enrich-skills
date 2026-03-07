@@ -121,4 +121,15 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
   } catch {
     return reply.status(401).send({ error: 'Unauthorized' });
   }
+
+  const payload = request.user as UserTokenPayload | undefined;
+  if (payload?.sub) {
+    const user = await prisma.user.findUnique({
+      where: { id: payload.sub },
+      select: { isActive: true },
+    });
+    if (!user || !user.isActive) {
+      return reply.status(401).send({ error: 'Your account has been deactivated' });
+    }
+  }
 }
