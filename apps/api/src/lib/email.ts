@@ -6,6 +6,40 @@ const INVITE_BASE_URL = process.env.INVITE_BASE_URL || 'http://localhost:5173';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
+export async function sendAdminInviteEmail(to: string, tempPassword: string): Promise<void> {
+  const adminUrl = process.env.ADMIN_WEB_URL || 'http://localhost:5174';
+  const loginUrl = `${adminUrl}/login`;
+  const subject = "You've been invited as an admin on RankerShip";
+
+  const html = `
+    <p>You have been invited as an admin on <strong>RankerShip</strong> (by Vihaan Digital Solutions).</p>
+    <p>Use the credentials below to log in:</p>
+    <table style="border-collapse:collapse;margin:12px 0">
+      <tr><td style="padding:4px 12px 4px 0;font-weight:600">Email:</td><td>${to}</td></tr>
+      <tr><td style="padding:4px 12px 4px 0;font-weight:600">Temporary Password:</td><td><code>${tempPassword}</code></td></tr>
+    </table>
+    <p>Please change your password after logging in.</p>
+    <p>
+      <a href="${loginUrl}" style="display:inline-block;padding:10px 20px;background:#4338ca;color:#fff;text-decoration:none;border-radius:6px;">
+        Log in to Admin Panel
+      </a>
+    </p>
+    <p>Or copy this link: ${loginUrl}</p>
+    <p>If you didn't expect this email, you can ignore it.</p>
+  `;
+
+  if (!resend) {
+    console.log('[email] RESEND_API_KEY not set — admin invite for', to, '| temp password:', tempPassword, '| login:', loginUrl);
+    return;
+  }
+
+  const { error } = await resend.emails.send({ from: EMAIL_FROM, to, subject, html });
+  if (error) {
+    console.error('[email] Resend error:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+}
+
 export async function sendInviteEmail(to: string, token: string, testTitle?: string): Promise<void> {
   const inviteUrl = `${INVITE_BASE_URL}/invite?token=${encodeURIComponent(token)}`;
   const subject = testTitle

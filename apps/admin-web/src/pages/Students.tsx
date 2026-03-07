@@ -55,6 +55,9 @@ export default function Students() {
   const [historyTarget, setHistoryTarget] = useState<{ id: string; name: string } | null>(null);
   const [directOpen, setDirectOpen] = useState(false);
   const [directForm, setDirectForm] = useState({ name: '', email: '', password: '', phoneNumber: '', address: '' });
+  const [resetPw, setResetPw] = useState('');
+  const [resetPwLoading, setResetPwLoading] = useState(false);
+  const [resetPwSuccess, setResetPwSuccess] = useState(false);
 
   const loadStudents = () => {
     api<Student[]>('/users?role=student')
@@ -127,6 +130,8 @@ export default function Students() {
     setEditForm(next);
     setInitialEditForm(next);
     setEditError('');
+    setResetPw('');
+    setResetPwSuccess(false);
     setEditOpen(true);
   };
 
@@ -194,6 +199,24 @@ export default function Students() {
       emitToast('success', `Invite revoked`);
     } catch (err) {
       emitToast('error', err instanceof Error ? err.message : 'Failed to revoke invite');
+    }
+  };
+
+  const handleResetStudentPassword = async () => {
+    if (!editingStudent || resetPw.length < 8) return;
+    setResetPwLoading(true);
+    try {
+      await api(`/users/${editingStudent.id}/password`, {
+        method: 'PATCH',
+        body: JSON.stringify({ newPassword: resetPw }),
+      });
+      setResetPw('');
+      setResetPwSuccess(true);
+      setTimeout(() => setResetPwSuccess(false), 3000);
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : 'Failed to reset password');
+    } finally {
+      setResetPwLoading(false);
     }
   };
 
@@ -532,6 +555,30 @@ export default function Students() {
                 <button type="submit" disabled={!canSaveEdit} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSaveEdit ? 1 : 0.65, cursor: canSaveEdit ? 'pointer' : 'not-allowed' }}>{editSaving ? 'Saving...' : 'Save'}</button>
               </div>
             </form>
+            {isSuperAdmin && (
+              <div style={{ marginTop: '1.25rem', paddingTop: '1rem', borderTop: '1px solid var(--color-border)' }}>
+                <label style={{ ...labelStyle, marginBottom: '0.5rem' }}>Reset Password</label>
+                {resetPwSuccess && <div style={{ padding: '0.5rem 0.75rem', background: '#dcfce7', color: '#166534', borderRadius: 6, marginBottom: '0.5rem', fontSize: '0.85rem' }}>Password reset successfully!</div>}
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <input
+                    type="password"
+                    value={resetPw}
+                    onChange={(e) => setResetPw(e.target.value)}
+                    placeholder="New password (min 8 chars)"
+                    minLength={8}
+                    style={{ ...inputStyle, flex: 1 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={handleResetStudentPassword}
+                    disabled={resetPwLoading || resetPw.length < 8}
+                    style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, cursor: resetPw.length >= 8 ? 'pointer' : 'not-allowed', opacity: resetPw.length >= 8 ? 1 : 0.65, whiteSpace: 'nowrap' }}
+                  >
+                    {resetPwLoading ? 'Resetting...' : 'Reset'}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

@@ -16,6 +16,33 @@ export default function Layout() {
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [currentPw, setCurrentPw] = useState('');
+  const [newPw, setNewPw] = useState('');
+  const [pwError, setPwError] = useState('');
+  const [pwSuccess, setPwSuccess] = useState(false);
+  const [pwLoading, setPwLoading] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPwError('');
+    setPwSuccess(false);
+    setPwLoading(true);
+    try {
+      await api('/users/me/password', {
+        method: 'PATCH',
+        body: JSON.stringify({ currentPassword: currentPw, newPassword: newPw }),
+      });
+      setPwSuccess(true);
+      setCurrentPw('');
+      setNewPw('');
+      setTimeout(() => setShowPasswordModal(false), 1500);
+    } catch (err) {
+      setPwError(err instanceof Error ? err.message : 'Failed to change password');
+    } finally {
+      setPwLoading(false);
+    }
+  };
 
   useEffect(() => {
     const fetchUnread = () => {
@@ -62,11 +89,9 @@ export default function Layout() {
           flexShrink: 0,
         }}
       >
-        <div style={{ padding: '1.25rem 1rem', borderBottom: '1px solid var(--color-border)' }}>
-          <div>
-            <span style={{ fontWeight: 700, fontSize: '1.2rem', whiteSpace: 'nowrap' }}>Ranker Ship</span>
-            <div style={{ fontSize: '0.7rem', color: 'var(--color-text-muted)', marginTop: '0.15rem' }}>Vihaan Digital Solutions</div>
-          </div>
+        <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+          <img src="/logo.png" alt="RankerShip" style={{ height: 36, display: 'block', marginBottom: '0.35rem' }} />
+          <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </div>
 
         <nav style={{ flex: 1, padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
@@ -99,30 +124,76 @@ export default function Layout() {
           style={{
             padding: '1rem',
             borderTop: '1px solid var(--color-border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
           }}
         >
-          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block', marginBottom: '0.5rem' }}>
             {user?.name}
           </span>
-          <button
-            onClick={handleLogout}
-            style={{
-              background: 'transparent',
-              border: '1px solid var(--color-border)',
-              color: 'var(--color-text-muted)',
-              padding: '0.3rem 0.6rem',
-              borderRadius: '6px',
-              fontSize: '0.8rem',
-              flexShrink: 0,
-            }}
-          >
-            Logout
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button
+              onClick={() => { setShowPasswordModal(true); setPwError(''); setPwSuccess(false); setCurrentPw(''); setNewPw(''); }}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-muted)',
+                padding: '0.3rem 0.5rem',
+                borderRadius: '6px',
+                fontSize: '0.75rem',
+                cursor: 'pointer',
+              }}
+            >
+              Change Password
+            </button>
+            <button
+              onClick={handleLogout}
+              style={{
+                background: 'transparent',
+                border: '1px solid var(--color-border)',
+                color: 'var(--color-text-muted)',
+                padding: '0.3rem 0.6rem',
+                borderRadius: '6px',
+                fontSize: '0.8rem',
+                flexShrink: 0,
+                cursor: 'pointer',
+              }}
+            >
+              Logout
+            </button>
+          </div>
         </div>
       </aside>
+
+      {showPasswordModal && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex',
+            alignItems: 'center', justifyContent: 'center', zIndex: 100,
+          }}
+          onClick={() => setShowPasswordModal(false)}
+        >
+          <div
+            style={{
+              background: 'var(--color-surface)', border: '1px solid var(--color-border)',
+              borderRadius: 12, padding: '1.5rem', width: 360, maxWidth: '90vw',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 style={{ margin: '0 0 1rem' }}>Change Password</h3>
+            {pwSuccess && <div style={{ padding: '0.75rem', background: '#dcfce7', color: '#166534', borderRadius: 6, marginBottom: '1rem', fontSize: '0.9rem' }}>Password changed successfully!</div>}
+            {pwError && <div style={{ padding: '0.75rem', background: 'rgba(239,68,68,0.1)', color: '#ef4444', borderRadius: 6, marginBottom: '1rem', fontSize: '0.9rem' }}>{pwError}</div>}
+            <form onSubmit={handleChangePassword}>
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>Current Password</label>
+              <input type="password" value={currentPw} onChange={(e) => setCurrentPw(e.target.value)} required style={{ width: '100%', padding: '0.6rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', marginBottom: '0.75rem', fontSize: '0.95rem' }} />
+              <label style={{ display: 'block', marginBottom: '0.35rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>New Password (min 8 chars)</label>
+              <input type="password" value={newPw} onChange={(e) => setNewPw(e.target.value)} required minLength={8} style={{ width: '100%', padding: '0.6rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)', color: 'var(--color-text)', marginBottom: '1rem', fontSize: '0.95rem' }} />
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                <button type="button" onClick={() => setShowPasswordModal(false)} style={{ padding: '0.5rem 1rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', cursor: 'pointer' }}>Cancel</button>
+                <button type="submit" disabled={pwLoading} style={{ padding: '0.5rem 1rem', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontWeight: 600, cursor: 'pointer', opacity: pwLoading ? 0.65 : 1 }}>{pwLoading ? 'Saving...' : 'Change Password'}</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
         <header

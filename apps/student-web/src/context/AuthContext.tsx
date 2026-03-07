@@ -56,8 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (u.tenantId) localStorage.setItem('enrich_tenant_id', u.tenantId);
   }, []);
 
+  const apiBase = import.meta.env.VITE_API_URL ?? '';
+
   const login = useCallback(async (email: string, password: string, tenantId?: string) => {
-    const res = await fetch('/api/v1/auth/login', {
+    const res = await fetch(`${apiBase}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(tenantId && { 'X-Tenant-Id': tenantId }) },
       body: JSON.stringify({ email, password }),
@@ -73,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setAuth]);
 
   const register = useCallback(async (email: string, password: string, name: string, tenantId?: string) => {
-    const res = await fetch('/api/v1/auth/register', {
+    const res = await fetch(`${apiBase}/api/v1/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', ...(tenantId && { 'X-Tenant-Id': tenantId }) },
       body: JSON.stringify({ email, password, name }),
@@ -89,7 +91,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [setAuth]);
 
   const registerWithInvite = useCallback(async (token: string, password: string, name: string, phoneNumber: string, address: string) => {
-    const res = await fetch('/api/v1/auth/register-with-invite', {
+    const res = await fetch(`${apiBase}/api/v1/auth/register-with-invite`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ token, password, name, phoneNumber, address }),
