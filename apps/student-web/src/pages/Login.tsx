@@ -41,7 +41,10 @@ export default function Login() {
           maxWidth: '400px',
         }}
       >
-        <h1 style={{ margin: '0 0 1.5rem', fontSize: '1.5rem' }}>Sign in</h1>
+        <div style={{ textAlign: 'center', marginBottom: '1.5rem' }}>
+          <img src="/logo.png" alt="RankerShip" style={{ height: 72, marginBottom: '1rem' }} />
+          <p style={{ margin: 0, fontSize: '1.1rem', color: 'var(--color-text-muted)', fontWeight: 500 }}>All the best Ranker</p>
+        </div>
         {error && (
           <div
             style={{

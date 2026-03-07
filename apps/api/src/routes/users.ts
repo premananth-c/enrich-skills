@@ -12,9 +12,88 @@ import {
   type PermissionLevel,
 } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
+import { randomUUID } from 'crypto';
+import { sendAdminInviteEmail } from '../lib/email.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
+
+  app.patch('/me/password', async (request: FastifyRequest, reply: FastifyReply) => {
+    const payload = request.user as { sub: string };
+    const body = request.body as { currentPassword?: string; newPassword?: string };
+    const currentPassword = (body.currentPassword || '').trim();
+    const newPassword = (body.newPassword || '').trim();
+    if (!currentPassword || newPassword.length < 8) {
+      return reply.status(400).send({ error: 'Current password and new password (min 8 chars) are required' });
+    }
+    const user = await prisma.user.findUnique({ where: { id: payload.sub } });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    const valid = await bcrypt.compare(currentPassword, user.passwordHash);
+    if (!valid) return reply.status(400).send({ error: 'Current password is incorrect' });
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: payload.sub }, data: { passwordHash } });
+    return reply.send({ message: 'Password changed successfully' });
+  });
+
+  app.patch('/:id/password', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: 'Only super admins can change passwords for other users' });
+    }
+    const tenantId = requireTenant(request);
+    const body = request.body as { newPassword?: string };
+    const newPassword = (body.newPassword || '').trim();
+    if (newPassword.length < 8) {
+      return reply.status(400).send({ error: 'New password (min 8 chars) is required' });
+    }
+    const user = await prisma.user.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    if (user.role === 'super_admin') {
+      return reply.status(403).send({ error: 'Cannot reset password for another super admin' });
+    }
+    const passwordHash = await bcrypt.hash(newPassword, 12);
+    await prisma.user.update({ where: { id: request.params.id }, data: { passwordHash } });
+    const actor = request.user as { sub: string };
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'updated',
+      userId: actor.sub,
+      details: { action: 'password_reset', name: user.name },
+    });
+    return reply.send({ message: 'Password changed successfully' });
+  });
+
+  app.patch('/:id/email', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: 'Only super admins can change emails for other users' });
+    }
+    const tenantId = requireTenant(request);
+    const body = request.body as { email?: string };
+    const email = (body.email || '').trim().toLowerCase();
+    if (!email) return reply.status(400).send({ error: 'Email is required' });
+    const user = await prisma.user.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    const existing = await prisma.user.findFirst({
+      where: { tenantId, email, id: { not: request.params.id } },
+    });
+    if (existing) return reply.status(409).send({ error: 'Another user with this email already exists' });
+    const updated = await prisma.user.update({
+      where: { id: request.params.id },
+      data: { email },
+      select: { id: true, email: true, name: true, role: true },
+    });
+    const actor = request.user as { sub: string };
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: updated.id,
+      action: 'updated',
+      userId: actor.sub,
+      details: { action: 'email_changed', name: updated.name, email: updated.email },
+    });
+    return reply.send(updated);
+  });
 
   app.get('/me/permissions', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
@@ -207,6 +286,41 @@ export async function userRoutes(app: FastifyInstance) {
       userId: actor.sub,
       details: { name: user.name, role: user.role },
     });
+    return reply.status(201).send(user);
+  });
+
+  app.post('/admins/invite', async (request: FastifyRequest, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: 'Only super admins can invite admin users' });
+    }
+    const tenantId = requireTenant(request);
+    const actor = request.user as { sub: string };
+    const body = request.body as { email?: string };
+    const email = (body.email || '').trim().toLowerCase();
+    if (!email) return reply.status(400).send({ error: 'Email is required' });
+    const existing = await prisma.user.findUnique({
+      where: { tenantId_email: { tenantId, email } },
+    });
+    if (existing) return reply.status(409).send({ error: 'A user with this email already exists' });
+    const tempPassword = randomUUID().slice(0, 12);
+    const passwordHash = await bcrypt.hash(tempPassword, 12);
+    const user = await prisma.user.create({
+      data: { tenantId, name: email.split('@')[0], email, passwordHash, role: 'admin', isActive: true },
+      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true, updatedAt: true },
+    });
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: user.id,
+      action: 'created',
+      userId: actor.sub,
+      details: { name: user.name, role: user.role, method: 'invite' },
+    });
+    try {
+      await sendAdminInviteEmail(email, tempPassword);
+    } catch (err) {
+      console.error('[invite-admin] Email send failed:', err);
+    }
     return reply.status(201).send(user);
   });
 

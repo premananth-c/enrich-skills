@@ -171,37 +171,181 @@ const sectionStyle: React.CSSProperties = {
 
 export default function App() {
   const formRef = useRef<HTMLDivElement>(null);
+  const studentUrl = import.meta.env.VITE_STUDENT_URL || 'http://localhost:5173';
+  const adminUrl = import.meta.env.VITE_ADMIN_URL || 'http://localhost:5174';
 
   const scrollToForm = () => formRef.current?.scrollIntoView({ behavior: 'smooth' });
 
   return (
     <div>
+      {/* Top Nav */}
+      <nav
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '0.75rem 2rem',
+          background: '#fff',
+          borderBottom: '1px solid #e2e8f0',
+          position: 'sticky',
+          top: 0,
+          zIndex: 50,
+          boxShadow: '0 1px 3px rgba(0,0,0,0.06)',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'flex-end', gap: '0.75rem' }}>
+          <img src="/logo.png" alt="RankerShip" style={{ height: 44, display: 'block' }} />
+          <span style={{ fontSize: '0.7rem', color: '#94a3b8', whiteSpace: 'nowrap', lineHeight: 1, paddingBottom: '2px' }}>by Vihaan Digital Solutions</span>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+          <a
+            href={`${studentUrl}/login`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: '#334155',
+              textDecoration: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              padding: '0.5rem 1.25rem',
+              borderRadius: 6,
+              border: '1px solid #cbd5e1',
+              transition: 'background 0.15s',
+            }}
+          >
+            Student Login
+          </a>
+          <a
+            href={`${adminUrl}/login`}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: '#fff',
+              textDecoration: 'none',
+              fontSize: '0.95rem',
+              fontWeight: 500,
+              padding: '0.5rem 1.25rem',
+              borderRadius: 6,
+              background: '#4338ca',
+              transition: 'background 0.15s',
+            }}
+          >
+            Admin Login
+          </a>
+        </div>
+      </nav>
+
       {/* Hero */}
       <header
         style={{
-          background: 'linear-gradient(135deg, #1e1b4b 0%, #312e81 50%, #4338ca 100%)',
+          background: 'linear-gradient(135deg, #0f172a 0%, #1e1b4b 35%, #312e81 60%, #4338ca 85%, #6366f1 100%)',
           color: '#fff',
-          padding: '4rem 1.5rem 5rem',
+          padding: '6rem 1.5rem 7rem',
           textAlign: 'center',
+          position: 'relative',
+          overflow: 'hidden',
         }}
       >
-        <div style={{ maxWidth: 640, margin: '0 auto' }}>
-          <h1 style={{ margin: 0, fontSize: '2.5rem', fontWeight: 700 }}>
-            Ranker Ship
+        {/* Decorative orbs */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '-30%',
+            left: '-10%',
+            width: '50%',
+            height: '140%',
+            background: 'radial-gradient(circle, rgba(99,102,241,0.18) 0%, transparent 65%)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            bottom: '-40%',
+            right: '-5%',
+            width: '45%',
+            height: '130%',
+            background: 'radial-gradient(circle, rgba(129,140,248,0.12) 0%, transparent 60%)',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            top: '10%',
+            right: '15%',
+            width: '25%',
+            height: '50%',
+            background: 'radial-gradient(circle, rgba(67,56,202,0.2) 0%, transparent 70%)',
+            pointerEvents: 'none',
+          }}
+        />
+        {/* Grid pattern overlay */}
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundImage: 'linear-gradient(rgba(255,255,255,0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.03) 1px, transparent 1px)',
+            backgroundSize: '60px 60px',
+            pointerEvents: 'none',
+          }}
+        />
+        <div style={{ maxWidth: 760, margin: '0 auto', position: 'relative' }}>
+          <h1 style={{ margin: 0, fontSize: '3rem', fontWeight: 800, letterSpacing: '-0.03em', lineHeight: 1.15 }}>
+            Learn, Practice, and Succeed
+            <br />
+            <span style={{ background: 'linear-gradient(90deg, #c7d2fe, #a5b4fc, #818cf8)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
+              on One Unified Platform.
+            </span>
           </h1>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '1.1rem', opacity: 0.9 }}>
-            by Vihaan Digital Solutions
+          <p style={{ margin: '1.75rem auto 0', fontSize: '1.15rem', lineHeight: 1.8, color: '#cbd5e1', maxWidth: 660 }}>
+            From live recordings and MCQ marathons to complex coding assessments, RankerShip combines a world-class LMS with high-stakes testing environments — powered by <span style={{ color: '#a5b4fc', fontWeight: 600 }}>AI-driven analysis and reporting</span> that gives every learner a clear path to improve.
           </p>
-          <p style={{ margin: '1.5rem 0 0', fontSize: '1.1rem', lineHeight: 1.6 }}>
-            Practice coding & mock tests. Get AI-powered feedback. Ace your assessments.
-          </p>
+          <div
+            style={{
+              display: 'flex',
+              justifyContent: 'center',
+              gap: '1.5rem',
+              marginTop: '2rem',
+              flexWrap: 'wrap',
+            }}
+          >
+            {[
+              { icon: '\u2728', text: 'AI Feedback on Every Attempt' },
+              { icon: '\uD83D\uDCCA', text: 'Smart Performance Reports' },
+              { icon: '\uD83C\uDFAF', text: 'Personalized Recommendations' },
+            ].map((item) => (
+              <div
+                key={item.text}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  background: 'rgba(255,255,255,0.08)',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  padding: '0.5rem 1rem',
+                  fontSize: '0.9rem',
+                  color: '#e2e8f0',
+                  backdropFilter: 'blur(4px)',
+                }}
+              >
+                <span>{item.icon}</span>
+                <span>{item.text}</span>
+              </div>
+            ))}
+          </div>
           <button
             onClick={scrollToForm}
             style={{
               ...buttonStyle,
-              marginTop: '2rem',
+              marginTop: '2.5rem',
               background: '#fff',
               color: '#4338ca',
+              fontSize: '1.1rem',
+              padding: '1rem 2.5rem',
+              fontWeight: 700,
+              boxShadow: '0 4px 20px rgba(99,102,241,0.3)',
             }}
           >
             Get Access
@@ -266,23 +410,28 @@ export default function App() {
       <footer
         style={{
           padding: '2rem 1.5rem',
-          background: '#1e293b',
+          background: '#0f172a',
           color: '#94a3b8',
           textAlign: 'center',
           fontSize: '0.9rem',
         }}
       >
-        <p style={{ margin: 0 }}>© Vihaan Digital Solutions</p>
+        <img src="/logo.png" alt="RankerShip" style={{ height: 28, marginBottom: '0.75rem', opacity: 0.8 }} />
+        <p style={{ margin: 0 }}>&copy; Vihaan Digital Solutions</p>
         <p style={{ margin: '0.75rem 0 0' }}>
           <a
-            href={`${import.meta.env.VITE_STUDENT_URL || 'http://localhost:5173'}/login`}
+            href={`${studentUrl}/login`}
+            target="_blank"
+            rel="noopener noreferrer"
             style={{ color: '#818cf8', textDecoration: 'none' }}
           >
             Student Login
           </a>
           {' · '}
           <a
-            href={`${import.meta.env.VITE_ADMIN_URL || 'http://localhost:5174'}/login`}
+            href={`${adminUrl}/login`}
+            target="_blank"
+            rel="noopener noreferrer"
             style={{ color: '#818cf8', textDecoration: 'none' }}
           >
             Admin Login
