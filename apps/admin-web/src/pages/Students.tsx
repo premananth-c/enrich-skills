@@ -202,6 +202,16 @@ export default function Students() {
     }
   };
 
+  const handleDeletePermanently = async (student: Student) => {
+    if (!confirm(`Permanently delete student "${student.name}"? All their test attempts, submissions, and data will be removed. This action cannot be undone.`)) return;
+    try {
+      await api('/users/' + student.id + '/permanent', { method: 'DELETE' });
+      setStudents((prev) => prev.filter((s) => s.id !== student.id));
+    } catch (err) {
+      emitToast('error', err instanceof Error ? err.message : 'Failed to delete student');
+    }
+  };
+
   const handleResetStudentPassword = async () => {
     if (!editingStudent || resetPw.length < 8) return;
     setResetPwLoading(true);
@@ -435,6 +445,7 @@ export default function Students() {
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button type="button" onClick={() => handleRevoke(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 6, color: '#4ade80', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Revoke</button>
+                      <button type="button" onClick={() => handleDeletePermanently(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Delete</button>
                       <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
                     </div>
                   </td>
