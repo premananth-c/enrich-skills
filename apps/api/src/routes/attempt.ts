@@ -92,9 +92,45 @@ export async function attemptRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'testId required' });
     }
 
-    const allocation = await prisma.testAllocation.findUnique({
+    let allocation = await prisma.testAllocation.findUnique({
       where: { userId_testId: { userId: user.sub, testId: body.testId } },
+      include: { variant: true },
     });
+
+    // If no direct allocation, check if test is part of a course the student is assigned to (course evaluation)
+    if (!allocation) {
+      const evaluationsWithCourse = await prisma.courseEvaluation.findMany({
+        where: { testId: body.testId },
+        select: { topic: { select: { chapter: { select: { courseId: true } } } } },
+      });
+      const courseIds = [...new Set(evaluationsWithCourse.map((e) => e.topic.chapter.courseId))];
+      if (courseIds.length > 0) {
+        const batchIds = await prisma.batchMember
+          .findMany({ where: { userId: user.sub }, select: { batchId: true } })
+          .then((m) => m.map((x) => x.batchId));
+        const hasCourseAccess = await prisma.courseAssignment.findFirst({
+          where: {
+            tenantId: user.tenantId,
+            courseId: { in: courseIds },
+            OR: [{ userId: user.sub }, ...(batchIds.length > 0 ? [{ batchId: { in: batchIds } }] : [])],
+          },
+        });
+        if (hasCourseAccess) {
+          allocation = await prisma.testAllocation.upsert({
+            where: { userId_testId: { userId: user.sub, testId: body.testId } },
+            update: {},
+            create: {
+              userId: user.sub,
+              testId: body.testId,
+              variantId: null,
+              assignedBy: null,
+            },
+            include: { variant: true },
+          });
+        }
+      }
+    }
+
     if (!allocation) return reply.status(403).send({ error: 'Test is not assigned to you' });
 
     const test = await prisma.test.findFirst({

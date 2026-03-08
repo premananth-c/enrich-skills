@@ -19,11 +19,13 @@ import { batchVideoRoutes } from './routes/batchVideos.js';
 import { reportsRoutes } from './routes/reports.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { enquiryRoutes } from './routes/enquiries.js';
+import { streamRoutes } from './routes/stream.js';
 import { prisma } from './lib/prisma.js';
+import { getAllAllowedOrigins } from './lib/domainCheck.js';
 
 const app = Fastify({ logger: true });
 
-const CORS_ORIGINS = [
+const STATIC_CORS_ORIGINS = [
   'https://rankership.com',
   'https://www.rankership.com',
   'https://student.rankership.com',
@@ -34,7 +36,14 @@ const CORS_ORIGINS = [
 ];
 
 async function main() {
-  await app.register(cors, { origin: CORS_ORIGINS });
+  await app.register(cors, {
+    origin: async (origin: string | undefined) => {
+      if (!origin) return true;
+      if (STATIC_CORS_ORIGINS.includes(origin)) return true;
+      const dynamic = await getAllAllowedOrigins();
+      return dynamic.includes(origin);
+    },
+  });
   await app.register(jwt, {
     secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
   });
@@ -69,6 +78,7 @@ async function main() {
   app.register(reportsRoutes, { prefix: '/api/v1/reports' });
   app.register(revisionRoutes, { prefix: '/api/v1/revisions' });
   app.register(enquiryRoutes, { prefix: '/api/v1/enquiries' });
+  app.register(streamRoutes, { prefix: '/api/v1/stream' });
 
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });

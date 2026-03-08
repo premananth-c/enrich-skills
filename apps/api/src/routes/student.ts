@@ -97,6 +97,32 @@ export async function studentRoutes(app: FastifyInstance) {
       orderBy: { assignedAt: 'desc' },
     });
     const publishedAllocations = allocations.filter((a) => a.test.status === 'published');
+    const testIds = publishedAllocations.map((a) => a.testId);
+
+    // Course/topic context for tests that are assigned inside a course (evaluation)
+    const courseContextByTestId = new Map<string, { courseName: string; topicName: string }>();
+    if (testIds.length > 0) {
+      const evaluations = await prisma.courseEvaluation.findMany({
+        where: { testId: { in: testIds } },
+        select: {
+          testId: true,
+          topic: {
+            select: {
+              title: true,
+              chapter: { select: { course: { select: { title: true } } } },
+            },
+          },
+        },
+      });
+      for (const ev of evaluations) {
+        if (ev.testId && ev.topic && !courseContextByTestId.has(ev.testId)) {
+          courseContextByTestId.set(ev.testId, {
+            courseName: ev.topic.chapter.course.title,
+            topicName: ev.topic.title,
+          });
+        }
+      }
+    }
 
     const attemptCounts = await prisma.attempt.groupBy({
       by: ['testId'],
@@ -143,6 +169,7 @@ export async function studentRoutes(app: FastifyInstance) {
         ...alloc,
         attemptCount: countMap.get(alloc.testId) ?? 0,
         attempts: testAttempts,
+        courseContext: courseContextByTestId.get(alloc.testId) ?? null,
         latestCompletedAttempt: latestCompleted
           ? {
               ...latestCompleted,
@@ -270,7 +297,27 @@ export async function studentRoutes(app: FastifyInstance) {
       });
       const submissionMap = new Map(mySubmissions.map((s) => [s.activityId, s]));
 
-      return reply.send({ course, assignment, mySubmissions: Object.fromEntries(submissionMap) });
+      // Hide evaluations whose test is draft or archived (only show published tests to students)
+      const courseFiltered = course
+        ? {
+            ...course,
+            chapters: course.chapters.map((ch) => ({
+              ...ch,
+              topics: ch.topics.map((topic) => ({
+                ...topic,
+                evaluations: topic.evaluations.filter(
+                  (ev) => !ev.test || ev.test.status === 'published'
+                ),
+              })),
+            })),
+          }
+        : null;
+
+      return reply.send({
+        course: courseFiltered,
+        assignment,
+        mySubmissions: Object.fromEntries(submissionMap),
+      });
     }
   );
 

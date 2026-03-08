@@ -312,6 +312,9 @@ export async function testRoutes(app: FastifyInstance) {
     const admin = request.user as { sub: string };
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
+    if (test.status !== 'published') {
+      return reply.status(403).send({ error: 'Only published tests can be assigned to students. Set the test status to Published first.' });
+    }
 
     const body = request.body as { userId?: string; email?: string; variantId?: string; resetAttempts?: boolean };
     let userId = body.userId;

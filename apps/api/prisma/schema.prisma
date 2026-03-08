@@ -359,10 +359,12 @@ model CourseTopic {
 model CourseMaterial {
   id         String   @id @default(uuid())
   topicId    String
-  type       String   // pdf, link
+  type       String   // pdf, link, video
   title      String
   storageKey String?
   url        String?
+  mimeType   String?
+  sizeBytes  Int?
   order      Int      @default(0)
   createdAt  DateTime @default(now())
 

@@ -88,32 +88,32 @@ button { font-family: inherit; cursor: pointer; }
 
 /* Toast notifications */
 .toast-viewport {
-  align-items: flex-end;
+  align-items: center;
 }
 
 .toast-item {
-  transform-origin: top right;
+  transform-origin: top center;
   will-change: transform, opacity;
 }
 
 @keyframes toast-in {
   from {
     opacity: 0;
-    transform: translateY(-10px) translateX(12px) scale(0.98);
+    transform: translateY(-10px) scale(0.98);
   }
   to {
     opacity: 1;
-    transform: translateY(0) translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
 }
 
 @keyframes toast-out {
   from {
     opacity: 1;
-    transform: translateY(0) translateX(0) scale(1);
+    transform: translateY(0) scale(1);
   }
   to {
     opacity: 0;
-    transform: translateY(-8px) translateX(12px) scale(0.98);
+    transform: translateY(-8px) scale(0.98);
   }
 }

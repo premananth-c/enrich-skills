@@ -365,6 +365,8 @@ export default function TestDetail() {
   const isUpdateDirty = currentUpdateSnapshot !== initialUpdateSnapshot;
   const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
   const canUpdateTest = !saving && title.trim().length >= 2 && hasRequiredSchedule && isUpdateDirty;
+  const canAssignToStudents = test.status === 'published';
+  const isDraftOrArchived = test.status === 'draft' || test.status === 'archived';
 
   const updateQuestionWeight = async (questionId: string, nextWeight: number) => {
     if (!test) return;
@@ -455,15 +457,32 @@ export default function TestDetail() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <Link to="/tests" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>Tests</Link>
-          <span style={{ margin: '0 0.4rem', color: 'var(--color-text-muted)' }}>/</span>
-          <span style={{ fontWeight: 500 }}>{test.title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <Link to="/tests" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>Tests</Link>
+            <span style={{ margin: '0 0.4rem', color: 'var(--color-text-muted)' }}>/</span>
+            <span style={{ fontWeight: 500 }}>{test.title}</span>
+          </div>
+          {isDraftOrArchived && (
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '0.35rem 0.75rem',
+                background: '#ef4444',
+                color: '#fff',
+                fontSize: '0.8rem',
+                borderRadius: 9999,
+                fontWeight: 500,
+              }}
+            >
+              Publish this test to assign it to students or use it in courses or batches.
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
+        <div>
           <button
             onClick={openAllocate}
-            disabled={!canEdit('tests')}
+            disabled={!canEdit('tests') || !canAssignToStudents}
             style={{
               padding: '0.5rem 1rem',
               background: 'var(--color-surface)',
@@ -471,8 +490,8 @@ export default function TestDetail() {
               borderRadius: 6,
               color: 'var(--color-text)',
               fontSize: '0.9rem',
-              cursor: canEdit('tests') ? 'pointer' : 'not-allowed',
-              opacity: canEdit('tests') ? 1 : 0.6,
+              cursor: canEdit('tests') && canAssignToStudents ? 'pointer' : 'not-allowed',
+              opacity: canEdit('tests') && canAssignToStudents ? 1 : 0.6,
             }}
           >
             Assign to Student

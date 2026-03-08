@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
@@ -57,8 +57,10 @@ const STATUS_COLORS: Record<string, string> = {
 export default function TestAttempt() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
   const reviewMode = searchParams.get('review') === '1';
+  const fromCourseId = (location.state as { fromCourse?: string } | null)?.fromCourse;
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [codeMap, setCodeMap] = useState<Record<string, string>>({});
@@ -88,23 +90,34 @@ export default function TestAttempt() {
     });
   }, [attemptId, reviewMode]);
 
-  const handleFinish = useCallback(async () => {
-    if (finishing) return;
-    if (!attemptId) {
-      setOutput('Unable to submit test: attempt id is missing.');
-      return;
-    }
-    if (!window.confirm('Are you sure you want to submit the test? You cannot change your answers after submission.')) return;
-    setFinishing(true);
-    try {
-      await api<{ resultsAvailable: boolean }>(`/attempts/${attemptId}/finish`, { method: 'POST' });
-      navigate(`/result/${attemptId}`);
-    } catch (e) {
-      setOutput(`Error: ${e instanceof Error ? e.message : 'Finish failed'}`);
-    } finally {
-      setFinishing(false);
-    }
-  }, [attemptId, finishing, navigate]);
+  const handleFinish = useCallback(
+    async (skipConfirm?: boolean) => {
+      if (finishing) return;
+      if (!attemptId) {
+        setOutput('Unable to submit test: attempt id is missing.');
+        return;
+      }
+      if (
+        !skipConfirm &&
+        !window.confirm('Are you sure you want to submit the test? You cannot change your answers after submission.')
+      )
+        return;
+      setFinishing(true);
+      try {
+        await api<{ resultsAvailable: boolean }>(`/attempts/${attemptId}/finish`, { method: 'POST' });
+        if (fromCourseId) {
+          navigate(`/courses/${fromCourseId}`, { state: { testSubmitted: true, attemptId }, replace: true });
+        } else {
+          navigate(`/result/${attemptId}`);
+        }
+      } catch (e) {
+        setOutput(`Error: ${e instanceof Error ? e.message : 'Finish failed'}`);
+      } finally {
+        setFinishing(false);
+      }
+    },
+    [attemptId, finishing, navigate, fromCourseId]
+  );
 
   if (!attempt) return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>;
 
@@ -113,7 +126,22 @@ export default function TestAttempt() {
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Test Submitted</h1>
         <p style={{ color: 'var(--color-text-muted)' }}>This attempt has already been submitted.</p>
-        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+        <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
+          {fromCourseId && (
+            <Link
+              to={`/courses/${fromCourseId}`}
+              style={{
+                padding: '0.6rem 1.5rem',
+                border: '1px solid var(--color-border)',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                color: 'var(--color-text)',
+                fontWeight: 500,
+              }}
+            >
+              Back to Course
+            </Link>
+          )}
           <button
             onClick={() => navigate(`/result/${attemptId}`)}
             style={{
@@ -129,6 +157,7 @@ export default function TestAttempt() {
           </button>
           <Link
             to={`/attempt/${attemptId}?review=1`}
+            state={fromCourseId ? { fromCourse: fromCourseId } : undefined}
             style={{
               padding: '0.6rem 1.5rem',
               border: '1px solid var(--color-border)',
@@ -255,10 +284,10 @@ export default function TestAttempt() {
             <CountdownTimer
               startedAt={attempt.startedAt}
               durationMinutes={attempt.test.config.durationMinutes}
-              onExpire={handleFinish}
+              onExpire={() => handleFinish(true)}
             />
             <button
-              onClick={handleFinish}
+              onClick={() => handleFinish(false)}
               disabled={finishing || !hasAnyResponse}
               style={{
                 padding: '0.5rem 1rem',

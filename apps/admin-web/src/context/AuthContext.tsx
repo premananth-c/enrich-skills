@@ -9,6 +9,8 @@ interface User {
   permissions?: Record<string, 'none' | 'view' | 'edit'>;
 }
 
+const MODULE_KEYS = ['courses', 'batches', 'tests', 'questions', 'students', 'reports', 'manage_users'] as const;
+
 interface AuthContextType {
   user: User | null;
   loading: boolean;
@@ -17,6 +19,7 @@ interface AuthContextType {
   canView: (moduleKey: string) => boolean;
   canEdit: (moduleKey: string) => boolean;
   isSuperAdmin: boolean;
+  hasNoModuleAccess: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | null>(null);
@@ -93,9 +96,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isSuperAdmin = user?.role === 'super_admin';
+  const hasNoModuleAccess =
+    !!user &&
+    !isSuperAdmin &&
+    MODULE_KEYS.every((moduleKey) => !(user.permissions?.[moduleKey] === 'view' || user.permissions?.[moduleKey] === 'edit'));
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, canView, canEdit, isSuperAdmin }}>
+    <AuthContext.Provider value={{ user, loading, login, logout, canView, canEdit, isSuperAdmin, hasNoModuleAccess }}>
       {children}
     </AuthContext.Provider>
   );

@@ -36,12 +36,14 @@ export default function ToastViewport() {
       className="toast-viewport"
       style={{
         position: 'fixed',
-        right: 16,
         top: 16,
+        left: '50%',
+        transform: 'translateX(-50%)',
         zIndex: 2000,
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
+        alignItems: 'center',
         pointerEvents: 'none',
       }}
     >

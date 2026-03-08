@@ -15,7 +15,11 @@ import {
   updateEvaluationSchema,
 } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
-import { saveFile, getFileUrl, deleteFile, STORAGE_KEYS } from '../lib/storage.js';
+import {
+  saveFile, getFileUrl, deleteFile, STORAGE_KEYS,
+  buildStorageKey, initiateMultipartUpload, getPresignedPartUrl,
+  completeMultipartUpload, abortMultipartUpload,
+} from '../lib/storage.js';
 import { logRevision } from '../lib/revision.js';
 
 export async function courseRoutes(app: FastifyInstance) {
@@ -391,6 +395,12 @@ export async function courseRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
+    if (parsed.data.testId) {
+      const test = await prisma.test.findFirst({ where: { id: parsed.data.testId, tenantId } });
+      if (!test || test.status !== 'published') {
+        return reply.status(400).send({ error: 'Test not found or must be published to link to a course. Only published tests can be used in course evaluations.' });
+      }
+    }
     const count = await prisma.courseEvaluation.count({ where: { topicId: request.params.topicId } });
     const evaluation = await prisma.courseEvaluation.create({
       data: {
@@ -412,6 +422,12 @@ export async function courseRoutes(app: FastifyInstance) {
     const parsed = updateEvaluationSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    if (parsed.data.testId !== undefined && parsed.data.testId) {
+      const test = await prisma.test.findFirst({ where: { id: parsed.data.testId, tenantId } });
+      if (!test || test.status !== 'published') {
+        return reply.status(400).send({ error: 'Test not found or must be published to link to a course. Only published tests can be used in course evaluations.' });
+      }
     }
     const evaluation = await prisma.courseEvaluation.update({
       where: { id: request.params.evaluationId },
@@ -474,5 +490,102 @@ export async function courseRoutes(app: FastifyInstance) {
       },
     });
     return reply.status(201).send(material);
+  });
+
+  // --- Chunked video upload (multipart to R2) ---
+
+  const ALLOWED_VIDEO_TYPES = ['video/mp4', 'video/webm', 'video/quicktime', 'video/x-matroska'];
+
+  app.post('/:id/chapters/:chapterId/topics/:topicId/materials/video/init-upload', async (
+    request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>,
+    reply: FastifyReply
+  ) => {
+    const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!course) return reply.status(404).send({ error: 'Course not found' });
+
+    const { filename, sizeBytes, mimeType } = request.body as { filename: string; sizeBytes: number; mimeType: string };
+    if (!filename || !mimeType) return reply.status(400).send({ error: 'filename and mimeType are required' });
+    if (!ALLOWED_VIDEO_TYPES.includes(mimeType)) {
+      return reply.status(400).send({ error: `Unsupported video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(', ')}` });
+    }
+
+    const key = buildStorageKey(STORAGE_KEYS.MATERIALS, filename, mimeType, {
+      tenantId,
+      courseId: request.params.id,
+      topicId: request.params.topicId,
+    });
+
+    const uploadId = await initiateMultipartUpload(key, mimeType);
+    const count = await prisma.courseMaterial.count({ where: { topicId: request.params.topicId } });
+    const material = await prisma.courseMaterial.create({
+      data: {
+        topicId: request.params.topicId,
+        type: 'video',
+        title: filename,
+        storageKey: key,
+        mimeType,
+        sizeBytes: sizeBytes || null,
+        order: count,
+      },
+    });
+
+    return reply.status(201).send({ materialId: material.id, uploadId, key });
+  });
+
+  app.post('/:id/chapters/:chapterId/topics/:topicId/materials/video/presign-part', async (
+    request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>,
+    reply: FastifyReply
+  ) => {
+    await requireModuleAccess(request, 'courses', 'edit');
+    const { uploadId, key, partNumber } = request.body as { uploadId: string; key: string; partNumber: number };
+    if (!uploadId || !key || !partNumber) {
+      return reply.status(400).send({ error: 'uploadId, key, and partNumber are required' });
+    }
+    const url = await getPresignedPartUrl(key, uploadId, partNumber);
+    return reply.send({ url });
+  });
+
+  app.post('/:id/chapters/:chapterId/topics/:topicId/materials/video/complete-upload', async (
+    request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>,
+    reply: FastifyReply
+  ) => {
+    await requireModuleAccess(request, 'courses', 'edit');
+    const { materialId, uploadId, key, parts } = request.body as {
+      materialId: string; uploadId: string; key: string;
+      parts: { partNumber: number; etag: string }[];
+    };
+    if (!materialId || !uploadId || !key || !parts?.length) {
+      return reply.status(400).send({ error: 'materialId, uploadId, key, and parts are required' });
+    }
+
+    await completeMultipartUpload(
+      key,
+      uploadId,
+      parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag }))
+    );
+
+    const material = await prisma.courseMaterial.update({
+      where: { id: materialId },
+      data: { sizeBytes: undefined },
+    });
+
+    return reply.send(material);
+  });
+
+  app.post('/:id/chapters/:chapterId/topics/:topicId/materials/video/abort-upload', async (
+    request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>,
+    reply: FastifyReply
+  ) => {
+    await requireModuleAccess(request, 'courses', 'edit');
+    const { materialId, uploadId, key } = request.body as { materialId: string; uploadId: string; key: string };
+    if (!uploadId || !key) return reply.status(400).send({ error: 'uploadId and key are required' });
+
+    try { await abortMultipartUpload(key, uploadId); } catch { /* ignore */ }
+    if (materialId) {
+      try { await prisma.courseMaterial.delete({ where: { id: materialId } }); } catch { /* ignore */ }
+    }
+
+    return reply.status(204).send();
   });
 }

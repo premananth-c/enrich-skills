@@ -17,6 +17,7 @@ import CourseForm from './pages/CourseForm';
 import CourseDetail from './pages/CourseDetail';
 import Reports from './pages/Reports';
 import ToastViewport from './components/ToastViewport';
+import UploadProgressToast from './components/UploadProgressToast';
 import ManageUsers from './pages/ManageUsers';
 import Enquiries from './pages/Enquiries';
 
@@ -75,6 +76,7 @@ export default function App() {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
         <ToastViewport />
+        <UploadProgressToast />
       </>
     </AuthProvider>
   );

@@ -201,6 +201,9 @@ export async function batchRoutes(app: FastifyInstance) {
     if (!body.testId) return reply.status(400).send({ error: 'testId is required' });
     const test = await prisma.test.findFirst({ where: { id: body.testId, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
+    if (test.status !== 'published') {
+      return reply.status(403).send({ error: 'Only published tests can be assigned to batches. Set the test status to Published first.' });
+    }
     const existing = await prisma.batchTestAssignment.findUnique({
       where: { batchId_testId: { batchId: request.params.id, testId: body.testId } },
     });

@@ -116,7 +116,9 @@ export default function BatchDetail() {
 
   useEffect(() => {
     if (tab !== 'tests' || !assignTestOpen) return;
-    api<{ id: string; title: string; type: string; status: string }[]>('/tests').then(setAllTests).catch(() => setAllTests([]));
+    api<{ id: string; title: string; type: string; status: string }[]>('/tests')
+      .then((data) => setAllTests(data.filter((t) => t.status === 'published')))
+      .catch(() => setAllTests([]));
   }, [tab, assignTestOpen]);
 
   useEffect(() => {

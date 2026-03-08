@@ -3,7 +3,9 @@ import { Link, useParams, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api, apiUpload } from '../lib/api';
 import { RichTextEditor } from '../components/RichTextEditor';
+import VideoPlayer from '../components/VideoPlayer';
 import { emitToast } from '../lib/toast';
+import { startVideoUpload } from '../lib/uploadManager';
 
 interface CourseChapter {
   id: string;
@@ -32,6 +34,8 @@ interface Material {
   title: string;
   url: string | null;
   storageKey: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
 }
 
 interface Activity {
@@ -77,9 +81,9 @@ export default function CourseDetail() {
   const [materials, setMaterials] = useState<Record<string, Material[]>>({});
   const [activities, setActivities] = useState<Record<string, Activity[]>>({});
   const [evaluations, setEvaluations] = useState<Record<string, Evaluation[]>>({});
-  const [tests, setTests] = useState<{ id: string; title: string }[]>([]);
+  const [tests, setTests] = useState<{ id: string; title: string; type: string; status: string }[]>([]);
   const [addMaterial, setAddMaterial] = useState<string | null>(null);
-  const [newMaterial, setNewMaterial] = useState({ type: 'link' as 'pdf' | 'link', title: '', url: '' });
+  const [newMaterial, setNewMaterial] = useState({ type: 'link' as 'pdf' | 'link' | 'video', title: '', url: '' });
   const [addActivity, setAddActivity] = useState<string | null>(null);
   const [newActivity, setNewActivity] = useState({ type: 'assignment' as 'assignment' | 'discussion', title: '', description: '' });
   const [addEvaluation, setAddEvaluation] = useState<string | null>(null);
@@ -121,7 +125,9 @@ export default function CourseDetail() {
   }, [addAssignmentOpen]);
 
   useEffect(() => {
-    api<{ id: string; title: string; type: string }[]>('/tests').then(setTests).catch(() => setTests([]));
+    api<{ id: string; title: string; type: string; status: string }[]>('/tests')
+      .then((data) => setTests(data.filter((t) => t.status === 'published')))
+      .catch(() => setTests([]));
   }, []);
 
   const loadTopicExtras = async (topicId: string) => {
@@ -233,6 +239,23 @@ export default function CourseDetail() {
     } catch (err) {
       emitToast('error', err instanceof Error ? err.message : 'Upload failed');
     }
+    e.target.value = '';
+  };
+
+  const handleVideoUpload = (topicId: string, e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!id || !file) return;
+    const chapter = course?.chapters.find((c) => c.topics.some((t) => t.id === topicId));
+    if (!chapter) return;
+
+    setAddMaterial(null);
+    setNewMaterial({ type: 'link', title: '', url: '' });
+    emitToast('info', `Uploading "${file.name}" — you can navigate away, progress is shown in the bottom-right.`);
+
+    startVideoUpload(id, chapter.id, topicId, file, () => {
+      loadTopicExtras(topicId);
+    });
+
     e.target.value = '';
   };
 
@@ -527,31 +550,50 @@ export default function CourseDetail() {
                         <div style={{ marginBottom: '1rem' }}>
                           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', fontWeight: 500, marginBottom: '0.25rem' }}>Materials</div>
                           {(materials[topic.id] ?? []).map((m) => (
-                            <div key={m.id} style={{ marginBottom: '0.25rem' }}>
-                              {m.type === 'pdf' ? (
-                                <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                            <div key={m.id} style={{ marginBottom: m.type === 'video' ? '0.75rem' : '0.25rem' }}>
+                              {m.type === 'video' ? (
+                                <div>
+                                  <VideoPlayer materialId={m.id} title={m.title} />
+                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginTop: 4, padding: '2px 8px', fontSize: '0.75rem', color: '#f87171', background: 'transparent', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4 }}>Delete video</button>
+                                </div>
+                              ) : m.type === 'pdf' ? (
+                                <>
+                                  <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                                </>
                               ) : (
-                                <a href={m.url ?? '#'} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                <>
+                                  <a href={m.url ?? '#'} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                                </>
                               )}
-                              <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
                             </div>
                           ))}
                           {addMaterial === topic.id ? (
                             <div style={formBlockStyle}>
-                              <select value={newMaterial.type} onChange={(e) => setNewMaterial((p) => ({ ...p, type: e.target.value as 'pdf' | 'link' }))} style={{ ...inputStyle, width: '100%', maxWidth: 120 }}>
+                              <select value={newMaterial.type} onChange={(e) => setNewMaterial((p) => ({ ...p, type: e.target.value as 'pdf' | 'link' | 'video' }))} style={{ ...inputStyle, width: '100%', maxWidth: 140 }}>
                                 <option value="link">Link</option>
                                 <option value="pdf">PDF</option>
+                                <option value="video">Video</option>
                               </select>
                               {newMaterial.type === 'link' ? (
                                 <>
                                   <input value={newMaterial.title} onChange={(e) => setNewMaterial((p) => ({ ...p, title: e.target.value }))} placeholder="Title" style={inputStyle} />
                                   <input value={newMaterial.url} onChange={(e) => setNewMaterial((p) => ({ ...p, url: e.target.value }))} placeholder="URL" style={inputStyle} />
                                 </>
-                              ) : (
+                              ) : newMaterial.type === 'pdf' ? (
                                 <input type="file" accept=".pdf" onChange={(e) => uploadPdf(topic.id, e)} />
+                              ) : (
+                                <input
+                                  type="file"
+                                  accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mp4,.webm,.mov,.mkv"
+                                  onChange={(e) => handleVideoUpload(topic.id, e)}
+                                />
                               )}
                               <div style={{ display: 'flex', gap: 0, marginTop: '0.25rem' }}>
-                                <button type="button" onClick={() => saveMaterial(topic.id)} style={addBtnStyle}>Add</button>
+                                {newMaterial.type !== 'video' && (
+                                  <button type="button" onClick={() => saveMaterial(topic.id)} style={addBtnStyle}>Add</button>
+                                )}
                                 <button type="button" onClick={() => setAddMaterial(null)} style={cancelBtnStyle}>Cancel</button>
                               </div>
                             </div>

@@ -6,6 +6,7 @@ interface AllocatedTest {
   testId: string;
   assignedAt: string;
   attemptCount: number;
+  courseContext: { courseName: string; topicName: string } | null;
   latestCompletedAttempt: {
     id: string;
     score: number | null;
@@ -114,6 +115,13 @@ export default function MyTests() {
             return (
               <div key={alloc.testId} style={cardStyle}>
                 <div style={{ flex: 1 }}>
+                  {alloc.courseContext && (
+                    <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.2rem' }}>
+                      {alloc.courseContext.courseName}
+                      <span style={{ margin: '0 0.25rem' }}>›</span>
+                      {alloc.courseContext.topicName}
+                    </div>
+                  )}
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.25rem' }}>
                     <span style={{ fontWeight: 500 }}>{alloc.test.title}</span>
                     <span style={badgeStyle(alloc.test.type === 'coding' ? '#6366f1' : '#22d3ee')}>
