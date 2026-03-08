@@ -15,6 +15,7 @@ import BatchDetail from './pages/BatchDetail';
 import Courses from './pages/Courses';
 import CourseForm from './pages/CourseForm';
 import CourseDetail from './pages/CourseDetail';
+import PdfViewer from './pages/PdfViewer';
 import Reports from './pages/Reports';
 import ToastViewport from './components/ToastViewport';
 import UploadProgressToast from './components/UploadProgressToast';
@@ -69,6 +70,7 @@ export default function App() {
             <Route path="courses/new" element={<ModuleRoute moduleKey="courses" access="edit"><CourseForm /></ModuleRoute>} />
             <Route path="courses/:id" element={<ModuleRoute moduleKey="courses"><CourseDetail /></ModuleRoute>} />
             <Route path="courses/:id/edit" element={<ModuleRoute moduleKey="courses" access="edit"><CourseForm /></ModuleRoute>} />
+            <Route path="pdf/:materialId" element={<ModuleRoute moduleKey="courses"><PdfViewer /></ModuleRoute>} />
             <Route path="reports" element={<ModuleRoute moduleKey="reports"><Reports /></ModuleRoute>} />
             <Route path="manage-users" element={<SuperAdminRoute><ManageUsers /></SuperAdminRoute>} />
             <Route path="enquiries" element={<SuperAdminRoute><Enquiries /></SuperAdminRoute>} />

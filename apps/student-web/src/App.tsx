@@ -10,6 +10,7 @@ import TestAttempt from './pages/TestAttempt';
 import TestResult from './pages/TestResult';
 import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
+import PdfViewer from './pages/PdfViewer';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
 import ToastViewport from './components/ToastViewport';
@@ -41,6 +42,7 @@ function AppRoutes() {
         <Route path="result/:attemptId" element={<TestResult />} />
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetail />} />
+        <Route path="pdf/:materialId" element={<PdfViewer />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="notifications" element={<Notifications />} />
       </Route>
