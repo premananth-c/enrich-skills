@@ -29,6 +29,10 @@ interface Evaluation {
   testId: string | null;
   test: { id: string; title: string; type: string; status: string } | null;
   order: number;
+  testAttempts?: {
+    attemptCount: number;
+    latestAttempt: { id: string; score: number | null; maxScore: number | null; submittedAt: string | null } | null;
+  } | null;
 }
 
 interface Topic {
@@ -327,47 +331,81 @@ export default function CourseDetail() {
                           {/* Evaluations (linked tests) */}
                           {topic.evaluations
                             .sort((a, b) => a.order - b.order)
-                            .map((ev) => (
-                              <div
-                                key={ev.id}
-                                style={{
-                                  padding: '0.75rem',
-                                  background: 'var(--color-bg)',
-                                  border: '1px solid var(--color-border)',
-                                  borderRadius: '8px',
-                                  marginBottom: '0.5rem',
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{ev.title}</div>
-                                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{ev.type}</div>
+                            .map((ev) => {
+                              const attempts = ev.testAttempts;
+                              const hasAttempts = attempts && attempts.attemptCount > 0;
+                              const latest = attempts?.latestAttempt;
+                              return (
+                                <div
+                                  key={ev.id}
+                                  style={{
+                                    padding: '0.75rem',
+                                    background: 'var(--color-bg)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '8px',
+                                    marginBottom: '0.5rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '0.5rem',
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{ev.title}</div>
+                                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{ev.type}</div>
+                                    {hasAttempts && (
+                                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                        {attempts!.attemptCount} attempt{attempts!.attemptCount !== 1 ? 's' : ''}
+                                        {latest && (latest.score != null && latest.maxScore != null)
+                                          ? ` • Latest score: ${latest.score} / ${latest.maxScore}`
+                                          : latest?.submittedAt
+                                            ? ' • Submitted'
+                                            : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {ev.test && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                      {hasAttempts && latest && (
+                                        <Link
+                                          to={`/result/${latest.id}`}
+                                          style={{
+                                            padding: '0.4rem 0.75rem',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: '6px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 500,
+                                            color: 'var(--color-text)',
+                                            textDecoration: 'none',
+                                          }}
+                                        >
+                                          View result
+                                        </Link>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => startTestFromCourse(ev.test!.id)}
+                                        disabled={!!startingTestId}
+                                        style={{
+                                          padding: '0.4rem 0.75rem',
+                                          background: 'var(--color-primary)',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 500,
+                                          cursor: startingTestId ? 'wait' : 'pointer',
+                                          opacity: startingTestId ? 0.8 : 1,
+                                        }}
+                                      >
+                                        {startingTestId === ev.test.id ? 'Starting…' : 'Take Test'}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                                {ev.test && (
-                                  <button
-                                    type="button"
-                                    onClick={() => startTestFromCourse(ev.test!.id)}
-                                    disabled={!!startingTestId}
-                                    style={{
-                                      padding: '0.4rem 0.75rem',
-                                      background: 'var(--color-primary)',
-                                      color: 'white',
-                                      border: 'none',
-                                      borderRadius: '6px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 500,
-                                      cursor: startingTestId ? 'wait' : 'pointer',
-                                      flexShrink: 0,
-                                      opacity: startingTestId ? 0.8 : 1,
-                                    }}
-                                  >
-                                    {startingTestId === ev.test.id ? 'Starting…' : 'Take Test'}
-                                  </button>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                         </div>
                       ))}
                   </div>

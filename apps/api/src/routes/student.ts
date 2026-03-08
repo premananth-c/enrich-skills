@@ -313,8 +313,65 @@ export async function studentRoutes(app: FastifyInstance) {
           }
         : null;
 
+      // Attach attempt counts and latest score per evaluation (test) for this student
+      const testIdsFromCourse =
+        courseFiltered?.chapters.flatMap((ch) =>
+          ch.topics.flatMap((t) => t.evaluations.map((e) => e.testId).filter(Boolean) as string[])
+        ) ?? [];
+      const uniqueTestIds = [...new Set(testIdsFromCourse)];
+
+      const testAttemptsMap = new Map<
+        string,
+        { attemptCount: number; latestAttempt: { id: string; score: number | null; maxScore: number | null; submittedAt: string | null } | null }
+      >();
+
+      if (uniqueTestIds.length > 0) {
+        const attempts = await prisma.attempt.findMany({
+          where: { userId, testId: { in: uniqueTestIds }, submittedAt: { not: null } },
+          select: { id: true, testId: true, score: true, maxScore: true, submittedAt: true },
+          orderBy: { submittedAt: 'desc' },
+        });
+        const countByTest = await prisma.attempt.groupBy({
+          by: ['testId'],
+          where: { userId, testId: { in: uniqueTestIds }, submittedAt: { not: null } },
+          _count: true,
+        });
+        for (const testId of uniqueTestIds) {
+          const submitted = attempts.filter((a) => a.testId === testId);
+          const latest = submitted[0] ?? null;
+          const count = countByTest.find((c) => c.testId === testId)?._count ?? 0;
+          testAttemptsMap.set(testId, {
+            attemptCount: count,
+            latestAttempt: latest
+              ? {
+                  id: latest.id,
+                  score: latest.score,
+                  maxScore: latest.maxScore,
+                  submittedAt: latest.submittedAt,
+                }
+              : null,
+          });
+        }
+      }
+
+      const courseWithAttempts = courseFiltered
+        ? {
+            ...courseFiltered,
+            chapters: courseFiltered.chapters.map((ch) => ({
+              ...ch,
+              topics: ch.topics.map((topic) => ({
+                ...topic,
+                evaluations: topic.evaluations.map((ev) => ({
+                  ...ev,
+                  testAttempts: ev.testId ? testAttemptsMap.get(ev.testId) ?? { attemptCount: 0, latestAttempt: null } : null,
+                })),
+              })),
+            })),
+          }
+        : null;
+
       return reply.send({
-        course: courseFiltered,
+        course: courseWithAttempts,
         assignment,
         mySubmissions: Object.fromEntries(submissionMap),
       });
