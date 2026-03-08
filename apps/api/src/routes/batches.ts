@@ -124,6 +124,17 @@ export async function batchRoutes(app: FastifyInstance) {
     return reply.send(restored);
   });
 
+  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const existing = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!existing) return reply.status(404).send({ error: 'Batch not found' });
+    if (!existing.isArchived) {
+      return reply.status(400).send({ error: 'Only archived batches can be permanently deleted. Archive the batch first.' });
+    }
+    await prisma.batch.delete({ where: { id: request.params.id } });
+    return reply.status(204).send();
+  });
+
   // --- Members ---
   app.get('/:id/members', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');

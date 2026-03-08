@@ -111,12 +111,15 @@ function getSuccessMessage(method: string): string {
   return 'Action completed';
 }
 
-export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const body = options.body;
-  const method = (options.method || 'GET').toUpperCase();
+type ApiOptions = RequestInit & { silent?: boolean };
+
+export async function api<T>(path: string, options: ApiOptions = {}): Promise<T> {
+  const { silent, ...fetchOptions } = options;
+  const body = fetchOptions.body;
+  const method = (fetchOptions.method || 'GET').toUpperCase();
   const isMutation = method !== 'GET';
-  const headers = { ...getHeaders(body), ...options.headers };
-  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers, body });
+  const headers = { ...getHeaders(body), ...fetchOptions.headers };
+  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...fetchOptions, headers, body });
 
   if (res.status === 401) {
     const retryRes = await handleUnauthorized<T>(path, options, body);
@@ -131,11 +134,11 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
     throw new Error(message);
   }
   if (res.status === 204) {
-    if (isMutation) emitToast('success', getSuccessMessage(method));
+    if (isMutation && !silent) emitToast('success', getSuccessMessage(method));
     return undefined as T;
   }
   const data = await res.json();
-  if (isMutation) {
+  if (isMutation && !silent) {
     const msg = typeof data?.message === 'string' && data.message.trim() ? data.message : getSuccessMessage(method);
     emitToast('success', msg);
   }

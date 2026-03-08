@@ -732,16 +732,19 @@ export default function TestDetail() {
                             type="number"
                             min={0}
                             step={0.5}
-                            value={test.config.questionWeights?.[tq.questionId] ?? 1}
+                            value={test.config.questionWeights?.[tq.questionId] ?? (tq.question.content as { defaultWeight?: number })?.defaultWeight ?? 1}
                             onChange={(e) => {
                               const value = Number(e.target.value);
                               if (Number.isFinite(value)) void updateQuestionWeight(tq.questionId, value);
                             }}
-                            style={{ width: 80, ...inputStyle }}
+                            style={{ width: 52, ...inputStyle }}
                           />
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
-                          <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button onClick={() => navigate(`/questions/${tq.questionId}/edit`)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
+                            <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
+                          </div>
                         </td>
                       </tr>
                     );

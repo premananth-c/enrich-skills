@@ -27,6 +27,7 @@ interface QuestionData {
     constraints?: string[];
     options?: McqOption[];
     explanation?: string;
+    defaultWeight?: number;
   };
   testCases?: TestCaseEntry[];
 }
@@ -42,6 +43,7 @@ function buildQuestionSnapshot(input: {
   examples: { input: string; output: string }[];
   constraints: string;
   testCases: TestCaseEntry[];
+  defaultWeight: number | '';
 }) {
   return JSON.stringify({
     type: input.type,
@@ -54,6 +56,7 @@ function buildQuestionSnapshot(input: {
     examples: input.examples,
     constraints: input.constraints,
     testCases: input.testCases,
+    defaultWeight: input.defaultWeight === '' ? undefined : input.defaultWeight,
   });
 }
 
@@ -70,6 +73,7 @@ export default function QuestionForm() {
   const [difficulty, setDifficulty] = useState<'easy' | 'medium' | 'hard'>('easy');
   const [tags, setTags] = useState('');
   const [explanation, setExplanation] = useState('');
+  const [defaultWeight, setDefaultWeight] = useState<number | ''>(1);
 
   // MCQ state
   const [options, setOptions] = useState<McqOption[]>([
@@ -98,6 +102,7 @@ export default function QuestionForm() {
         setDescription(q.content.description || '');
         setDifficulty(q.difficulty as 'easy' | 'medium' | 'hard');
         setTags(q.tags.join(', '));
+        setDefaultWeight(typeof q.content.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : 1);
         if (q.type === 'mcq') {
           setOptions(q.content.options || [{ text: '', isCorrect: true }, { text: '', isCorrect: false }]);
           setExplanation(q.content.explanation || '');
@@ -118,6 +123,7 @@ export default function QuestionForm() {
             examples: q.content.examples || [{ input: '', output: '' }],
             constraints: (q.content.constraints || []).join('\n'),
             testCases: q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1 }],
+            defaultWeight: typeof q.content.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : 1,
           })
         );
       })
@@ -171,6 +177,7 @@ export default function QuestionForm() {
           tags: tagArr,
           options: options.map((o) => ({ text: o.text, isCorrect: o.isCorrect })),
           explanation: explanation || undefined,
+          ...(defaultWeight !== '' && Number.isFinite(Number(defaultWeight)) && { defaultWeight: Number(defaultWeight) }),
         };
         if (isEdit) {
           await api(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -186,6 +193,7 @@ export default function QuestionForm() {
           examples: examples.filter((ex) => ex.input || ex.output),
           constraints: constraints.split('\n').filter(Boolean),
           testCases,
+          ...(defaultWeight !== '' && Number.isFinite(Number(defaultWeight)) && { defaultWeight: Number(defaultWeight) }),
         };
         if (isEdit) {
           await api(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -216,7 +224,7 @@ export default function QuestionForm() {
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
   const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, resize: 'vertical' as const };
-  const currentSnapshot = buildQuestionSnapshot({ type, title, description, difficulty, tags, explanation, options, examples, constraints, testCases });
+  const currentSnapshot = buildQuestionSnapshot({ type, title, description, difficulty, tags, explanation, options, examples, constraints, testCases, defaultWeight });
   const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
   const hasCorrect = options.some((o) => o.isCorrect);
   const hasRequiredForCreate = type === 'mcq'
@@ -267,6 +275,25 @@ export default function QuestionForm() {
         <div>
           <label style={labelStyle}>Tags (comma-separated)</label>
           <input value={tags} onChange={(e) => setTags(e.target.value)} style={inputStyle} placeholder="e.g. math, arrays, loops" />
+        </div>
+
+        <div>
+          <label style={labelStyle}>Weight (optional)</label>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.75rem', width: '100%' }}>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={defaultWeight === '' || !Number.isFinite(Number(defaultWeight)) ? '' : defaultWeight}
+              onChange={(e) => {
+                const v = e.target.value;
+                setDefaultWeight(v === '' ? '' : Number(v));
+              }}
+              placeholder="Default for tests"
+              style={{ ...inputStyle, width: 52, flexShrink: 0 }}
+            />
+            <span style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)', paddingTop: '0.5rem', flex: 1 }}>Used when this question is in a test with custom weightage. Each test can override this.</span>
+          </div>
         </div>
 
         {/* MCQ Section */}
@@ -360,7 +387,7 @@ export default function QuestionForm() {
                       <input type="checkbox" checked={tc.isPublic} onChange={(e) => updateTestCase(i, { isPublic: e.target.checked })} /> Public
                     </label>
                     <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Weight</label>
-                    <input type="number" min={0} max={100} value={tc.weight} onChange={(e) => updateTestCase(i, { weight: +e.target.value })} style={{ ...inputStyle, width: 60 }} />
+                    <input type="number" min={0} max={100} value={tc.weight} onChange={(e) => updateTestCase(i, { weight: +e.target.value })} style={{ ...inputStyle, width: 52 }} />
                   </div>
                   {testCases.length > 1 && (
                     <button type="button" onClick={() => removeTestCase(i)} style={{ background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', padding: '4px 8px', fontSize: '0.8rem' }}>x</button>

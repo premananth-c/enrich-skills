@@ -49,6 +49,16 @@ export default function Batches() {
     }
   };
 
+  const handleDelete = async (id: string, name: string) => {
+    if (!confirm(`Permanently delete batch "${name}"? This cannot be undone.`)) return;
+    try {
+      await api(`/batches/${id}`, { method: 'DELETE' });
+      loadBatches();
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Delete failed');
+    }
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   const filtered = batches.filter((b) => {
@@ -131,6 +141,7 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button onClick={() => handleRevoke(b.id, b.name)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
+                      <button onClick={() => handleDelete(b.id, b.name)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
                       <button onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
                     </div>
                   </td>

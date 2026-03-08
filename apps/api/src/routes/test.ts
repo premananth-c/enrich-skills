@@ -141,6 +141,9 @@ export async function testRoutes(app: FastifyInstance) {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
     const existing = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Test not found' });
+    if (existing.status !== 'archived') {
+      return reply.status(400).send({ error: 'Only archived tests can be permanently deleted. Archive the test first.' });
+    }
     await prisma.test.delete({ where: { id: request.params.id } });
     return reply.status(204).send();
   });

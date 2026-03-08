@@ -17,7 +17,10 @@ export async function questionRoutes(app: FastifyInstance) {
         ...(type && { type }),
         ...(includeArchived === 'true' ? {} : { isArchived: false }),
       },
-      include: { testCases: { where: { isPublic: true } } },
+      include: {
+        testCases: { where: { isPublic: true } },
+        testQuestions: { include: { test: { select: { id: true, title: true } } } },
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return reply.send(questions);
@@ -51,6 +54,7 @@ export async function questionRoutes(app: FastifyInstance) {
           description: data.description,
           examples: data.examples,
           constraints: data.constraints,
+          ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
         },
         difficulty: data.difficulty,
         tags: data.tags,
@@ -100,6 +104,7 @@ export async function questionRoutes(app: FastifyInstance) {
             isCorrect: o.isCorrect,
           })),
           explanation: data.explanation,
+          ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
         },
         difficulty: data.difficulty,
         tags: data.tags,
@@ -145,6 +150,7 @@ export async function questionRoutes(app: FastifyInstance) {
             ...(data.description && { description: data.description }),
             ...(data.examples !== undefined && { examples: data.examples }),
             ...(data.constraints !== undefined && { constraints: data.constraints }),
+            ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
           },
           ...(data.testCases && {
             testCases: {
@@ -194,6 +200,7 @@ export async function questionRoutes(app: FastifyInstance) {
               })),
             }),
             ...(data.explanation !== undefined && { explanation: data.explanation }),
+            ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
           },
         },
       });
@@ -254,5 +261,20 @@ export async function questionRoutes(app: FastifyInstance) {
       },
     });
     return reply.send(restored);
+  });
+
+  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'questions', 'edit');
+    const existing = await prisma.question.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Question not found' });
+    if (!existing.isArchived) {
+      return reply.status(400).send({ error: 'Only archived questions can be permanently deleted. Archive the question first.' });
+    }
+    await prisma.question.delete({
+      where: { id: request.params.id },
+    });
+    return reply.status(204).send();
   });
 }

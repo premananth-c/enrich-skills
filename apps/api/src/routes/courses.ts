@@ -140,6 +140,17 @@ export async function courseRoutes(app: FastifyInstance) {
     return reply.send(course);
   });
 
+  app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const existing = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!existing) return reply.status(404).send({ error: 'Course not found' });
+    if (!existing.isArchived) {
+      return reply.status(400).send({ error: 'Only archived courses can be permanently deleted. Archive the course first.' });
+    }
+    await prisma.course.delete({ where: { id: request.params.id } });
+    return reply.status(204).send();
+  });
+
   // --- Chapters ---
   app.get('/:id/chapters', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');

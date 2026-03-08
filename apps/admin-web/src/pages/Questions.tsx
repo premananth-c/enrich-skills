@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
@@ -7,10 +7,11 @@ import RevisionHistoryModal from '../components/RevisionHistoryModal';
 interface Question {
   id: string;
   type: string;
-  content: { title: string };
+  content: { title: string; defaultWeight?: number };
   difficulty: string;
   tags: string[];
   isArchived?: boolean;
+  testQuestions?: { test: { id: string; title: string } }[];
 }
 
 export default function Questions() {
@@ -50,6 +51,16 @@ export default function Questions() {
       loadQuestions();
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Revoke failed');
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Permanently delete question "${title}"? This cannot be undone.`)) return;
+    try {
+      await api(`/questions/${id}`, { method: 'DELETE' });
+      loadQuestions();
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Delete failed');
     }
   };
 
@@ -111,7 +122,9 @@ export default function Questions() {
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Title</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Type</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Difficulty</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Weight</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Tags</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Used in tests</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
               </tr>
             </thead>
@@ -123,7 +136,18 @@ export default function Questions() {
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <span style={badgeStyle(q.difficulty)}>{q.difficulty}</span>
                   </td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{typeof q.content?.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{q.tags?.join(', ') || '--'}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                    {(q.testQuestions?.length ?? 0) === 0
+                      ? '--'
+                      : (q.testQuestions ?? []).map((tq, idx) => (
+                          <span key={tq.test.id}>
+                            {idx > 0 && ', '}
+                            <Link to={`/tests/${tq.test.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{tq.test.title}</Link>
+                          </span>
+                        ))}
+                  </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button onClick={() => navigate(`/questions/${q.id}/edit`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
@@ -147,6 +171,8 @@ export default function Questions() {
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Title</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Type</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Weight</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Used in tests</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
               </tr>
             </thead>
@@ -155,9 +181,16 @@ export default function Questions() {
                 <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{q.content?.title || '(untitled)'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: '0.85rem' }}>{q.type}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{typeof q.content?.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : '--'}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                    {(q.testQuestions?.length ?? 0) === 0 ? '--' : (q.testQuestions ?? []).map((tq, idx) => (
+                      <span key={tq.test.id}>{idx > 0 && ', '}<Link to={`/tests/${tq.test.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{tq.test.title}</Link></span>
+                    ))}
+                  </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button onClick={() => handleRevoke(q.id, q.content?.title || '(untitled)')} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
+                      <button onClick={() => handleDelete(q.id, q.content?.title || '(untitled)')} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
                       <button onClick={() => setHistoryTarget({ id: q.id, title: q.content?.title || '(untitled)' })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
                     </div>
                   </td>
