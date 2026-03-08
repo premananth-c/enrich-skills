@@ -544,7 +544,16 @@ export async function courseRoutes(app: FastifyInstance) {
 
       return reply.status(201).send({ materialId: material.id, uploadId, key });
     } catch (err) {
-      request.log.error({ err }, 'Video init-upload failed');
+      request.log.error(
+        {
+          err,
+          r2AccountId: process.env.R2_ACCOUNT_ID ? 'set' : 'MISSING',
+          r2AccessKey: process.env.R2_ACCESS_KEY_ID ? 'set' : 'MISSING',
+          r2SecretKey: process.env.R2_SECRET_ACCESS_KEY ? 'set' : 'MISSING',
+          r2Bucket: process.env.R2_BUCKET_NAME ?? 'MISSING',
+        },
+        'Video init-upload failed'
+      );
       const message = err instanceof Error && err.message.includes('R2 storage is not configured')
         ? 'Storage is not configured. Contact support.'
         : 'Video upload is temporarily unavailable. Please try again.';
