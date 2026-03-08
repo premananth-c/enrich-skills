@@ -20,6 +20,14 @@ const R2_BUCKET_NAME = process.env.R2_BUCKET_NAME ?? 'rankership';
 /** Optional: public CDN / R2 custom domain URL (e.g. https://assets.yourdomain.com) */
 const R2_PUBLIC_URL = process.env.R2_PUBLIC_URL ?? '';
 
+function ensureR2Config(): void {
+  if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY) {
+    throw new Error(
+      'R2 storage is not configured. Set R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, and R2_SECRET_ACCESS_KEY in the environment.'
+    );
+  }
+}
+
 const s3 = new S3Client({
   region: 'auto',
   endpoint: `https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
@@ -164,6 +172,7 @@ export async function initiateMultipartUpload(
   key: string,
   mimeType: string
 ): Promise<string> {
+  ensureR2Config();
   const result = await s3.send(
     new CreateMultipartUploadCommand({
       Bucket: R2_BUCKET_NAME,
@@ -180,6 +189,7 @@ export async function getPresignedPartUrl(
   partNumber: number,
   expiresIn = 3600
 ): Promise<string> {
+  ensureR2Config();
   const command = new UploadPartCommand({
     Bucket: R2_BUCKET_NAME,
     Key: key,
@@ -194,6 +204,7 @@ export async function completeMultipartUpload(
   uploadId: string,
   parts: { PartNumber: number; ETag: string }[]
 ): Promise<void> {
+  ensureR2Config();
   await s3.send(
     new CompleteMultipartUploadCommand({
       Bucket: R2_BUCKET_NAME,
