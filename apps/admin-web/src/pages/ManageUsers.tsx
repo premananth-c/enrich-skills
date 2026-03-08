@@ -50,7 +50,6 @@ export default function ManageUsers() {
   const [users, setUsers] = useState<UserRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [roleName, setRoleName] = useState('');
-  const [roleKey, setRoleKey] = useState('');
   const [permissions, setPermissions] = useState<Record<ModuleKey, PermissionLevel>>(defaultPermissions);
   const [adminName, setAdminName] = useState('');
   const [adminEmail, setAdminEmail] = useState('');
@@ -82,25 +81,67 @@ export default function ManageUsers() {
     () => [
       { key: 'admin', label: 'Admin (full module access)' },
       { key: 'super_admin', label: 'Super Admin (all access)' },
+      { key: 'invited', label: 'Invited (no access)' },
       ...roles.map((r) => ({ key: r.roleKey, label: r.displayName })),
     ],
     [roles]
   );
 
-  const handleCreateRole = async (e: React.FormEvent) => {
+  const rolePanelOptions = useMemo(
+    () => [{ value: '', label: 'Create new role' }, ...roles.map((r) => ({ value: r.id, label: r.displayName }))],
+    [roles]
+  );
+
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('');
+  const [roleSaveLoading, setRoleSaveLoading] = useState(false);
+
+  useEffect(() => {
+    if (selectedRoleId === '') {
+      setRoleName('');
+      setPermissions(defaultPermissions);
+    } else {
+      const r = roles.find((x) => x.id === selectedRoleId);
+      if (r) {
+        setRoleName(r.displayName);
+        setPermissions({ ...defaultPermissions, ...r.permissions } as Record<ModuleKey, PermissionLevel>);
+      }
+    }
+  }, [selectedRoleId, roles]);
+
+  const handleSaveRole = async (e: React.FormEvent) => {
     e.preventDefault();
-    await api('/users/roles', {
-      method: 'POST',
-      body: JSON.stringify({
-        roleKey,
-        displayName: roleName,
-        permissions,
-      }),
-    });
+    setRoleSaveLoading(true);
+    try {
+      if (selectedRoleId === '') {
+        await api('/users/roles', {
+          method: 'POST',
+          body: JSON.stringify({
+            displayName: roleName,
+            permissions,
+          }),
+        });
+        setRoleName('');
+        setPermissions(defaultPermissions);
+        setSelectedRoleId('');
+      } else {
+        await api(`/users/roles/${selectedRoleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify({
+            displayName: roleName,
+            permissions,
+          }),
+        });
+      }
+      await load();
+    } finally {
+      setRoleSaveLoading(false);
+    }
+  };
+
+  const handleCancelRole = () => {
+    setSelectedRoleId('');
     setRoleName('');
-    setRoleKey('');
     setPermissions(defaultPermissions);
-    await load();
   };
 
   const handleCreateAdmin = async (e: React.FormEvent) => {
@@ -230,11 +271,29 @@ export default function ManageUsers() {
           </button>
         </form>
 
-        <form onSubmit={handleCreateRole} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <h3 style={{ marginTop: 0 }}>Create Custom Role</h3>
-          <input value={roleName} onChange={(e) => setRoleName(e.target.value)} placeholder="Display name (e.g. Test Reviewer)" required style={{ width: '100%', marginBottom: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
-          <input value={roleKey} onChange={(e) => setRoleKey(e.target.value.toLowerCase().replace(/\s+/g, '_'))} placeholder="role_key" required style={{ width: '100%', marginBottom: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
-          <div style={{ display: 'grid', gap: '0.45rem', marginBottom: '0.8rem' }}>
+        <form onSubmit={handleSaveRole} style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
+          <h3 style={{ marginTop: 0 }}>Create or Edit Custom Role</h3>
+          <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Role</label>
+          <select
+            value={selectedRoleId}
+            onChange={(e) => setSelectedRoleId(e.target.value)}
+            style={{ width: '100%', marginBottom: '0.8rem', padding: '0.55rem 0.7rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+          >
+            {rolePanelOptions.map((opt) => (
+              <option key={opt.value || 'new'} value={opt.value}>{opt.label}</option>
+            ))}
+          </select>
+          <label style={{ display: 'block', fontSize: '0.85rem', color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Display name</label>
+          <input value={roleName} onChange={(e) => setRoleName(e.target.value)} placeholder="e.g. Test Reviewer" required style={{ width: '100%', marginBottom: '0.6rem', padding: '0.55rem 0.7rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)' }} />
+          {selectedRoleId && (() => {
+            const r = roles.find((x) => x.id === selectedRoleId);
+            return r ? (
+              <p style={{ margin: '0 0 0.6rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+                Role key: <code style={{ background: 'var(--color-bg)', padding: '0.15rem 0.4rem', borderRadius: 4 }}>{r.roleKey}</code>
+              </p>
+            ) : null;
+          })()}
+          <div style={{ display: 'grid', gap: '0.45rem', marginBottom: '1rem' }}>
             {configurableModuleKeys.map((moduleKey) => (
               <div key={moduleKey} style={{ display: 'grid', gridTemplateColumns: '1fr auto', alignItems: 'center' }}>
                 <span>{moduleLabels[moduleKey]}</span>
@@ -255,9 +314,14 @@ export default function ManageUsers() {
               </div>
             ))}
           </div>
-          <button type="submit" style={{ padding: '0.55rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600 }}>
-            Create Role
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+            <button type="button" onClick={handleCancelRole} style={{ padding: '0.55rem 1rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 500, cursor: 'pointer' }}>
+              Cancel
+            </button>
+            <button type="submit" disabled={roleSaveLoading} style={{ padding: '0.55rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: roleSaveLoading ? 0.65 : 1 }}>
+              {roleSaveLoading ? 'Saving...' : 'Save'}
+            </button>
+          </div>
         </form>
       </div>
 

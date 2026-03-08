@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useNavigate } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
+import VideoPlayer from '../components/VideoPlayer';
 
 interface Material {
   id: string;
@@ -9,6 +10,8 @@ interface Material {
   title: string;
   storageKey: string | null;
   url: string | null;
+  mimeType: string | null;
+  sizeBytes: number | null;
   order: number;
 }
 
@@ -26,6 +29,10 @@ interface Evaluation {
   testId: string | null;
   test: { id: string; title: string; type: string; status: string } | null;
   order: number;
+  testAttempts?: {
+    attemptCount: number;
+    latestAttempt: { id: string; score: number | null; maxScore: number | null; submittedAt: string | null } | null;
+  } | null;
 }
 
 interface Topic {
@@ -66,10 +73,12 @@ const sectionCard: React.CSSProperties = {
 
 export default function CourseDetail() {
   const { courseId } = useParams();
+  const navigate = useNavigate();
   const [data, setData] = useState<CourseData | null>(null);
   const [loading, setLoading] = useState(true);
   const [openChapters, setOpenChapters] = useState<Set<string>>(new Set());
   const [uploading, setUploading] = useState<string | null>(null);
+  const [startingTestId, setStartingTestId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!courseId) return;
@@ -91,6 +100,22 @@ export default function CourseDetail() {
       else next.add(id);
       return next;
     });
+  };
+
+  const startTestFromCourse = async (testId: string) => {
+    if (!courseId) return;
+    setStartingTestId(testId);
+    try {
+      const attempt = await api<{ id: string }>('/attempts/start', {
+        method: 'POST',
+        body: JSON.stringify({ testId }),
+      });
+      navigate(`/attempt/${attempt.id}`, { state: { fromCourse: courseId } });
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to start test');
+    } finally {
+      setStartingTestId(null);
+    }
   };
 
   const handleUpload = async (activityId: string, file: File) => {
@@ -211,30 +236,36 @@ export default function CourseDetail() {
                             <div style={{ marginBottom: '0.5rem' }}>
                               {topic.materials
                                 .sort((a, b) => a.order - b.order)
-                                .map((mat) => (
-                                  <a
-                                    key={mat.id}
-                                    href={mat.url || `/api/v1/materials/${mat.storageKey}`}
-                                    target="_blank"
-                                    rel="noopener noreferrer"
-                                    style={{
-                                      display: 'inline-flex',
-                                      alignItems: 'center',
-                                      gap: '0.4rem',
-                                      marginRight: '0.75rem',
-                                      marginBottom: '0.35rem',
-                                      padding: '0.35rem 0.75rem',
-                                      background: 'var(--color-bg)',
-                                      border: '1px solid var(--color-border)',
-                                      borderRadius: '6px',
-                                      fontSize: '0.8rem',
-                                      color: 'var(--color-primary)',
-                                      textDecoration: 'none',
-                                    }}
-                                  >
-                                    {mat.type === 'pdf' ? '📄' : '🔗'} {mat.title}
-                                  </a>
-                                ))}
+                                .map((mat) =>
+                                  mat.type === 'video' ? (
+                                    <div key={mat.id} style={{ marginBottom: '0.75rem' }}>
+                                      <VideoPlayer materialId={mat.id} title={mat.title} />
+                                    </div>
+                                  ) : (
+                                    <a
+                                      key={mat.id}
+                                      href={mat.url || `/api/v1/materials/${mat.storageKey}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                        marginRight: '0.75rem',
+                                        marginBottom: '0.35rem',
+                                        padding: '0.35rem 0.75rem',
+                                        background: 'var(--color-bg)',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: '6px',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--color-primary)',
+                                        textDecoration: 'none',
+                                      }}
+                                    >
+                                      {mat.type === 'pdf' ? '📄' : '🔗'} {mat.title}
+                                    </a>
+                                  )
+                                )}
                             </div>
                           )}
 
@@ -300,43 +331,81 @@ export default function CourseDetail() {
                           {/* Evaluations (linked tests) */}
                           {topic.evaluations
                             .sort((a, b) => a.order - b.order)
-                            .map((ev) => (
-                              <div
-                                key={ev.id}
-                                style={{
-                                  padding: '0.75rem',
-                                  background: 'var(--color-bg)',
-                                  border: '1px solid var(--color-border)',
-                                  borderRadius: '8px',
-                                  marginBottom: '0.5rem',
-                                  display: 'flex',
-                                  justifyContent: 'space-between',
-                                  alignItems: 'center',
-                                }}
-                              >
-                                <div>
-                                  <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{ev.title}</div>
-                                  <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{ev.type}</div>
+                            .map((ev) => {
+                              const attempts = ev.testAttempts;
+                              const hasAttempts = attempts && attempts.attemptCount > 0;
+                              const latest = attempts?.latestAttempt;
+                              return (
+                                <div
+                                  key={ev.id}
+                                  style={{
+                                    padding: '0.75rem',
+                                    background: 'var(--color-bg)',
+                                    border: '1px solid var(--color-border)',
+                                    borderRadius: '8px',
+                                    marginBottom: '0.5rem',
+                                    display: 'flex',
+                                    justifyContent: 'space-between',
+                                    alignItems: 'center',
+                                    flexWrap: 'wrap',
+                                    gap: '0.5rem',
+                                  }}
+                                >
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontWeight: 500, fontSize: '0.9rem' }}>{ev.title}</div>
+                                    <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>{ev.type}</div>
+                                    {hasAttempts && (
+                                      <div style={{ marginTop: '0.35rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                                        {attempts!.attemptCount} attempt{attempts!.attemptCount !== 1 ? 's' : ''}
+                                        {latest && (latest.score != null && latest.maxScore != null)
+                                          ? ` • Latest score: ${latest.score} / ${latest.maxScore}`
+                                          : latest?.submittedAt
+                                            ? ' • Submitted'
+                                            : ''}
+                                      </div>
+                                    )}
+                                  </div>
+                                  {ev.test && (
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexShrink: 0 }}>
+                                      {hasAttempts && latest && (
+                                        <Link
+                                          to={`/result/${latest.id}`}
+                                          style={{
+                                            padding: '0.4rem 0.75rem',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: '6px',
+                                            fontSize: '0.8rem',
+                                            fontWeight: 500,
+                                            color: 'var(--color-text)',
+                                            textDecoration: 'none',
+                                          }}
+                                        >
+                                          View result
+                                        </Link>
+                                      )}
+                                      <button
+                                        type="button"
+                                        onClick={() => startTestFromCourse(ev.test!.id)}
+                                        disabled={!!startingTestId}
+                                        style={{
+                                          padding: '0.4rem 0.75rem',
+                                          background: 'var(--color-primary)',
+                                          color: 'white',
+                                          border: 'none',
+                                          borderRadius: '6px',
+                                          fontSize: '0.8rem',
+                                          fontWeight: 500,
+                                          cursor: startingTestId ? 'wait' : 'pointer',
+                                          opacity: startingTestId ? 0.8 : 1,
+                                        }}
+                                      >
+                                        {startingTestId === ev.test.id ? 'Starting…' : 'Take Test'}
+                                      </button>
+                                    </div>
+                                  )}
                                 </div>
-                                {ev.test && (
-                                  <Link
-                                    to="/tests"
-                                    style={{
-                                      padding: '0.4rem 0.75rem',
-                                      background: 'var(--color-primary)',
-                                      color: 'white',
-                                      borderRadius: '6px',
-                                      fontSize: '0.8rem',
-                                      fontWeight: 500,
-                                      textDecoration: 'none',
-                                      flexShrink: 0,
-                                    }}
-                                  >
-                                    Take Test
-                                  </Link>
-                                )}
-                              </div>
-                            ))}
+                              );
+                            })}
                         </div>
                       ))}
                   </div>

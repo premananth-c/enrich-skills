@@ -18,6 +18,7 @@ export const createCodingQuestionSchema = z.object({
   })).optional(),
   constraints: z.array(z.string()).optional(),
   testCases: z.array(testCaseSchema).min(1),
+  defaultWeight: z.number().min(0).optional(),
 });
 
 export const createMcqQuestionSchema = z.object({
@@ -30,6 +31,7 @@ export const createMcqQuestionSchema = z.object({
     isCorrect: z.boolean(),
   })).min(2),
   explanation: z.string().optional(),
+  defaultWeight: z.number().min(0).optional(),
 });
 
 export const updateCodingQuestionSchema = createCodingQuestionSchema.partial();

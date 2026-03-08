@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import CreateTestFromFileModal from '../components/CreateTestFromFileModal';
 
 interface Test {
   id: string;
@@ -18,6 +19,7 @@ export default function Tests() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
   const [historyTarget, setHistoryTarget] = useState<{ id: string; title: string } | null>(null);
+  const [createFromFileOpen, setCreateFromFileOpen] = useState(false);
   const navigate = useNavigate();
 
   const loadTests = () => {
@@ -47,6 +49,16 @@ export default function Tests() {
       loadTests();
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Revoke failed');
+    }
+  };
+
+  const handleDelete = async (id: string, title: string) => {
+    if (!confirm(`Permanently delete test "${title}"? This cannot be undone.`)) return;
+    try {
+      await api(`/tests/${id}`, { method: 'DELETE' });
+      loadTests();
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Delete failed');
     }
   };
 
@@ -95,7 +107,10 @@ export default function Tests() {
                   <button onClick={() => handleArchive(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Archive</button>
                 )}
                 {t.status === 'archived' && (
-                  <button onClick={() => handleRevoke(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
+                  <>
+                    <button onClick={() => handleRevoke(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
+                    <button onClick={() => handleDelete(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
+                  </>
                 )}
                 <button onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
               </div>
@@ -110,12 +125,20 @@ export default function Tests() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Tests</h1>
-        <button
-          onClick={() => navigate('/tests/new')}
-          style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-        >
-          + Create Test
-        </button>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            onClick={() => setCreateFromFileOpen(true)}
+            style={{ padding: '0.5rem 1.25rem', background: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 6, fontWeight: 500 }}
+          >
+            Create Test From File
+          </button>
+          <button
+            onClick={() => navigate('/tests/new')}
+            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
+          >
+            + Create Test
+          </button>
+        </div>
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input
@@ -146,6 +169,12 @@ export default function Tests() {
           entityId={historyTarget.id}
           entityLabel={historyTarget.title}
           onClose={() => setHistoryTarget(null)}
+        />
+      )}
+      {createFromFileOpen && (
+        <CreateTestFromFileModal
+          onClose={() => setCreateFromFileOpen(false)}
+          onCreated={loadTests}
         />
       )}
     </div>

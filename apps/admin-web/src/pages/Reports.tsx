@@ -52,7 +52,9 @@ export default function Reports() {
 
   useEffect(() => {
     api<{ id: string; name: string }[]>('/batches').then((b) => setBatches(b.map((x) => ({ id: x.id, name: x.name })))).catch(() => setBatches([]));
-    api<{ id: string; title: string }[]>('/tests').then((t) => setTests(t.map((x) => ({ id: x.id, title: x.title })))).catch(() => setTests([]));
+    api<{ id: string; title: string; status: string }[]>('/tests')
+      .then((t) => setTests(t.filter((x) => x.status === 'published').map((x) => ({ id: x.id, title: x.title }))))
+      .catch(() => setTests([]));
   }, []);
 
   useEffect(() => {

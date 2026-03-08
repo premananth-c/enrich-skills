@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
+import { useAuth } from '../context/AuthContext';
 
 interface QuestionItem {
   id: string;
@@ -121,6 +122,7 @@ function buildUpdateSnapshot(input: {
 export default function TestDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const { canEdit } = useAuth();
   const [test, setTest] = useState<TestData | null>(null);
   const [attempts, setAttempts] = useState<AttemptEntry[]>([]);
   const [studentAttempts, setStudentAttempts] = useState<StudentAttemptSummary[]>([]);
@@ -148,6 +150,7 @@ export default function TestDetail() {
   const [allocVariantId, setAllocVariantId] = useState('');
   const [allocError, setAllocError] = useState('');
   const [allocResetAttempts, setAllocResetAttempts] = useState(false);
+  const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'mcq' | 'coding'>('mcq');
   const [status, setStatus] = useState<'draft' | 'published' | 'archived'>('draft');
@@ -331,6 +334,19 @@ export default function TestDetail() {
     }
   };
 
+  const removeStudentFromTest = async (userId: string) => {
+    if (!test || !confirm('Remove this student from the test? They will no longer see or attempt this test.')) return;
+    setRemovingUserId(userId);
+    try {
+      await api(`/tests/${test.id}/allocations/${userId}`, { method: 'DELETE' });
+      loadTest();
+    } catch (e) {
+      alert(e instanceof Error ? e.message : 'Failed to remove student');
+    } finally {
+      setRemovingUserId(null);
+    }
+  };
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
   if (!test) return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Test not found.</div>;
 
@@ -349,6 +365,8 @@ export default function TestDetail() {
   const isUpdateDirty = currentUpdateSnapshot !== initialUpdateSnapshot;
   const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
   const canUpdateTest = !saving && title.trim().length >= 2 && hasRequiredSchedule && isUpdateDirty;
+  const canAssignToStudents = test.status === 'published';
+  const isDraftOrArchived = test.status === 'draft' || test.status === 'archived';
 
   const updateQuestionWeight = async (questionId: string, nextWeight: number) => {
     if (!test) return;
@@ -439,13 +457,43 @@ export default function TestDetail() {
   return (
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-        <div>
-          <Link to="/tests" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>Tests</Link>
-          <span style={{ margin: '0 0.4rem', color: 'var(--color-text-muted)' }}>/</span>
-          <span style={{ fontWeight: 500 }}>{test.title}</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', flexWrap: 'wrap' }}>
+          <div>
+            <Link to="/tests" style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.85rem' }}>Tests</Link>
+            <span style={{ margin: '0 0.4rem', color: 'var(--color-text-muted)' }}>/</span>
+            <span style={{ fontWeight: 500 }}>{test.title}</span>
+          </div>
+          {isDraftOrArchived && (
+            <span
+              style={{
+                display: 'inline-block',
+                padding: '0.35rem 0.75rem',
+                background: '#ef4444',
+                color: '#fff',
+                fontSize: '0.8rem',
+                borderRadius: 9999,
+                fontWeight: 500,
+              }}
+            >
+              Publish this test to assign it to students or use it in courses or batches.
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button onClick={openAllocate} style={{ padding: '0.5rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
+        <div>
+          <button
+            onClick={openAllocate}
+            disabled={!canEdit('tests') || !canAssignToStudents}
+            style={{
+              padding: '0.5rem 1rem',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 6,
+              color: 'var(--color-text)',
+              fontSize: '0.9rem',
+              cursor: canEdit('tests') && canAssignToStudents ? 'pointer' : 'not-allowed',
+              opacity: canEdit('tests') && canAssignToStudents ? 1 : 0.6,
+            }}
+          >
             Assign to Student
           </button>
         </div>
@@ -684,16 +732,19 @@ export default function TestDetail() {
                             type="number"
                             min={0}
                             step={0.5}
-                            value={test.config.questionWeights?.[tq.questionId] ?? 1}
+                            value={test.config.questionWeights?.[tq.questionId] ?? (tq.question.content as { defaultWeight?: number })?.defaultWeight ?? 1}
                             onChange={(e) => {
                               const value = Number(e.target.value);
                               if (Number.isFinite(value)) void updateQuestionWeight(tq.questionId, value);
                             }}
-                            style={{ width: 80, ...inputStyle }}
+                            style={{ width: 52, ...inputStyle }}
                           />
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
-                          <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
+                          <div style={{ display: 'flex', gap: '0.5rem' }}>
+                            <button onClick={() => navigate(`/questions/${tq.questionId}/edit`)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
+                            <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -770,6 +821,9 @@ export default function TestDetail() {
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Score</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempt Timestamps</th>
+                  {canEdit('tests') && (
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -796,6 +850,27 @@ export default function TestDetail() {
                             .map((a, i) => `#${i + 1} ${new Date(a.startedAt).toLocaleString()}${a.submittedAt ? ` -> ${new Date(a.submittedAt).toLocaleString()}` : ''}`)
                             .join(' | ')}
                     </td>
+                    {canEdit('tests') && (
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => removeStudentFromTest(s.userId)}
+                          disabled={removingUserId === s.userId}
+                          style={{
+                            padding: '4px 10px',
+                            background: 'transparent',
+                            border: '1px solid #ef444444',
+                            borderRadius: 4,
+                            color: '#f87171',
+                            fontSize: '0.8rem',
+                            cursor: removingUserId === s.userId ? 'wait' : 'pointer',
+                            opacity: removingUserId === s.userId ? 0.6 : 1,
+                          }}
+                        >
+                          {removingUserId === s.userId ? 'Removing…' : 'Remove from test'}
+                        </button>
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>

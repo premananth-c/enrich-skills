@@ -49,7 +49,7 @@ export default function Layout() {
     <div style={{ display: 'flex', minHeight: '100vh' }}>
       <aside style={{ width: 220, background: 'var(--color-surface)', borderRight: '1px solid var(--color-border)', padding: '1rem', display: 'flex', flexDirection: 'column' }}>
         <Link to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'block' }}>
-          <img src="/logo.png" alt="RankerShip" style={{ height: 36, display: 'block', marginBottom: '0.35rem' }} />
+          <img src="/logo.png" alt="RankerShip" style={{ height: 52, display: 'block', marginBottom: '0.35rem' }} />
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>

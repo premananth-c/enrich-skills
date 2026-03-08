@@ -23,9 +23,11 @@ export const createTopicSchema = z.object({
 export const updateTopicSchema = createTopicSchema.partial();
 
 export const createMaterialSchema = z.object({
-  type: z.enum(['pdf', 'link']),
+  type: z.enum(['pdf', 'link', 'video']),
   title: z.string().min(1),
   url: z.string().url().optional().nullable(),
+  mimeType: z.string().optional().nullable(),
+  sizeBytes: z.number().int().min(0).optional().nullable(),
   order: z.number().int().min(0).optional(),
 });
 

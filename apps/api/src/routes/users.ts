@@ -156,13 +156,23 @@ export async function userRoutes(app: FastifyInstance) {
       displayName?: string;
       permissions?: Partial<Record<ModuleKey, PermissionLevel>>;
     };
-    const roleKey = (body.roleKey || '').trim().toLowerCase().replace(/\s+/g, '_');
     const displayName = (body.displayName || '').trim();
-    if (!roleKey || !displayName) {
-      return reply.status(400).send({ error: 'roleKey and displayName are required' });
+    if (!displayName) {
+      return reply.status(400).send({ error: 'displayName is required' });
     }
-    if (roleKey === 'super_admin' || roleKey === 'admin' || roleKey === 'student') {
-      return reply.status(400).send({ error: 'Reserved role key cannot be used' });
+    const rawKey = (body.roleKey || displayName).trim().toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+    const baseKey = rawKey || 'role';
+    let roleKey = baseKey;
+    let suffix = 0;
+    while (true) {
+      if (roleKey !== 'super_admin' && roleKey !== 'admin' && roleKey !== 'student' && roleKey !== 'invited') {
+        const exists = await prisma.roleDefinition.findFirst({
+          where: { tenantId, roleKey, isActive: true },
+        });
+        if (!exists) break;
+      }
+      suffix += 1;
+      roleKey = `${baseKey}_${suffix}`;
     }
     const permissions: Record<ModuleKey, PermissionLevel> = {
       courses: 'none',
@@ -305,7 +315,7 @@ export async function userRoutes(app: FastifyInstance) {
     const tempPassword = randomUUID().slice(0, 12);
     const passwordHash = await bcrypt.hash(tempPassword, 12);
     const user = await prisma.user.create({
-      data: { tenantId, name: email.split('@')[0], email, passwordHash, role: 'admin', isActive: true },
+      data: { tenantId, name: email.split('@')[0], email, passwordHash, role: 'invited', isActive: true },
       select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true, updatedAt: true },
     });
     await logRevision({
@@ -398,7 +408,7 @@ export async function userRoutes(app: FastifyInstance) {
     const body = request.body as { role?: string; roleKey?: string };
     const nextRole = (body.roleKey || body.role || '').trim().toLowerCase();
     if (!nextRole) return reply.status(400).send({ error: 'role is required' });
-    if (nextRole !== 'admin' && nextRole !== 'super_admin' && nextRole !== 'student') {
+    if (nextRole !== 'admin' && nextRole !== 'super_admin' && nextRole !== 'student' && nextRole !== 'invited') {
       const roleDef = await prisma.roleDefinition.findFirst({
         where: { tenantId, roleKey: nextRole, isActive: true },
       });

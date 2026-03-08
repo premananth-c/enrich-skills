@@ -97,6 +97,32 @@ export async function studentRoutes(app: FastifyInstance) {
       orderBy: { assignedAt: 'desc' },
     });
     const publishedAllocations = allocations.filter((a) => a.test.status === 'published');
+    const testIds = publishedAllocations.map((a) => a.testId);
+
+    // Course/topic context for tests that are assigned inside a course (evaluation)
+    const courseContextByTestId = new Map<string, { courseName: string; topicName: string }>();
+    if (testIds.length > 0) {
+      const evaluations = await prisma.courseEvaluation.findMany({
+        where: { testId: { in: testIds } },
+        select: {
+          testId: true,
+          topic: {
+            select: {
+              title: true,
+              chapter: { select: { course: { select: { title: true } } } },
+            },
+          },
+        },
+      });
+      for (const ev of evaluations) {
+        if (ev.testId && ev.topic && !courseContextByTestId.has(ev.testId)) {
+          courseContextByTestId.set(ev.testId, {
+            courseName: ev.topic.chapter.course.title,
+            topicName: ev.topic.title,
+          });
+        }
+      }
+    }
 
     const attemptCounts = await prisma.attempt.groupBy({
       by: ['testId'],
@@ -143,6 +169,7 @@ export async function studentRoutes(app: FastifyInstance) {
         ...alloc,
         attemptCount: countMap.get(alloc.testId) ?? 0,
         attempts: testAttempts,
+        courseContext: courseContextByTestId.get(alloc.testId) ?? null,
         latestCompletedAttempt: latestCompleted
           ? {
               ...latestCompleted,
@@ -270,7 +297,84 @@ export async function studentRoutes(app: FastifyInstance) {
       });
       const submissionMap = new Map(mySubmissions.map((s) => [s.activityId, s]));
 
-      return reply.send({ course, assignment, mySubmissions: Object.fromEntries(submissionMap) });
+      // Hide evaluations whose test is draft or archived (only show published tests to students)
+      const courseFiltered = course
+        ? {
+            ...course,
+            chapters: course.chapters.map((ch) => ({
+              ...ch,
+              topics: ch.topics.map((topic) => ({
+                ...topic,
+                evaluations: topic.evaluations.filter(
+                  (ev) => !ev.test || ev.test.status === 'published'
+                ),
+              })),
+            })),
+          }
+        : null;
+
+      // Attach attempt counts and latest score per evaluation (test) for this student
+      const testIdsFromCourse =
+        courseFiltered?.chapters.flatMap((ch) =>
+          ch.topics.flatMap((t) => t.evaluations.map((e) => e.testId).filter(Boolean) as string[])
+        ) ?? [];
+      const uniqueTestIds = [...new Set(testIdsFromCourse)];
+
+      const testAttemptsMap = new Map<
+        string,
+        { attemptCount: number; latestAttempt: { id: string; score: number | null; maxScore: number | null; submittedAt: string | null } | null }
+      >();
+
+      if (uniqueTestIds.length > 0) {
+        const attempts = await prisma.attempt.findMany({
+          where: { userId, testId: { in: uniqueTestIds }, submittedAt: { not: null } },
+          select: { id: true, testId: true, score: true, maxScore: true, submittedAt: true },
+          orderBy: { submittedAt: 'desc' },
+        });
+        const countByTest = await prisma.attempt.groupBy({
+          by: ['testId'],
+          where: { userId, testId: { in: uniqueTestIds }, submittedAt: { not: null } },
+          _count: true,
+        });
+        for (const testId of uniqueTestIds) {
+          const submitted = attempts.filter((a) => a.testId === testId);
+          const latest = submitted[0] ?? null;
+          const count = countByTest.find((c) => c.testId === testId)?._count ?? 0;
+          testAttemptsMap.set(testId, {
+            attemptCount: count,
+            latestAttempt: latest
+              ? {
+                  id: latest.id,
+                  score: latest.score,
+                  maxScore: latest.maxScore,
+                  submittedAt: latest.submittedAt,
+                }
+              : null,
+          });
+        }
+      }
+
+      const courseWithAttempts = courseFiltered
+        ? {
+            ...courseFiltered,
+            chapters: courseFiltered.chapters.map((ch) => ({
+              ...ch,
+              topics: ch.topics.map((topic) => ({
+                ...topic,
+                evaluations: topic.evaluations.map((ev) => ({
+                  ...ev,
+                  testAttempts: ev.testId ? testAttemptsMap.get(ev.testId) ?? { attemptCount: 0, latestAttempt: null } : null,
+                })),
+              })),
+            })),
+          }
+        : null;
+
+      return reply.send({
+        course: courseWithAttempts,
+        assignment,
+        mySubmissions: Object.fromEntries(submissionMap),
+      });
     }
   );
 

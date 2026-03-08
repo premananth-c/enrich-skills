@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import { api } from '../lib/api';
 
 interface DashboardStats {
@@ -9,20 +10,36 @@ interface DashboardStats {
 }
 
 export default function Dashboard() {
+  const { hasNoModuleAccess } = useAuth();
   const [stats, setStats] = useState<DashboardStats>({ tests: 0, questions: 0, students: 0 });
   const [batchesCount, setBatchesCount] = useState(0);
   const [coursesCount, setCoursesCount] = useState(0);
 
   useEffect(() => {
+    if (hasNoModuleAccess) return;
     api<DashboardStats>('/users/stats')
       .then(setStats)
       .catch(() => {});
-  }, []);
+  }, [hasNoModuleAccess]);
 
   useEffect(() => {
+    if (hasNoModuleAccess) return;
     api<unknown[]>('/batches').then((b) => setBatchesCount(b.length)).catch(() => {});
     api<unknown[]>('/courses').then((c) => setCoursesCount(c.length)).catch(() => {});
-  }, []);
+  }, [hasNoModuleAccess]);
+
+  if (hasNoModuleAccess) {
+    return (
+      <div style={{ maxWidth: 560 }}>
+        <h1 style={{ margin: '0 0 1rem' }}>Dashboard</h1>
+        <div style={{ padding: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, color: 'var(--color-text)' }}>
+          <p style={{ margin: 0, lineHeight: 1.6 }}>
+            No access provided yet. This is usual, you have successfully logged in as Admin. Please change your password and request your Super Admin to assign permissions.
+          </p>
+        </div>
+      </div>
+    );
+  }
 
   const cards = [
     { label: 'Courses', value: coursesCount, to: '/courses' },

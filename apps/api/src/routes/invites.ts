@@ -72,6 +72,9 @@ export async function inviteRoutes(app: FastifyInstance) {
     if (testId) {
       const test = await prisma.test.findFirst({ where: { id: testId, tenantId } });
       if (!test) return reply.status(400).send({ error: 'Test not found' });
+      if (test.status !== 'published') {
+        return reply.status(400).send({ error: 'Only published tests can be used in invites. Set the test status to Published first.' });
+      }
       testTitle = test.title;
       if (variantId) {
         const variant = await prisma.testVariant.findFirst({ where: { id: variantId, testId } });

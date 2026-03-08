@@ -29,6 +29,7 @@ interface TestOption {
   id: string;
   title: string;
   type: string;
+  status?: string;
   variants?: { id: string; name: string; difficulty: string }[];
 }
 
@@ -81,7 +82,9 @@ export default function Students() {
 
   useEffect(() => {
     if (inviteOpen) {
-      api<TestOption[]>('/tests').then(setTests).catch(() => setTests([]));
+      api<TestOption[]>('/tests')
+        .then((data) => setTests(data.filter((t) => t.status === 'published')))
+        .catch(() => setTests([]));
     }
   }, [inviteOpen]);
 

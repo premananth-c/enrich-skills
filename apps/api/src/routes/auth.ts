@@ -29,6 +29,17 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
       manage_users: 'none',
     };
   }
+  if (role === 'invited') {
+    return {
+      courses: 'none',
+      batches: 'none',
+      tests: 'none',
+      questions: 'none',
+      students: 'none',
+      reports: 'none',
+      manage_users: 'none',
+    };
+  }
   const base = {
     courses: 'none',
     batches: 'none',

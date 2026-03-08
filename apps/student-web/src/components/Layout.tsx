@@ -90,7 +90,7 @@ export default function Layout() {
         }}
       >
         <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-          <img src="/logo.png" alt="RankerShip" style={{ height: 36, display: 'block', marginBottom: '0.35rem' }} />
+          <img src="/logo.png" alt="RankerShip" style={{ height: 52, display: 'block', marginBottom: '0.35rem' }} />
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </div>
 
