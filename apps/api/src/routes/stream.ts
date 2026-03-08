@@ -1,6 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { getFileStreamWithRange } from '../lib/storage.js';
+import { getFileStreamWithRange, getFileStream } from '../lib/storage.js';
 import { authenticate } from '../lib/tenant.js';
 import { isAllowedDomain } from '../lib/domainCheck.js';
 
@@ -34,6 +34,68 @@ export async function streamRoutes(app: FastifyInstance) {
       });
 
       return reply.send({ url: `/api/v1/stream/video?t=${token}` });
+    }
+  );
+
+  // Authenticated: generate a short-lived stream token for a PDF material
+  app.get<{ Params: { materialId: string } }>(
+    '/materials/:materialId/pdf-token',
+    { preHandler: [authenticate] },
+    async (request, reply) => {
+      const material = await prisma.courseMaterial.findFirst({
+        where: { id: request.params.materialId, type: 'pdf', storageKey: { not: null } },
+      });
+      if (!material?.storageKey) {
+        return reply.status(404).send({ error: 'PDF material not found' });
+      }
+
+      const token = createStreamToken(app, {
+        materialId: material.id,
+        storageKey: material.storageKey,
+        mimeType: 'application/pdf',
+      });
+
+      return reply.send({ url: `/api/v1/stream/pdf?t=${token}` });
+    }
+  );
+
+  // Public: proxy-stream a PDF using the signed token (no auth header needed)
+  app.get(
+    '/pdf',
+    async (request: FastifyRequest<{ Querystring: { t?: string } }>, reply: FastifyReply) => {
+      const token = (request.query as { t?: string }).t;
+      if (!token) {
+        return reply.status(400).send({ error: 'Missing stream token' });
+      }
+
+      const origin = request.headers.origin;
+      const referer = request.headers.referer;
+      const allowed = await isAllowedDomain(origin, referer);
+      if (!allowed) {
+        return reply.status(403).send({ error: 'Streaming not allowed from this domain' });
+      }
+
+      let payload: { materialId: string; storageKey: string; mimeType: string };
+      try {
+        payload = app.jwt.verify<{ materialId: string; storageKey: string; mimeType: string }>(token);
+      } catch {
+        return reply.status(401).send({ error: 'Invalid or expired stream token' });
+      }
+
+      const stream = await getFileStream(payload.storageKey);
+      if (!stream) {
+        return reply.status(404).send({ error: 'PDF file not found in storage' });
+      }
+
+      return reply
+        .status(200)
+        .headers({
+          'Content-Type': 'application/pdf',
+          'Content-Disposition': 'inline',
+          'Cache-Control': 'no-store',
+          'X-Content-Type-Options': 'nosniff',
+        })
+        .send(stream);
     }
   );
 

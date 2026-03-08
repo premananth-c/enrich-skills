@@ -241,10 +241,31 @@ export default function CourseDetail() {
                                     <div key={mat.id} style={{ marginBottom: '0.75rem' }}>
                                       <VideoPlayer materialId={mat.id} title={mat.title} />
                                     </div>
+                                  ) : mat.type === 'pdf' && mat.storageKey ? (
+                                    <Link
+                                      key={mat.id}
+                                      to={`/pdf/${mat.id}?title=${encodeURIComponent(mat.title)}&back=${encodeURIComponent(`/courses/${courseId}`)}`}
+                                      style={{
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '0.4rem',
+                                        marginRight: '0.75rem',
+                                        marginBottom: '0.35rem',
+                                        padding: '0.35rem 0.75rem',
+                                        background: 'var(--color-bg)',
+                                        border: '1px solid var(--color-border)',
+                                        borderRadius: '6px',
+                                        fontSize: '0.8rem',
+                                        color: 'var(--color-primary)',
+                                        textDecoration: 'none',
+                                      }}
+                                    >
+                                      📄 {mat.title}
+                                    </Link>
                                   ) : (
                                     <a
                                       key={mat.id}
-                                      href={mat.url || `/api/v1/materials/${mat.storageKey}`}
+                                      href={mat.url || '#'}
                                       target="_blank"
                                       rel="noopener noreferrer"
                                       style={{
@@ -262,7 +283,7 @@ export default function CourseDetail() {
                                         textDecoration: 'none',
                                       }}
                                     >
-                                      {mat.type === 'pdf' ? '📄' : '🔗'} {mat.title}
+                                      🔗 {mat.title}
                                     </a>
                                   )
                                 )}
