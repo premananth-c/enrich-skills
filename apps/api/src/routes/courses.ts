@@ -511,37 +511,45 @@ export async function courseRoutes(app: FastifyInstance) {
     request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>,
     reply: FastifyReply
   ) => {
-    const tenantId = await requireModuleAccess(request, 'courses', 'edit');
-    const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
-    if (!course) return reply.status(404).send({ error: 'Course not found' });
+    try {
+      const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+      const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
+      if (!course) return reply.status(404).send({ error: 'Course not found' });
 
-    const { filename, sizeBytes, mimeType } = request.body as { filename: string; sizeBytes: number; mimeType: string };
-    if (!filename || !mimeType) return reply.status(400).send({ error: 'filename and mimeType are required' });
-    if (!ALLOWED_VIDEO_TYPES.includes(mimeType)) {
-      return reply.status(400).send({ error: `Unsupported video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(', ')}` });
-    }
+      const { filename, sizeBytes, mimeType } = request.body as { filename: string; sizeBytes: number; mimeType: string };
+      if (!filename || !mimeType) return reply.status(400).send({ error: 'filename and mimeType are required' });
+      if (!ALLOWED_VIDEO_TYPES.includes(mimeType)) {
+        return reply.status(400).send({ error: `Unsupported video type. Allowed: ${ALLOWED_VIDEO_TYPES.join(', ')}` });
+      }
 
-    const key = buildStorageKey(STORAGE_KEYS.MATERIALS, filename, mimeType, {
-      tenantId,
-      courseId: request.params.id,
-      topicId: request.params.topicId,
-    });
-
-    const uploadId = await initiateMultipartUpload(key, mimeType);
-    const count = await prisma.courseMaterial.count({ where: { topicId: request.params.topicId } });
-    const material = await prisma.courseMaterial.create({
-      data: {
+      const key = buildStorageKey(STORAGE_KEYS.MATERIALS, filename, mimeType, {
+        tenantId,
+        courseId: request.params.id,
         topicId: request.params.topicId,
-        type: 'video',
-        title: filename,
-        storageKey: key,
-        mimeType,
-        sizeBytes: sizeBytes || null,
-        order: count,
-      },
-    });
+      });
 
-    return reply.status(201).send({ materialId: material.id, uploadId, key });
+      const uploadId = await initiateMultipartUpload(key, mimeType);
+      const count = await prisma.courseMaterial.count({ where: { topicId: request.params.topicId } });
+      const material = await prisma.courseMaterial.create({
+        data: {
+          topicId: request.params.topicId,
+          type: 'video',
+          title: filename,
+          storageKey: key,
+          mimeType,
+          sizeBytes: sizeBytes || null,
+          order: count,
+        },
+      });
+
+      return reply.status(201).send({ materialId: material.id, uploadId, key });
+    } catch (err) {
+      request.log.error({ err }, 'Video init-upload failed');
+      const message = err instanceof Error && err.message.includes('R2 storage is not configured')
+        ? 'Storage is not configured. Contact support.'
+        : 'Video upload is temporarily unavailable. Please try again.';
+      return reply.status(503).send({ error: message });
+    }
   });
 
   app.post('/:id/chapters/:chapterId/topics/:topicId/materials/video/presign-part', async (
