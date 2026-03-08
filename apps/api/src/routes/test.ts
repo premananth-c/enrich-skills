@@ -366,4 +366,14 @@ export async function testRoutes(app: FastifyInstance) {
     }
     return reply.status(201).send(allocation);
   });
+
+  app.delete('/:id/allocations/:userId', async (request: FastifyRequest<{ Params: { id: string; userId: string } }>, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!test) return reply.status(404).send({ error: 'Test not found' });
+    await prisma.testAllocation.deleteMany({
+      where: { testId: request.params.id, userId: request.params.userId },
+    });
+    return reply.status(204).send();
+  });
 }
