@@ -2,7 +2,7 @@ import { prisma } from './prisma.js';
 import type { Prisma } from '@prisma/client';
 
 type RevisionModule = 'tests' | 'students' | 'courses' | 'questions' | 'batches';
-type RevisionAction = 'created' | 'updated' | 'archived';
+type RevisionAction = 'created' | 'updated' | 'archived' | 'deleted';
 
 interface LogRevisionInput {
   tenantId: string;

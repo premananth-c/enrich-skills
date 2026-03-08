@@ -347,7 +347,7 @@ export async function studentRoutes(app: FastifyInstance) {
                   id: latest.id,
                   score: latest.score,
                   maxScore: latest.maxScore,
-                  submittedAt: latest.submittedAt,
+                  submittedAt: latest.submittedAt ? latest.submittedAt.toISOString() : null,
                 }
               : null,
           });

@@ -16,10 +16,10 @@ function createStreamToken(
 
 export async function streamRoutes(app: FastifyInstance) {
   // Authenticated: generate a short-lived stream token for a material
-  app.get(
+  app.get<{ Params: { materialId: string } }>(
     '/materials/:materialId/token',
     { preHandler: [authenticate] },
-    async (request: FastifyRequest<{ Params: { materialId: string } }>, reply: FastifyReply) => {
+    async (request, reply) => {
       const material = await prisma.courseMaterial.findFirst({
         where: { id: request.params.materialId, type: 'video', storageKey: { not: null } },
       });
