@@ -66,13 +66,21 @@ export async function api<T>(
   const token = localStorage.getItem(TOKEN_KEY);
   const headers = buildHeaders(token, options);
 
-  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers });
+  // Fastify requires a non-empty body when Content-Type is application/json
+  const body =
+    options.body !== undefined
+      ? typeof options.body === 'string' ? options.body : JSON.stringify(options.body)
+      : isMutation
+        ? '{}'
+        : undefined;
+
+  let res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers, body });
 
   if (res.status === 401) {
     const newToken = await getRefreshedToken();
     if (newToken) {
       const retryHeaders = buildHeaders(newToken, options);
-      res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers: retryHeaders });
+      res = await fetch(`${API_BASE}/api/v1${path}`, { ...options, headers: retryHeaders, body });
     } else {
       localStorage.removeItem(TOKEN_KEY);
       localStorage.removeItem(REFRESH_KEY);
