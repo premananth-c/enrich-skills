@@ -558,7 +558,7 @@ export default function CourseDetail() {
                                 </div>
                               ) : m.type === 'pdf' ? (
                                 <>
-                                  <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/courses/${id}/chapters/${ch.id}/topics/${topic.id}/materials/${m.id}/download`} target="_blank" rel="noopener noreferrer">{m.title}</a>
+                                  <Link to={`/pdf/${m.id}?title=${encodeURIComponent(m.title)}&back=${encodeURIComponent(`/courses/${id}`)}`} style={{ color: 'var(--color-primary)' }}>{m.title}</Link>
                                   <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
                                 </>
                               ) : (
