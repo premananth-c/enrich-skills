@@ -1,15 +1,18 @@
 # Business Requirements Document (BRD)
+
 # White-label SaaS Mock Test & Coding Assessment Platform
 
 ## Document Control
 
-| Field | Value |
-|-------|-------|
-| Document Name | BRD - White-label SaaS Mock Test Platform |
-| Version | v2.1 |
-| Date | 15 Feb 2026 |
-| Owner | Platform Product & Engineering |
+
+| Field           | Value                                                 |
+| --------------- | ----------------------------------------------------- |
+| Document Name   | BRD - White-label SaaS Mock Test Platform             |
+| Version         | v2.1                                                  |
+| Date            | 15 Feb 2026                                           |
+| Owner           | Platform Product & Engineering                        |
 | Confidentiality | Confidential - For internal and client evaluation use |
+
 
 ---
 
@@ -23,41 +26,45 @@ Version 2 additions: (a) configurable proctoring per test (live human proctoring
 
 ## 2. Glossary
 
-| Term | Definition |
-|------|------------|
-| **Tenant** | A client organization (training institute, college, coaching center, corporate) that uses the platform under a subscription. Each tenant has isolated data, branding, and configuration. |
-| **Cohort** | A group of students/candidates grouped for a specific course, batch, or test campaign. Used for targeted tests and reporting. |
-| **Sandbox** | Isolated, resource-limited execution environment for running user-submitted code. No outbound network access; strict CPU/memory/time limits. |
-| **Proctoring Mode** | The type of proctoring enabled for a test: (a) live human proctoring, (b) webcam monitoring (automated), or (c) both. |
-| **Attempt** | A single instance of a student taking a test from start to submission. An attempt may have multiple question submissions. |
-| **Hidden Test Case** | Test cases not visible to the student; used for final scoring. Contrast with sample/public test cases. |
-| **Sample Test Case** | Test cases visible to the student with input/output examples; used for "Run" during practice. May be a subset of hidden cases or distinct. |
-| **Public Test Case** | Same as sample—visible I/O for student validation before submit. |
-| **Feature Flag** | Configuration toggle that enables/disables a capability (e.g., coding, MCQ, proctoring) for a tenant or test. |
-| **Entitlement** | A tenant's right to use a feature or resource based on their plan (e.g., proctoring minutes, test limits). |
+
+| Term                 | Definition                                                                                                                                                                               |
+| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Tenant**           | A client organization (training institute, college, coaching center, corporate) that uses the platform under a subscription. Each tenant has isolated data, branding, and configuration. |
+| **Cohort**           | A group of students/candidates grouped for a specific course, batch, or test campaign. Used for targeted tests and reporting.                                                            |
+| **Sandbox**          | Isolated, resource-limited execution environment for running user-submitted code. No outbound network access; strict CPU/memory/time limits.                                             |
+| **Proctoring Mode**  | The type of proctoring enabled for a test: (a) live human proctoring, (b) webcam monitoring (automated), or (c) both.                                                                    |
+| **Attempt**          | A single instance of a student taking a test from start to submission. An attempt may have multiple question submissions.                                                                |
+| **Hidden Test Case** | Test cases not visible to the student; used for final scoring. Contrast with sample/public test cases.                                                                                   |
+| **Sample Test Case** | Test cases visible to the student with input/output examples; used for "Run" during practice. May be a subset of hidden cases or distinct.                                               |
+| **Public Test Case** | Same as sample—visible I/O for student validation before submit.                                                                                                                         |
+| **Feature Flag**     | Configuration toggle that enables/disables a capability (e.g., coding, MCQ, proctoring) for a tenant or test.                                                                            |
+| **Entitlement**      | A tenant's right to use a feature or resource based on their plan (e.g., proctoring minutes, test limits).                                                                               |
+
 
 ---
 
 ## 3. Acronyms
 
-| Acronym | Full Form |
-|---------|-----------|
-| BRD | Business Requirements Document |
-| LMS | Learning Management System |
-| NFR | Non-Functional Requirement |
-| OWASP | Open Web Application Security Project |
-| ASVS | Application Security Verification Standard |
-| TLS | Transport Layer Security |
-| WAF | Web Application Firewall |
-| CSV | Comma-Separated Values |
-| PDF | Portable Document Format |
-| GST | Goods and Services Tax (India) |
-| MVP | Minimum Viable Product |
-| NPS | Net Promoter Score |
-| SLA | Service Level Agreement |
-| API | Application Programming Interface |
-| JWT | JSON Web Token |
-| WCAG | Web Content Accessibility Guidelines |
+
+| Acronym | Full Form                                  |
+| ------- | ------------------------------------------ |
+| BRD     | Business Requirements Document             |
+| LMS     | Learning Management System                 |
+| NFR     | Non-Functional Requirement                 |
+| OWASP   | Open Web Application Security Project      |
+| ASVS    | Application Security Verification Standard |
+| TLS     | Transport Layer Security                   |
+| WAF     | Web Application Firewall                   |
+| CSV     | Comma-Separated Values                     |
+| PDF     | Portable Document Format                   |
+| GST     | Goods and Services Tax (India)             |
+| MVP     | Minimum Viable Product                     |
+| NPS     | Net Promoter Score                         |
+| SLA     | Service Level Agreement                    |
+| API     | Application Programming Interface          |
+| JWT     | JSON Web Token                             |
+| WCAG    | Web Content Accessibility Guidelines       |
+
 
 ---
 
@@ -72,15 +79,17 @@ Version 2 additions: (a) configurable proctoring per test (live human proctoring
 
 ## 5. Success Metrics
 
-| Metric | Target | Measurement |
-|--------|--------|-------------|
-| Student NPS | ≥ 40 | Quarterly survey of active students |
-| Tenant Churn (monthly) | < 5% | Tenants canceling vs active base |
-| p95 API Latency | < 300 ms | For standard CRUD (excluding code execution) |
-| Code Execution p95 | < 10 s | Per submission evaluation time |
-| Platform Uptime | ≥ 99.5% | Monthly availability for core services |
-| Proctoring Session Success Rate | ≥ 98% | Sessions completing without technical failure |
-| Payment Success Rate | ≥ 99% | Successful webhook processing post-payment |
+
+| Metric                          | Target   | Measurement                                   |
+| ------------------------------- | -------- | --------------------------------------------- |
+| Student NPS                     | ≥ 40     | Quarterly survey of active students           |
+| Tenant Churn (monthly)          | < 5%     | Tenants canceling vs active base              |
+| p95 API Latency                 | < 300 ms | For standard CRUD (excluding code execution)  |
+| Code Execution p95              | < 10 s   | Per submission evaluation time                |
+| Platform Uptime                 | ≥ 99.5%  | Monthly availability for core services        |
+| Proctoring Session Success Rate | ≥ 98%    | Sessions completing without technical failure |
+| Payment Success Rate            | ≥ 99%    | Successful webhook processing post-payment    |
+
 
 ---
 
@@ -129,13 +138,15 @@ Version 2 additions: (a) configurable proctoring per test (live human proctoring
 
 ## 8. Stakeholders and Roles
 
-| Role | Description |
-|------|-------------|
-| **Student/Candidate** | Practices and attempts coding/MCQ tests. |
-| **Tenant Admin (Client)** | Configures white-label branding, manages tests, users, and reporting. |
-| **Proctor (Tenant role)** | Monitors proctored sessions and records incidents. |
-| **Platform Operator (Super Admin)** | Manages tenants, subscriptions, global policies, and incident response. |
-| **Content Author/Reviewer (Tenant role)** | Creates questions, test cases, solutions, and explanations. |
+
+| Role                                      | Description                                                             |
+| ----------------------------------------- | ----------------------------------------------------------------------- |
+| **Student/Candidate**                     | Practices and attempts coding/MCQ tests.                                |
+| **Tenant Admin (Client)**                 | Configures white-label branding, manages tests, users, and reporting.   |
+| **Proctor (Tenant role)**                 | Monitors proctored sessions and records incidents.                      |
+| **Platform Operator (Super Admin)**       | Manages tenants, subscriptions, global policies, and incident response. |
+| **Content Author/Reviewer (Tenant role)** | Creates questions, test cases, solutions, and explanations.             |
+
 
 ---
 
@@ -385,41 +396,47 @@ Wants to onboard tenants, ensure compliance/security, and maintain platform reli
 
 ## 16. Phase 1 Acceptance Criteria
 
-| Area | Acceptance Criteria |
-|------|---------------------|
-| **Auth & Tenant** | Student and admin can sign up, log in, and manage profile. Tenant can be created with branding; custom domain validates and serves over TLS. |
-| **Question Bank** | Admin can create coding and MCQ questions; add public and hidden test cases for coding; tag and set difficulty. |
-| **Test Builder** | Admin can create tests with sections, timers, scoring rules, schedule, attempt limits. Proctoring settings UI present (configuration only). |
-| **Student Test Flow** | Student can discover, start, and complete a coding/MCQ test; run sample cases; submit; view results with score, test cases, AI ratings. |
-| **Coding Evaluation** | Submissions compile/run in sandbox; pass/fail per test case; partial scoring; time/memory limits enforced. |
-| **AI Feedback** | AI ratings (Code Quality, Problem-Solving, Efficiency, Correctness) generated and displayed per attempt. Graceful degradation when unavailable. |
-| **Payments** | Tenant can subscribe via Razorpay (India) or Stripe (international); webhooks update entitlements; invoices generated. |
-| **Reporting** | Admin can view attempt, test, and cohort reports; export CSV/PDF. Role-based access enforced. |
-| **LMS** | Attendance (session-based), assignments (auto/manual/hybrid), course authoring (modules, chapters, content) functional for Phase 1 scope. |
+
+| Area                  | Acceptance Criteria                                                                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Auth & Tenant**     | Student and admin can sign up, log in, and manage profile. Tenant can be created with branding; custom domain validates and serves over TLS.    |
+| **Question Bank**     | Admin can create coding and MCQ questions; add public and hidden test cases for coding; tag and set difficulty.                                 |
+| **Test Builder**      | Admin can create tests with sections, timers, scoring rules, schedule, attempt limits. Proctoring settings UI present (configuration only).     |
+| **Student Test Flow** | Student can discover, start, and complete a coding/MCQ test; run sample cases; submit; view results with score, test cases, AI ratings.         |
+| **Coding Evaluation** | Submissions compile/run in sandbox; pass/fail per test case; partial scoring; time/memory limits enforced.                                      |
+| **AI Feedback**       | AI ratings (Code Quality, Problem-Solving, Efficiency, Correctness) generated and displayed per attempt. Graceful degradation when unavailable. |
+| **Payments**          | Tenant can subscribe via Razorpay (India) or Stripe (international); webhooks update entitlements; invoices generated.                          |
+| **Reporting**         | Admin can view attempt, test, and cohort reports; export CSV/PDF. Role-based access enforced.                                                   |
+| **LMS**               | Attendance (session-based), assignments (auto/manual/hybrid), course authoring (modules, chapters, content) functional for Phase 1 scope.       |
+
 
 ---
 
 ## 17. Phased Roadmap
 
-| Phase | Scope |
-|-------|-------|
-| **Phase 1** | Web SaaS: coding + MCQ + LMS + reporting + Stripe/Razorpay + AI feedback + AI ratings. Proctoring configuration only (no live/webcam). |
-| **Phase 1.5** | Proctoring MVP: webcam monitoring + live proctoring + proctor dashboard for selected tenants. |
-| **Phase 2** | Hybrid mobile app for students: test attempts, results, notifications, limited practice, selected proctoring support. |
+
+| Phase         | Scope                                                                                                                                  |
+| ------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Phase 1**   | Web SaaS: coding + MCQ + LMS + reporting + Stripe/Razorpay + AI feedback + AI ratings. Proctoring configuration only (no live/webcam). |
+| **Phase 1.5** | Proctoring MVP: webcam monitoring + live proctoring + proctor dashboard for selected tenants.                                          |
+| **Phase 2**   | Hybrid mobile app for students: test attempts, results, notifications, limited practice, selected proctoring support.                  |
+
 
 ---
 
 ## 18. Risks and Mitigations
 
-| Risk | Mitigation |
-|------|------------|
-| Proctoring privacy concerns | Explicit consent, configurable recording, clear disclosures, retention controls. |
-| Code execution abuse | Strict sandboxing, rate limits, malware scanning on outputs/artifacts, WAF. |
-| Peak load during scheduled exams | Autoscaling execution workers and queue-based evaluation. |
-| Third-party payment gateway downtime | Fallback gateway option, queue retries, manual reconciliation workflow. |
-| AI service unavailability | Graceful degradation; queue feedback for later; configurable toggle per test. |
-| Proctoring false positives | Configurable thresholds; human review workflow; appeal process for students. |
-| Tenant custom domain DNS misconfiguration | Clear documentation; validation wizard; support runbook. |
+
+| Risk                                      | Mitigation                                                                       |
+| ----------------------------------------- | -------------------------------------------------------------------------------- |
+| Proctoring privacy concerns               | Explicit consent, configurable recording, clear disclosures, retention controls. |
+| Code execution abuse                      | Strict sandboxing, rate limits, malware scanning on outputs/artifacts, WAF.      |
+| Peak load during scheduled exams          | Autoscaling execution workers and queue-based evaluation.                        |
+| Third-party payment gateway downtime      | Fallback gateway option, queue retries, manual reconciliation workflow.          |
+| AI service unavailability                 | Graceful degradation; queue feedback for later; configurable toggle per test.    |
+| Proctoring false positives                | Configurable thresholds; human review workflow; appeal process for students.     |
+| Tenant custom domain DNS misconfiguration | Clear documentation; validation wizard; support runbook.                         |
+
 
 ---
 
@@ -438,3 +455,4 @@ Before development starts, ensure:
 2. **Data model**: Core entities (Tenant, User, Test, Question, Attempt, Submission, ProctoringSession) defined; see TDD.
 3. **Integration contracts**: Stripe/Razorpay webhook payloads, idempotency handling documented.
 4. **Proctoring compliance**: Legal review for consent forms and privacy notices in target regions.
+

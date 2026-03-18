@@ -19,6 +19,9 @@ export const createCodingQuestionSchema = z.object({
   constraints: z.array(z.string()).optional(),
   testCases: z.array(testCaseSchema).min(1),
   defaultWeight: z.number().min(0).optional(),
+  timeLimitMs: z.number().min(1000).max(30000).optional(),
+  memoryLimitMb: z.number().min(32).max(1024).optional(),
+  supportedLanguages: z.array(z.string()).optional(),
 });
 
 export const createMcqQuestionSchema = z.object({

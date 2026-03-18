@@ -1,8 +1,14 @@
 import { z } from 'zod';
 
-export const supportedLanguages = ['python', 'java', 'cpp', 'javascript'] as const;
+export const supportedLanguages = ['python', 'java', 'cpp', 'c', 'javascript', 'typescript'] as const;
 
 export const submitCodeSchema = z.object({
+  questionId: z.string().uuid(),
+  code: z.string(),
+  language: z.enum(supportedLanguages),
+});
+
+export const runCodeSchema = z.object({
   questionId: z.string().uuid(),
   code: z.string(),
   language: z.enum(supportedLanguages),
@@ -14,3 +20,4 @@ export const submitMcqSchema = z.object({
 });
 
 export type SubmitCodeInput = z.infer<typeof submitCodeSchema>;
+export type RunCodeInput = z.infer<typeof runCodeSchema>;

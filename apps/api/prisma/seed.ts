@@ -89,6 +89,7 @@ async function main() {
           partialScoring: true,
           proctoringEnabled: false,
           aiFeedbackEnabled: true,
+          restrictBrowserDuringTest: false,
         },
         testQuestions: {
           create: [{ questionId: q.id, order: 0 }],

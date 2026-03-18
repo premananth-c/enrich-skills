@@ -76,9 +76,13 @@ export default function Layout() {
   });
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', overflow: 'hidden' }}>
       <aside
         style={{
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          height: '100vh',
           width: sidebarOpen ? 240 : 0,
           overflow: 'hidden',
           background: 'var(--color-surface)',
@@ -87,6 +91,7 @@ export default function Layout() {
           flexDirection: 'column',
           transition: 'width 0.2s',
           flexShrink: 0,
+          zIndex: 10,
         }}
       >
         <div style={{ padding: '1rem', borderBottom: '1px solid var(--color-border)' }}>
@@ -195,7 +200,7 @@ export default function Layout() {
         </div>
       )}
 
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, marginLeft: sidebarOpen ? 240 : 0, height: '100vh', overflow: 'hidden' }}>
         <header
           style={{
             padding: '0.6rem 1.5rem',

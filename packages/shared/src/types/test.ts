@@ -26,6 +26,7 @@ export interface TestConfig {
   passPercentage: number;
   scoreDistribution: 'equal' | 'custom';
   questionWeights?: Record<string, number>;
+  restrictBrowserDuringTest: boolean;
 }
 
 export interface TestSchedule {

@@ -44,6 +44,7 @@ interface TestData {
     passPercentage?: number;
     scoreDistribution?: 'equal' | 'custom';
     questionWeights?: Record<string, number>;
+    restrictBrowserDuringTest?: boolean;
   };
   schedule?: { startAt: string; endAt: string } | null;
   testQuestions: TestQuestion[];
@@ -90,6 +91,7 @@ const defaultConfig: TestData['config'] = {
   passPercentage: 40,
   scoreDistribution: 'equal',
   questionWeights: {},
+  restrictBrowserDuringTest: false,
 };
 
 function clampNumberInput(raw: string, min: number, max: number, fallback: number): number {
@@ -609,6 +611,7 @@ export default function TestDetail() {
             ['partialScoring', 'Partial Scoring'],
             ['proctoringEnabled', 'Proctoring'],
             ['aiFeedbackEnabled', 'AI Feedback'],
+            ['restrictBrowserDuringTest', 'Restrict Browser During Test'],
           ] as const).map(([key, label]) => (
             <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
               <input type="checkbox" checked={Boolean(config[key as keyof typeof config])} onChange={(e) => setConfig({ ...config, [key]: e.target.checked })} />

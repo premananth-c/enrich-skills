@@ -7,6 +7,7 @@ import InviteSignup from './pages/InviteSignup';
 import Dashboard from './pages/Dashboard';
 import MyTests from './pages/MyTests';
 import TestAttempt from './pages/TestAttempt';
+import CodingCompiler from './pages/CodingCompiler';
 import TestResult from './pages/TestResult';
 import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
@@ -39,6 +40,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="tests" element={<MyTests />} />
         <Route path="attempt/:attemptId" element={<TestAttempt />} />
+        <Route path="attempt/:attemptId/compiler" element={<CodingCompiler />} />
         <Route path="result/:attemptId" element={<TestResult />} />
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetail />} />

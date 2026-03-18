@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { submitCodeSchema, submitMcqSchema } from '@enrich-skills/shared';
+import { submitCodeSchema, submitMcqSchema, runCodeSchema } from '@enrich-skills/shared';
 import { requireTenant, authenticate } from '../lib/tenant.js';
+import { judgeQueue } from '../lib/judgeQueue.js';
 
 type AttemptTestConfig = {
   attemptLimit?: number;
@@ -298,6 +299,81 @@ export async function attemptRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post('/:id/run-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const user = request.user as { sub: string };
+    const parsed = runCodeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    const { questionId, code, language } = parsed.data;
+
+    const attempt = await prisma.attempt.findFirst({
+      where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
+      include: { submissions: true },
+    });
+    if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
+
+    const submission = attempt.submissions.find((s) => s.questionId === questionId);
+    if (!submission) return reply.status(404).send({ error: 'Question not in this attempt' });
+
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: { testCases: { where: { isPublic: true } } },
+    });
+    if (!question || question.type !== 'coding') {
+      return reply.status(400).send({ error: 'Not a coding question' });
+    }
+
+    if (question.testCases.length === 0) {
+      return reply.send({ results: [], message: 'No sample test cases available' });
+    }
+
+    const content = question.content as { timeLimitMs?: number; memoryLimitMb?: number };
+    const timeLimitMs = content.timeLimitMs ?? 5000;
+    const memoryLimitMb = content.memoryLimitMb ?? 256;
+    const judgeUrl = process.env.JUDGE_URL || 'http://localhost:4000';
+
+    const results = [];
+    for (const tc of question.testCases) {
+      try {
+        const res = await fetch(`${judgeUrl}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language, input: tc.input, timeLimitMs, memoryLimitMb }),
+        });
+        const data = await res.json() as {
+          stdout: string; stderr: string; exitCode: number;
+          executionTimeMs: number; timedOut: boolean;
+        };
+        const actual = data.stdout.replace(/\r\n/g, '\n').trim();
+        const expected = tc.expectedOutput.replace(/\r\n/g, '\n').trim();
+        results.push({
+          testCaseId: tc.id,
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: actual,
+          passed: data.exitCode === 0 && !data.timedOut && actual === expected,
+          stderr: data.stderr?.slice(0, 500) || '',
+          executionTimeMs: data.executionTimeMs,
+          timedOut: data.timedOut,
+        });
+      } catch (err) {
+        results.push({
+          testCaseId: tc.id,
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: '',
+          passed: false,
+          stderr: err instanceof Error ? err.message : 'Judge service unavailable',
+          executionTimeMs: 0,
+          timedOut: false,
+        });
+      }
+    }
+
+    return reply.send({ results });
+  });
+
   app.post('/:id/submit-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
     const parsed = submitCodeSchema.safeParse(request.body);
@@ -320,7 +396,54 @@ export async function attemptRoutes(app: FastifyInstance) {
       data: { code, language, status: 'pending' },
     });
 
+    await judgeQueue.add('evaluate', {
+      submissionId: submission.id,
+      attemptId: attempt.id,
+      questionId,
+      code,
+      language,
+    });
+
     return reply.send({ message: 'Submitted. Code will be evaluated.', status: 'pending' });
+  });
+
+  app.get('/:id/submission-status/:questionId', async (
+    request: FastifyRequest<{ Params: { id: string; questionId: string } }>,
+    reply: FastifyReply
+  ) => {
+    const user = request.user as { sub: string };
+    const submission = await prisma.submission.findFirst({
+      where: {
+        attemptId: request.params.id,
+        questionId: request.params.questionId,
+        attempt: { userId: user.sub },
+      },
+      include: {
+        testCaseResults: {
+          include: { testCase: { select: { isPublic: true, input: true, expectedOutput: true, weight: true } } },
+        },
+      },
+    });
+    if (!submission) return reply.status(404).send({ error: 'Submission not found' });
+
+    return reply.send({
+      status: submission.status,
+      score: submission.score,
+      output: submission.output,
+      errorMessage: submission.errorMessage,
+      executionDetails: submission.executionDetails,
+      testCaseResults: submission.testCaseResults.map((tcr) => ({
+        testCaseId: tcr.testCaseId,
+        passed: tcr.passed,
+        actualOutput: tcr.testCase.isPublic ? tcr.actualOutput : undefined,
+        executionTimeMs: tcr.executionTimeMs,
+        timedOut: tcr.timedOut,
+        isPublic: tcr.testCase.isPublic,
+        input: tcr.testCase.isPublic ? tcr.testCase.input : undefined,
+        expectedOutput: tcr.testCase.isPublic ? tcr.testCase.expectedOutput : undefined,
+        weight: tcr.testCase.weight,
+      })),
+    });
   });
 
   app.post('/:id/submit-mcq', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {

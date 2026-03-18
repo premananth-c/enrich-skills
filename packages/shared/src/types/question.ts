@@ -17,6 +17,9 @@ export interface QuestionContent {
   description: string;
   examples?: { input: string; output: string }[];
   constraints?: string[];
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
+  supportedLanguages?: string[];
   // MCQ specific
   options?: { id: string; text: string; isCorrect: boolean }[];
   explanation?: string;

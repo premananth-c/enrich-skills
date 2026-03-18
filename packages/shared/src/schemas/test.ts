@@ -20,6 +20,7 @@ export const testConfigSchema = z.object({
   passPercentage: z.number().min(0).max(100).default(40),
   scoreDistribution: z.enum(['equal', 'custom']).default('equal'),
   questionWeights: z.record(z.string(), z.number().min(0)).optional(),
+  restrictBrowserDuringTest: z.boolean().default(false),
 });
 
 export const testScheduleSchema = z.object({
