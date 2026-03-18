@@ -1,5 +1,6 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import { useSidebar } from '../context/SidebarContext';
 import { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 
@@ -13,6 +14,7 @@ const NAV_ITEMS = [
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { customSidebar } = useSidebar();
   const navigate = useNavigate();
   const [unreadCount, setUnreadCount] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -99,31 +101,37 @@ export default function Layout() {
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </div>
 
-        <nav style={{ flex: 1, padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} to={item.to} end={item.to === '/'} style={({ isActive }) => navLinkStyle(isActive)}>
-              <span style={{ fontSize: '1.1rem', width: 20, textAlign: 'center' }}>{item.icon}</span>
-              <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
-              {item.to === '/notifications' && unreadCount > 0 && (
-                <span
-                  style={{
-                    marginLeft: 'auto',
-                    background: '#ef4444',
-                    color: 'white',
-                    fontSize: '0.7rem',
-                    fontWeight: 700,
-                    padding: '0.15rem 0.5rem',
-                    borderRadius: '99px',
-                    minWidth: 20,
-                    textAlign: 'center',
-                  }}
-                >
-                  {unreadCount > 99 ? '99+' : unreadCount}
-                </span>
-              )}
-            </NavLink>
-          ))}
-        </nav>
+        {customSidebar ? (
+          <div style={{ flex: 1, padding: '0.75rem', overflow: 'auto' }}>
+            {customSidebar}
+          </div>
+        ) : (
+          <nav style={{ flex: 1, padding: '0.75rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+            {NAV_ITEMS.map((item) => (
+              <NavLink key={item.to} to={item.to} end={item.to === '/'} style={({ isActive }) => navLinkStyle(isActive)}>
+                <span style={{ fontSize: '1.1rem', width: 20, textAlign: 'center' }}>{item.icon}</span>
+                <span style={{ whiteSpace: 'nowrap' }}>{item.label}</span>
+                {item.to === '/notifications' && unreadCount > 0 && (
+                  <span
+                    style={{
+                      marginLeft: 'auto',
+                      background: '#ef4444',
+                      color: 'white',
+                      fontSize: '0.7rem',
+                      fontWeight: 700,
+                      padding: '0.15rem 0.5rem',
+                      borderRadius: '99px',
+                      minWidth: 20,
+                      textAlign: 'center',
+                    }}
+                  >
+                    {unreadCount > 99 ? '99+' : unreadCount}
+                  </span>
+                )}
+              </NavLink>
+            ))}
+          </nav>
+        )}
 
         <div
           style={{
