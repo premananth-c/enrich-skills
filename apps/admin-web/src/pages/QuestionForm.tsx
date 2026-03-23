@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
+import { CODING_LANGUAGE_IDS, CODING_LANGUAGE_LABELS } from '../lib/codingLanguages';
 import { api } from '../lib/api';
 
 interface McqOption {
@@ -8,11 +9,14 @@ interface McqOption {
   isCorrect: boolean;
 }
 
+type TestCaseMatchMode = 'exact' | 'json-orderless';
+
 interface TestCaseEntry {
   input: string;
   expectedOutput: string;
   isPublic: boolean;
   weight: number;
+  outputMatchMode: TestCaseMatchMode;
 }
 
 interface QuestionData {
@@ -23,13 +27,14 @@ interface QuestionData {
   content: {
     title: string;
     description?: string;
+    codingLanguage?: string;
     examples?: { input: string; output: string }[];
     constraints?: string[];
     options?: McqOption[];
     explanation?: string;
     defaultWeight?: number;
   };
-  testCases?: TestCaseEntry[];
+  testCases?: (TestCaseEntry & { outputMatchMode?: string })[];
 }
 
 function buildQuestionSnapshot(input: {
@@ -44,6 +49,7 @@ function buildQuestionSnapshot(input: {
   constraints: string;
   testCases: TestCaseEntry[];
   defaultWeight: number | '';
+  codingLanguage?: string;
 }) {
   return JSON.stringify({
     type: input.type,
@@ -57,6 +63,7 @@ function buildQuestionSnapshot(input: {
     constraints: input.constraints,
     testCases: input.testCases,
     defaultWeight: input.defaultWeight === '' ? undefined : input.defaultWeight,
+    ...(input.type === 'coding' ? { codingLanguage: input.codingLanguage ?? '' } : {}),
   });
 }
 
@@ -85,13 +92,28 @@ export default function QuestionForm() {
   const [examples, setExamples] = useState<{ input: string; output: string }[]>([{ input: '', output: '' }]);
   const [constraints, setConstraints] = useState('');
   const [testCases, setTestCases] = useState<TestCaseEntry[]>([
-    { input: '', expectedOutput: '', isPublic: true, weight: 1 },
+    { input: '', expectedOutput: '', isPublic: true, weight: 1, outputMatchMode: 'exact' },
   ]);
+  const [codingLanguage, setCodingLanguage] = useState('typescript');
+  const [linkedTest, setLinkedTest] = useState<{ type: string; codingLanguage?: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(isEdit);
   const [error, setError] = useState('');
   const [initialSnapshot, setInitialSnapshot] = useState('');
+
+  useEffect(() => {
+    if (!testId || id) return;
+    api<{ type: string; config: { codingLanguage?: string } }>(`/tests/${testId}`)
+      .then((t) => {
+        setLinkedTest({ type: t.type, codingLanguage: t.config.codingLanguage });
+        if (t.type === 'coding' && t.config.codingLanguage) {
+          setType('coding');
+          setCodingLanguage(t.config.codingLanguage);
+        }
+      })
+      .catch(() => setLinkedTest(null));
+  }, [testId, id]);
 
   useEffect(() => {
     if (!id) return;
@@ -109,7 +131,16 @@ export default function QuestionForm() {
         } else {
           setExamples(q.content.examples || [{ input: '', output: '' }]);
           setConstraints((q.content.constraints || []).join('\n'));
-          setTestCases(q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1 }]);
+          setTestCases(
+            (q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1, outputMatchMode: 'exact' as const }]).map((tc) => ({
+              input: tc.input,
+              expectedOutput: tc.expectedOutput,
+              isPublic: tc.isPublic,
+              weight: tc.weight,
+              outputMatchMode: 'outputMatchMode' in tc && tc.outputMatchMode === 'json-orderless' ? 'json-orderless' : 'exact',
+            }))
+          );
+          setCodingLanguage(q.content.codingLanguage ?? 'python');
         }
         setInitialSnapshot(
           buildQuestionSnapshot({
@@ -122,8 +153,15 @@ export default function QuestionForm() {
             options: q.content.options || [{ text: '', isCorrect: true }, { text: '', isCorrect: false }],
             examples: q.content.examples || [{ input: '', output: '' }],
             constraints: (q.content.constraints || []).join('\n'),
-            testCases: q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1 }],
+            testCases: (q.testCases || [{ input: '', expectedOutput: '', isPublic: true, weight: 1, outputMatchMode: 'exact' as const }]).map((tc) => ({
+              input: tc.input,
+              expectedOutput: tc.expectedOutput,
+              isPublic: tc.isPublic,
+              weight: tc.weight,
+              outputMatchMode: 'outputMatchMode' in tc && tc.outputMatchMode === 'json-orderless' ? 'json-orderless' : 'exact',
+            })),
             defaultWeight: typeof q.content.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : 1,
+            ...(q.type === 'coding' ? { codingLanguage: q.content.codingLanguage ?? 'python' } : {}),
           })
         );
       })
@@ -143,7 +181,8 @@ export default function QuestionForm() {
     setOptions(options.map((o, idx) => ({ ...o, isCorrect: idx === i })));
   };
 
-  const addTestCase = () => setTestCases([...testCases, { input: '', expectedOutput: '', isPublic: false, weight: 1 }]);
+  const addTestCase = () =>
+    setTestCases([...testCases, { input: '', expectedOutput: '', isPublic: false, weight: 1, outputMatchMode: 'exact' }]);
   const removeTestCase = (i: number) => {
     if (testCases.length <= 1) return;
     setTestCases(testCases.filter((_, idx) => idx !== i));
@@ -190,6 +229,7 @@ export default function QuestionForm() {
           description,
           difficulty,
           tags: tagArr,
+          codingLanguage,
           examples: examples.filter((ex) => ex.input || ex.output),
           constraints: constraints.split('\n').filter(Boolean),
           testCases,
@@ -224,12 +264,29 @@ export default function QuestionForm() {
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
   const textareaStyle: React.CSSProperties = { ...inputStyle, minHeight: 80, resize: 'vertical' as const };
-  const currentSnapshot = buildQuestionSnapshot({ type, title, description, difficulty, tags, explanation, options, examples, constraints, testCases, defaultWeight });
+  const currentSnapshot = buildQuestionSnapshot({
+    type,
+    title,
+    description,
+    difficulty,
+    tags,
+    explanation,
+    options,
+    examples,
+    constraints,
+    testCases,
+    defaultWeight,
+    ...(type === 'coding' ? { codingLanguage } : {}),
+  });
   const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
   const hasCorrect = options.some((o) => o.isCorrect);
   const hasRequiredForCreate = type === 'mcq'
     ? title.trim().length >= 2 && options.length >= 2 && options.every((o) => o.text.trim().length > 0) && hasCorrect
-    : title.trim().length >= 2 && description.trim().length >= 10 && testCases.length > 0 && testCases.every((tc) => tc.input.trim().length > 0 && tc.expectedOutput.trim().length > 0);
+    : title.trim().length >= 2 && description.trim().length >= 10 && testCases.length > 0 && testCases.every((tc) => tc.input.trim().length > 0 && tc.expectedOutput.trim().length > 0) && Boolean(codingLanguage);
+  const lockTypeForLinkedCodingTest = Boolean(testId && !isEdit && linkedTest?.type === 'coding');
+  const lockCodingLanguageForLinkedTest = Boolean(
+    testId && !isEdit && linkedTest?.type === 'coding' && linkedTest.codingLanguage
+  );
   const canSubmit = !saving && hasRequiredForCreate && isDirty;
 
   return (
@@ -246,7 +303,12 @@ export default function QuestionForm() {
           {!isEdit && (
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Type</label>
-              <select value={type} onChange={(e) => setType(e.target.value as 'mcq' | 'coding')} style={inputStyle}>
+              <select
+                value={type}
+                onChange={(e) => setType(e.target.value as 'mcq' | 'coding')}
+                disabled={lockTypeForLinkedCodingTest}
+                style={inputStyle}
+              >
                 <option value="mcq">MCQ</option>
                 <option value="coding">Coding</option>
               </select>
@@ -343,6 +405,27 @@ export default function QuestionForm() {
         {/* Coding Section */}
         {type === 'coding' && (
           <>
+            <div>
+              <label style={labelStyle}>Coding language</label>
+              <select
+                value={codingLanguage}
+                onChange={(e) => setCodingLanguage(e.target.value)}
+                disabled={lockCodingLanguageForLinkedTest}
+                required
+                style={inputStyle}
+              >
+                {CODING_LANGUAGE_IDS.map((lid) => (
+                  <option key={lid} value={lid}>
+                    {CODING_LANGUAGE_LABELS[lid]}
+                  </option>
+                ))}
+              </select>
+              {lockCodingLanguageForLinkedTest && (
+                <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                  Matches this test&apos;s coding language.
+                </p>
+              )}
+            </div>
             <fieldset style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
               <legend style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', padding: '0 0.5rem' }}>Examples</legend>
               {examples.map((ex, i) => (
@@ -372,15 +455,30 @@ export default function QuestionForm() {
 
             <fieldset style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
               <legend style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', padding: '0 0.5rem' }}>Test Cases (at least 1 required)</legend>
+              <p style={{ margin: '0 0 0.75rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.45 }}>
+                Use <strong>JSON (order ignored)</strong> for problems like grouped anagrams: expected output must be valid JSON, and tell students to print{' '}
+                <code style={{ fontSize: '0.78rem' }}>JSON.stringify(...)</code> so stdout parses as JSON (not Node&apos;s default array formatting).
+              </p>
               {testCases.map((tc, i) => (
-                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 6 }}>
-                  <div style={{ flex: 1 }}>
+                <div key={i} style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end', marginBottom: '0.75rem', padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 6, flexWrap: 'wrap' }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
                     <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Input</label>
                     <textarea value={tc.input} onChange={(e) => updateTestCase(i, { input: e.target.value })} required style={{ ...inputStyle, minHeight: 50 }} />
                   </div>
-                  <div style={{ flex: 1 }}>
+                  <div style={{ flex: 1, minWidth: 140 }}>
                     <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Expected Output</label>
                     <textarea value={tc.expectedOutput} onChange={(e) => updateTestCase(i, { expectedOutput: e.target.value })} required style={{ ...inputStyle, minHeight: 50 }} />
+                  </div>
+                  <div style={{ minWidth: 160 }}>
+                    <label style={{ ...labelStyle, fontSize: '0.8rem' }}>Match</label>
+                    <select
+                      value={tc.outputMatchMode}
+                      onChange={(e) => updateTestCase(i, { outputMatchMode: e.target.value as TestCaseMatchMode })}
+                      style={inputStyle}
+                    >
+                      <option value="exact">Exact text</option>
+                      <option value="json-orderless">JSON (order ignored)</option>
+                    </select>
                   </div>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem', minWidth: 80 }}>
                     <label style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', color: 'var(--color-text-muted)', fontSize: '0.8rem', cursor: 'pointer' }}>

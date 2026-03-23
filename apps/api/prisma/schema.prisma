@@ -119,6 +119,8 @@ model TestCase {
   expectedOutput String
   isPublic      Boolean  @default(false)
   weight        Int      @default(1)
+  /// exact | json-orderless — see @enrich-skills/shared outputsMatch
+  outputMatchMode String  @default("exact")
   createdAt     DateTime @default(now())
 
   question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)

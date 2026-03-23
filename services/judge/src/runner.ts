@@ -11,11 +11,15 @@ export interface RunResult {
   timedOut: boolean;
 }
 
+/** When 'stdin', test input is piped to the process. When 'append', test input is appended as code (so it runs after the user's code). */
+const INPUT_MODES = ['stdin', 'append'] as const;
+
 const LANGUAGE_CONFIG: Record<string, {
   image: string;
   buildCmd?: (filename: string) => string[];
   runCmd: (filename: string) => string[];
   filename: string;
+  inputMode?: (typeof INPUT_MODES)[number];
 }> = {
   python: {
     image: 'python:3.12-slim',
@@ -23,14 +27,29 @@ const LANGUAGE_CONFIG: Record<string, {
     filename: 'solution.py',
   },
   javascript: {
-    image: 'node:20-slim',
+    image: 'node:22-bookworm-slim',
     runCmd: (f) => ['node', f],
     filename: 'solution.js',
+    inputMode: 'append',
   },
   typescript: {
-    image: 'node:20-slim',
+    image: 'node:22-bookworm-slim',
     runCmd: (f) => ['npx', '--yes', 'tsx', f],
     filename: 'solution.ts',
+    inputMode: 'append',
+  },
+  /** TSX for algorithmic / component-style tasks (same runtime as TypeScript). */
+  react: {
+    image: 'node:22-bookworm-slim',
+    runCmd: (f) => ['npx', '--yes', 'tsx', f],
+    filename: 'solution.tsx',
+    inputMode: 'append',
+  },
+  angular: {
+    image: 'node:22-bookworm-slim',
+    runCmd: (f) => ['npx', '--yes', 'tsx', f],
+    filename: 'solution.ts',
+    inputMode: 'append',
   },
   java: {
     image: 'eclipse-temurin:21-jdk',
@@ -85,13 +104,18 @@ export async function runCode(
   }
 
   const filePath = `/tmp/${config.filename}`;
+  const inputMode = config.inputMode ?? 'stdin';
+  const effectiveCode = inputMode === 'append' ? code + '\n' + input : code;
+  const pipeInput = inputMode === 'stdin';
 
   const buildStep = config.buildCmd
-    ? `echo '${escapeShell(code)}' > ${filePath} && ${config.buildCmd(filePath).join(' ')} && `
-    : `echo '${escapeShell(code)}' > ${filePath} && `;
+    ? `echo '${escapeShell(effectiveCode)}' > ${filePath} && ${config.buildCmd(filePath).join(' ')} && `
+    : `echo '${escapeShell(effectiveCode)}' > ${filePath} && `;
 
   const runStep = config.runCmd(filePath).join(' ');
-  const fullCmd = ['sh', '-c', `${buildStep}echo '${escapeShell(input)}' | ${runStep}`];
+  const fullCmd = pipeInput
+    ? ['sh', '-c', `${buildStep}echo '${escapeShell(input)}' | ${runStep}`]
+    : ['sh', '-c', `${buildStep}${runStep}`];
 
   let container: Docker.Container | null = null;
   let timedOut = false;

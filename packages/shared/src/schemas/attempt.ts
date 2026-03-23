@@ -1,6 +1,7 @@
 import { z } from 'zod';
+import { CODING_LANGUAGE_IDS } from '../lib/codingLanguages.js';
 
-export const supportedLanguages = ['python', 'java', 'cpp', 'c', 'javascript', 'typescript'] as const;
+export const supportedLanguages = CODING_LANGUAGE_IDS;
 
 export const submitCodeSchema = z.object({
   questionId: z.string().uuid(),

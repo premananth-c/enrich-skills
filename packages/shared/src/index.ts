@@ -20,3 +20,5 @@ export * from './schemas/course.js';
 export * from './schemas/schedule.js';
 export * from './schemas/enquiry.js';
 export * from './lib/sanitize.js';
+export * from './lib/codingLanguages.js';
+export * from './lib/outputCompare.js';

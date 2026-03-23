@@ -1,5 +1,6 @@
 import { Worker, Job } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
+import { outputsMatch, isOutputMatchMode } from '@enrich-skills/shared';
 import { runCode } from './runner.js';
 
 const prisma = new PrismaClient();
@@ -71,8 +72,12 @@ async function processSubmission(job: Job<JudgeJobData>) {
     const result = await runCode(code, language, tc.input, timeLimitMs, memoryLimitMb);
 
     const actual = normalizeOutput(result.stdout);
-    const expected = normalizeOutput(tc.expectedOutput);
-    const passed = result.exitCode === 0 && !result.timedOut && actual === expected;
+    const modeRaw = tc.outputMatchMode ?? 'exact';
+    const mode = isOutputMatchMode(modeRaw) ? modeRaw : 'exact';
+    const passed =
+      result.exitCode === 0 &&
+      !result.timedOut &&
+      outputsMatch(actual, tc.expectedOutput, mode);
 
     if (passed) {
       totalWeightPassed += tc.weight;

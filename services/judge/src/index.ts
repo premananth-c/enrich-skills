@@ -6,7 +6,7 @@
  *
  * Docker images used:
  * - python:3.12-slim
- * - node:20-slim
+ * - node:22-bookworm-slim (JavaScript, TypeScript/tsx, React TSX, Angular-style TS)
  * - eclipse-temurin:21-jdk
  * - gcc:13  (C / C++)
  */

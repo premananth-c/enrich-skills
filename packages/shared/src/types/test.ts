@@ -27,6 +27,8 @@ export interface TestConfig {
   scoreDistribution: 'equal' | 'custom';
   questionWeights?: Record<string, number>;
   restrictBrowserDuringTest: boolean;
+  /** When set, attempt includes only coding questions with this language; students cannot change language. */
+  codingLanguage?: string;
 }
 
 export interface TestSchedule {

@@ -52,6 +52,7 @@ export async function questionRoutes(app: FastifyInstance) {
         content: {
           title: data.title,
           description: data.description,
+          codingLanguage: data.codingLanguage,
           examples: data.examples,
           constraints: data.constraints,
           ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
@@ -67,6 +68,7 @@ export async function questionRoutes(app: FastifyInstance) {
             expectedOutput: tc.expectedOutput,
             isPublic: tc.isPublic,
             weight: tc.weight,
+            outputMatchMode: tc.outputMatchMode ?? 'exact',
           })),
         },
       },
@@ -151,9 +153,13 @@ export async function questionRoutes(app: FastifyInstance) {
             ...currentContent,
             ...(data.title && { title: data.title }),
             ...(data.description && { description: data.description }),
+            ...(data.codingLanguage !== undefined && { codingLanguage: data.codingLanguage }),
             ...(data.examples !== undefined && { examples: data.examples }),
             ...(data.constraints !== undefined && { constraints: data.constraints }),
             ...(data.defaultWeight !== undefined && { defaultWeight: data.defaultWeight }),
+            ...(data.timeLimitMs !== undefined && { timeLimitMs: data.timeLimitMs }),
+            ...(data.memoryLimitMb !== undefined && { memoryLimitMb: data.memoryLimitMb }),
+            ...(data.supportedLanguages !== undefined && { supportedLanguages: data.supportedLanguages }),
           },
           ...(data.testCases && {
             testCases: {
@@ -163,6 +169,7 @@ export async function questionRoutes(app: FastifyInstance) {
                 expectedOutput: tc.expectedOutput,
                 isPublic: tc.isPublic,
                 weight: tc.weight,
+                outputMatchMode: tc.outputMatchMode ?? 'exact',
               })),
             },
           }),

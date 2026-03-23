@@ -5,6 +5,17 @@ import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
 import BrowserRestrictionOverlay from '../components/BrowserRestrictionOverlay';
 import { useBrowserRestriction } from '../hooks/useBrowserRestriction';
+import type { CodingLanguageId } from '../lib/codingLanguages';
+import {
+  CODING_LANGUAGE_IDS,
+  CODING_LANGUAGE_LABELS,
+  DEFAULT_CODE_TEMPLATES,
+  monacoLanguageForCodingId,
+} from '../lib/codingLanguagesUi';
+
+function defaultCodeForLang(lang: string): string {
+  return DEFAULT_CODE_TEMPLATES[lang as CodingLanguageId] ?? DEFAULT_CODE_TEMPLATES.python;
+}
 
 interface Question {
   id: string;
@@ -49,21 +60,13 @@ interface AttemptData {
       durationMinutes: number;
       showResultsImmediately: boolean;
       restrictBrowserDuringTest?: boolean;
+      codingLanguage?: string;
     };
     testQuestions: { question: Question; order: number }[];
   };
   status: string;
   submissions: Submission[];
 }
-
-const DEFAULT_CODE: Record<string, string> = {
-  python: '# Write your solution here\nimport sys\n\ndef solve():\n    pass\n\nsolve()\n',
-  javascript: '// Write your solution here\nfunction solve() {\n    //\n}\n\nsolve();\n',
-  typescript: '// Write your solution here\nfunction solve(): void {\n    //\n}\n\nsolve();\n',
-  java: '// Write your solution here\nimport java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        //\n    }\n}\n',
-  cpp: '// Write your solution here\n#include <iostream>\nusing namespace std;\n\nint main() {\n    //\n    return 0;\n}\n',
-  c: '// Write your solution here\n#include <stdio.h>\n\nint main() {\n    //\n    return 0;\n}\n',
-};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--color-text-muted)',
@@ -109,9 +112,14 @@ export default function TestAttempt() {
       const codes: Record<string, string> = {};
       const langs: Record<string, string> = {};
       const selections: Record<string, string> = {};
+      const locked = data.test.config?.codingLanguage;
+      const qById = new Map(data.test.testQuestions.map((tq) => [tq.question.id, tq.question]));
       data.submissions.forEach((sub) => {
-        codes[sub.questionId] = sub.code || DEFAULT_CODE[sub.language || 'python'] || DEFAULT_CODE.python;
-        langs[sub.questionId] = sub.language || 'python';
+        const q = qById.get(sub.questionId);
+        const lang =
+          q?.type === 'coding' && locked ? locked : (sub.language || 'python');
+        codes[sub.questionId] = sub.code || defaultCodeForLang(lang);
+        langs[sub.questionId] = lang;
         if (sub.selectedOptionId) selections[sub.questionId] = sub.selectedOptionId;
       });
       setCodeMap(codes);
@@ -208,36 +216,6 @@ export default function TestAttempt() {
   const current = sorted[currentIdx];
   const submission = attempt.submissions.find((s) => s.questionId === current?.question.id);
   const qId = current?.question.id || '';
-  const currentCode = codeMap[qId] || DEFAULT_CODE.python;
-  const currentLang = langMap[qId] || 'python';
-  const savedCode = submission?.code || DEFAULT_CODE[submission?.language || 'python'] || DEFAULT_CODE.python;
-  const savedLang = submission?.language || 'python';
-
-  const handleCodeSubmit = async () => {
-    if (!current || current.question.type !== 'coding') return;
-    if (!attemptId) return;
-    setSubmitting(true);
-    try {
-      const res = await api<{ status: string }>(`/attempts/${attemptId}/submit-code`, {
-        method: 'POST',
-        body: JSON.stringify({ questionId: qId, code: currentCode, language: currentLang }),
-      });
-      setOutput(`Code submitted. Status: ${res.status}`);
-      setAttempt((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          submissions: prev.submissions.map((s) =>
-            s.questionId === qId ? { ...s, code: currentCode, language: currentLang, status: 'pending' } : s
-          ),
-        };
-      });
-    } catch (e) {
-      setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleMcqSelect = (optionId: string) => {
     if (submission?.selectedOptionId) return;
@@ -275,6 +253,14 @@ export default function TestAttempt() {
   const content = current?.question.content;
   const isCoding = current?.question.type === 'coding';
   const isMcq = current?.question.type === 'mcq';
+  const lockedLang = attempt.test.config?.codingLanguage;
+  const effectiveLangForQ =
+    isCoding && lockedLang ? lockedLang : (langMap[qId] || 'python');
+  const currentCode = codeMap[qId] || defaultCodeForLang(effectiveLangForQ);
+  const currentLang = effectiveLangForQ;
+  const savedLang =
+    isCoding && lockedLang ? lockedLang : (submission?.language || 'python');
+  const savedCode = submission?.code || defaultCodeForLang(savedLang);
   const showImmediate = attempt.test.config.showResultsImmediately;
   const isReview = reviewMode || attempt.status !== 'in_progress';
   const hasAnyResponse = attempt.submissions.some((sub) => {
@@ -283,6 +269,32 @@ export default function TestAttempt() {
     return false;
   });
   const isCodeDirty = currentCode !== savedCode || currentLang !== savedLang;
+
+  const handleCodeSubmit = async () => {
+    if (!current || current.question.type !== 'coding') return;
+    if (!attemptId) return;
+    setSubmitting(true);
+    try {
+      const res = await api<{ status: string }>(`/attempts/${attemptId}/submit-code`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId: qId, code: currentCode, language: currentLang }),
+      });
+      setOutput(`Code submitted. Status: ${res.status}`);
+      setAttempt((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          submissions: prev.submissions.map((s) =>
+            s.questionId === qId ? { ...s, code: currentCode, language: currentLang, status: 'pending' } : s
+          ),
+        };
+      });
+    } catch (e) {
+      setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -617,25 +629,28 @@ export default function TestAttempt() {
             <>
               <div style={{ flex: 1, minHeight: 200, display: 'flex', flexDirection: 'column' }}>
                 {!isReview && <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <select
-                    value={currentLang}
-                    onChange={(e) => setLangMap((prev) => ({ ...prev, [qId]: e.target.value }))}
-                    style={{
-                      padding: '0.35rem 0.75rem',
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '6px',
-                      color: 'var(--color-text)',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <option value="python">Python</option>
-                    <option value="javascript">JavaScript</option>
-                    <option value="typescript">TypeScript</option>
-                    <option value="java">Java</option>
-                    <option value="cpp">C++</option>
-                    <option value="c">C</option>
-                  </select>
+                  {lockedLang ? (
+                    <span style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', alignSelf: 'center' }}>
+                      {CODING_LANGUAGE_LABELS[lockedLang as CodingLanguageId] ?? lockedLang}
+                    </span>
+                  ) : (
+                    <select
+                      value={currentLang}
+                      onChange={(e) => setLangMap((prev) => ({ ...prev, [qId]: e.target.value }))}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '6px',
+                        color: 'var(--color-text)',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      {CODING_LANGUAGE_IDS.map((id) => (
+                        <option key={id} value={id}>{CODING_LANGUAGE_LABELS[id]}</option>
+                      ))}
+                    </select>
+                  )}
                   <button
                     onClick={async () => {
                       if (!attemptId || running) return;
@@ -690,7 +705,7 @@ export default function TestAttempt() {
                 <div style={{ flex: 1, border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
-                    language={currentLang === 'cpp' || currentLang === 'c' ? 'cpp' : currentLang}
+                    language={monacoLanguageForCodingId(currentLang)}
                     value={currentCode}
                     onChange={(v) => setCodeMap((prev) => ({ ...prev, [qId]: v ?? '' }))}
                     theme="vs-dark"

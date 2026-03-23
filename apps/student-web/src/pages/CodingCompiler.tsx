@@ -5,6 +5,17 @@ import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
 import BrowserRestrictionOverlay from '../components/BrowserRestrictionOverlay';
 import { useBrowserRestriction } from '../hooks/useBrowserRestriction';
+import type { CodingLanguageId } from '../lib/codingLanguages';
+import {
+  CODING_LANGUAGE_IDS,
+  CODING_LANGUAGE_LABELS,
+  DEFAULT_CODE_TEMPLATES,
+  monacoLanguageForCodingId,
+} from '../lib/codingLanguagesUi';
+
+function defaultCodeForLang(lang: string): string {
+  return DEFAULT_CODE_TEMPLATES[lang as CodingLanguageId] ?? DEFAULT_CODE_TEMPLATES.python;
+}
 
 interface Question {
   id: string;
@@ -36,6 +47,7 @@ interface AttemptData {
       durationMinutes: number;
       showResultsImmediately: boolean;
       restrictBrowserDuringTest?: boolean;
+      codingLanguage?: string;
     };
     testQuestions: { question: Question; order: number }[];
   };
@@ -53,15 +65,6 @@ interface RunResult {
   executionTimeMs: number;
   timedOut: boolean;
 }
-
-const DEFAULT_CODE: Record<string, string> = {
-  python: '# Write your solution here\nimport sys\n\ndef solve():\n    pass\n\nsolve()\n',
-  javascript: '// Write your solution here\nfunction solve() {\n    //\n}\n\nsolve();\n',
-  typescript: '// Write your solution here\nfunction solve(): void {\n    //\n}\n\nsolve();\n',
-  java: '// Write your solution here\nimport java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        //\n    }\n}\n',
-  cpp: '// Write your solution here\n#include <iostream>\nusing namespace std;\n\nint main() {\n    //\n    return 0;\n}\n',
-  c: '// Write your solution here\n#include <stdio.h>\n\nint main() {\n    //\n    return 0;\n}\n',
-};
 
 export default function CodingCompiler() {
   const { attemptId } = useParams();
@@ -101,8 +104,10 @@ export default function CodingCompiler() {
       const q = codingQuestions[idx >= 0 ? idx : 0];
       if (q) {
         const sub = data.submissions.find((s) => s.questionId === q.question.id);
-        setCode(sub?.code || DEFAULT_CODE[sub?.language || 'python'] || DEFAULT_CODE.python);
-        setLanguage(sub?.language || 'python');
+        const locked = data.test.config?.codingLanguage;
+        const lang = locked || sub?.language || 'python';
+        setCode(sub?.code || defaultCodeForLang(lang));
+        setLanguage(lang);
       }
     });
   }, [attemptId]);
@@ -119,12 +124,14 @@ export default function CodingCompiler() {
   useEffect(() => {
     if (!current || !attempt) return;
     const sub = attempt.submissions.find((s) => s.questionId === current.question.id);
-    setCode(sub?.code || DEFAULT_CODE[sub?.language || language] || DEFAULT_CODE.python);
-    setLanguage(sub?.language || language);
+    const locked = attempt.test.config?.codingLanguage;
+    const lang = locked || sub?.language || language;
+    setCode(sub?.code || defaultCodeForLang(lang));
+    setLanguage(lang);
     setRunResults(null);
     setOutput('');
     setSubmissionStatus(sub?.status || null);
-  }, [currentIdx, current?.question.id]);
+  }, [currentIdx, current?.question.id, attempt?.test.config?.codingLanguage]);
 
   const startPolling = useCallback((attemptId: string, questionId: string) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -311,24 +318,28 @@ export default function CodingCompiler() {
                 &raquo; Problem
               </button>
             )}
-            <select
-              value={language}
-              onChange={(e) => {
-                const newLang = e.target.value;
-                setLanguage(newLang);
-                if (!code || Object.values(DEFAULT_CODE).includes(code)) {
-                  setCode(DEFAULT_CODE[newLang] || DEFAULT_CODE.python);
-                }
-              }}
-              style={{ padding: '0.3rem 0.6rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '4px', color: 'var(--color-text)', fontSize: '0.82rem' }}
-            >
-              <option value="python">Python</option>
-              <option value="javascript">JavaScript</option>
-              <option value="typescript">TypeScript</option>
-              <option value="java">Java</option>
-              <option value="cpp">C++</option>
-              <option value="c">C</option>
-            </select>
+            {attempt.test.config?.codingLanguage ? (
+              <span style={{ padding: '0.3rem 0.6rem', fontSize: '0.82rem', color: 'var(--color-text-muted)' }}>
+                {CODING_LANGUAGE_LABELS[attempt.test.config.codingLanguage as CodingLanguageId] ?? attempt.test.config.codingLanguage}
+              </span>
+            ) : (
+              <select
+                value={language}
+                onChange={(e) => {
+                  const newLang = e.target.value;
+                  setLanguage(newLang);
+                  const templates = Object.values(DEFAULT_CODE_TEMPLATES);
+                  if (!code || templates.includes(code)) {
+                    setCode(defaultCodeForLang(newLang));
+                  }
+                }}
+                style={{ padding: '0.3rem 0.6rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: '4px', color: 'var(--color-text)', fontSize: '0.82rem' }}
+              >
+                {CODING_LANGUAGE_IDS.map((id) => (
+                  <option key={id} value={id}>{CODING_LANGUAGE_LABELS[id]}</option>
+                ))}
+              </select>
+            )}
             <button onClick={handleRun} disabled={running} style={{
               padding: '0.3rem 0.75rem', background: running ? '#f59e0b' : '#22c55e', color: 'white', border: 'none', borderRadius: '4px', fontSize: '0.82rem', fontWeight: 600, cursor: running ? 'not-allowed' : 'pointer', opacity: running ? 0.7 : 1,
             }}>
@@ -345,7 +356,7 @@ export default function CodingCompiler() {
           <div style={{ flex: 1, minHeight: 0 }}>
             <Editor
               height="100%"
-              language={language === 'cpp' || language === 'c' ? 'cpp' : language}
+              language={monacoLanguageForCodingId(language)}
               value={code}
               onChange={(v) => setCode(v ?? '')}
               theme="vs-dark"
