@@ -35,28 +35,30 @@ services:
       - STUDENT_WEB_URL=${STUDENT_WEB_URL:-https://student.rankership.com}
       - ADMIN_WEB_URL=${ADMIN_WEB_URL:-https://admin.rankership.com}
       - ALLOWED_STREAMING_DOMAINS=${ALLOWED_STREAMING_DOMAINS:-rankership.com,www.rankership.com,student.rankership.com,admin.rankership.com}
+      - JUDGE_URL=http://judge-worker:4000
       - SENTRY_DSN=${SENTRY_DSN:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
       - redis
+      - judge-worker
     restart: unless-stopped
 
-  # Judge worker (Phase 3 — coding tests). Uncomment when ready.
-  # judge-worker:
-  #   build:
-  #     context: .
-  #     dockerfile: services/judge/Dockerfile
-  #   environment:
-  #     - DATABASE_URL=postgresql://enrich:${DB_PASSWORD}@host.docker.internal:5432/enrich_skills
-  #     - REDIS_URL=redis://redis:6379
-  #   extra_hosts:
-  #     - "host.docker.internal:host-gateway"
-  #   volumes:
-  #     - /var/run/docker.sock:/var/run/docker.sock
-  #   depends_on:
-  #     - redis
-  #   restart: unless-stopped
+  judge-worker:
+    build:
+      context: .
+      dockerfile: services/judge/Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://enrich:${DB_PASSWORD}@host.docker.internal:5432/enrich_skills
+      - REDIS_URL=redis://redis:6379
+      - JUDGE_PORT=4000
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - redis
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
