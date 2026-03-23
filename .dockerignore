@@ -21,5 +21,6 @@ apps/student-web
 apps/admin-web
 apps/landing-web
 
-# Services not used in API build
-services
+# Exclude services except judge (needed by judge-worker build)
+services/*
+!services/judge
