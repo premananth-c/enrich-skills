@@ -29,4 +29,4 @@ COPY --from=build /app/packages/shared/package.json ./packages/shared/package.js
 COPY --from=build /app/packages/shared/node_modules ./packages/shared/node_modules
 COPY --from=build /app/node_modules ./node_modules
 EXPOSE 3000
-CMD ["node", "apps/api/dist/index.js"]
+CMD ["node", "--import", "./apps/api/dist/instrument.js", "apps/api/dist/index.js"]

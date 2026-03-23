@@ -1,3 +1,5 @@
+import './instrument.js';
+import * as Sentry from '@sentry/node';
 import Fastify from 'fastify';
 import cors from '@fastify/cors';
 import jwt from '@fastify/jwt';
@@ -79,6 +81,8 @@ async function main() {
   app.register(revisionRoutes, { prefix: '/api/v1/revisions' });
   app.register(enquiryRoutes, { prefix: '/api/v1/enquiries' });
   app.register(streamRoutes, { prefix: '/api/v1/stream' });
+
+  Sentry.setupFastifyErrorHandler(app);
 
   const port = parseInt(process.env.PORT || '3000', 10);
   await app.listen({ port, host: '0.0.0.0' });
