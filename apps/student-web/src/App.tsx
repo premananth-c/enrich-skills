@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { SidebarProvider } from './context/SidebarContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -7,6 +8,7 @@ import InviteSignup from './pages/InviteSignup';
 import Dashboard from './pages/Dashboard';
 import MyTests from './pages/MyTests';
 import TestAttempt from './pages/TestAttempt';
+import CodingCompiler from './pages/CodingCompiler';
 import TestResult from './pages/TestResult';
 import MyCourses from './pages/MyCourses';
 import CourseDetail from './pages/CourseDetail';
@@ -39,6 +41,7 @@ function AppRoutes() {
         <Route index element={<Dashboard />} />
         <Route path="tests" element={<MyTests />} />
         <Route path="attempt/:attemptId" element={<TestAttempt />} />
+        <Route path="attempt/:attemptId/compiler" element={<CodingCompiler />} />
         <Route path="result/:attemptId" element={<TestResult />} />
         <Route path="courses" element={<MyCourses />} />
         <Route path="courses/:courseId" element={<CourseDetail />} />
@@ -54,10 +57,10 @@ function AppRoutes() {
 export default function App() {
   return (
     <AuthProvider>
-      <>
+      <SidebarProvider>
         <AppRoutes />
         <ToastViewport />
-      </>
+      </SidebarProvider>
     </AuthProvider>
   );
 }

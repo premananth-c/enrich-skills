@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
+import { CODING_LANGUAGE_IDS, CODING_LANGUAGE_LABELS, type CodingLanguageId } from '../lib/codingLanguages';
 import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
 import { useAuth } from '../context/AuthContext';
@@ -7,7 +8,7 @@ import { useAuth } from '../context/AuthContext';
 interface QuestionItem {
   id: string;
   type: string;
-  content: { title: string };
+  content: { title: string; codingLanguage?: string };
   difficulty: string;
   tags: string[];
 }
@@ -44,6 +45,8 @@ interface TestData {
     passPercentage?: number;
     scoreDistribution?: 'equal' | 'custom';
     questionWeights?: Record<string, number>;
+    restrictBrowserDuringTest?: boolean;
+    codingLanguage?: string;
   };
   schedule?: { startAt: string; endAt: string } | null;
   testQuestions: TestQuestion[];
@@ -90,6 +93,7 @@ const defaultConfig: TestData['config'] = {
   passPercentage: 40,
   scoreDistribution: 'equal',
   questionWeights: {},
+  restrictBrowserDuringTest: false,
 };
 
 function clampNumberInput(raw: string, min: number, max: number, fallback: number): number {
@@ -226,8 +230,18 @@ export default function TestDetail() {
   useEffect(() => { loadTest(); }, [loadTest]);
 
   const openPool = async () => {
+    if (!test) return;
     const questions = await api<QuestionItem[]>('/questions');
-    setPool(questions);
+    const lang = test.config.codingLanguage;
+    const filtered =
+      test.type === 'coding' && lang
+        ? questions.filter((q) => {
+            if (q.type !== 'coding') return true;
+            const qLang = q.content.codingLanguage ?? 'python';
+            return qLang === lang;
+          })
+        : questions;
+    setPool(filtered);
     setSelectedPoolIds(new Set());
     setPoolOpen(true);
   };
@@ -364,7 +378,12 @@ export default function TestDetail() {
   const currentUpdateSnapshot = buildUpdateSnapshot({ title, type, status, config, scheduleEnabled, startAt, endAt });
   const isUpdateDirty = currentUpdateSnapshot !== initialUpdateSnapshot;
   const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
-  const canUpdateTest = !saving && title.trim().length >= 2 && hasRequiredSchedule && isUpdateDirty;
+  const canUpdateTest =
+    !saving &&
+    title.trim().length >= 2 &&
+    hasRequiredSchedule &&
+    isUpdateDirty &&
+    (type !== 'coding' || Boolean(config.codingLanguage));
   const canAssignToStudents = test.status === 'published';
   const isDraftOrArchived = test.status === 'draft' || test.status === 'archived';
 
@@ -509,7 +528,17 @@ export default function TestDetail() {
           </div>
           <div>
             <label style={labelStyle}>Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value as 'mcq' | 'coding')} style={inputStyle}>
+            <select
+              value={type}
+              onChange={(e) => {
+                const next = e.target.value as 'mcq' | 'coding';
+                setType(next);
+                if (next === 'coding' && !config.codingLanguage) {
+                  setConfig((c) => ({ ...c, codingLanguage: 'typescript' }));
+                }
+              }}
+              style={inputStyle}
+            >
               <option value="mcq">MCQ</option>
               <option value="coding">Coding</option>
             </select>
@@ -602,6 +631,26 @@ export default function TestDetail() {
             </select>
           </div>
         </div>
+        {type === 'coding' && (
+          <div style={{ marginBottom: '1rem' }}>
+            <label style={labelStyle}>Coding language</label>
+            <select
+              value={config.codingLanguage ?? 'typescript'}
+              onChange={(e) => setConfig((c) => ({ ...c, codingLanguage: e.target.value }))}
+              required
+              style={inputStyle}
+            >
+              {CODING_LANGUAGE_IDS.map((id) => (
+                <option key={id} value={id}>
+                  {CODING_LANGUAGE_LABELS[id]}
+                </option>
+              ))}
+            </select>
+            <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+              Question bank and new questions from this test use this language only.
+            </p>
+          </div>
+        )}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
           {([
             ['shuffleQuestions', 'Shuffle Questions'],
@@ -609,6 +658,7 @@ export default function TestDetail() {
             ['partialScoring', 'Partial Scoring'],
             ['proctoringEnabled', 'Proctoring'],
             ['aiFeedbackEnabled', 'AI Feedback'],
+            ['restrictBrowserDuringTest', 'Restrict Browser During Test'],
           ] as const).map(([key, label]) => (
             <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
               <input type="checkbox" checked={Boolean(config[key as keyof typeof config])} onChange={(e) => setConfig({ ...config, [key]: e.target.checked })} />
@@ -649,6 +699,12 @@ export default function TestDetail() {
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Type</div>
           <div style={{ fontWeight: 500, textTransform: 'uppercase' }}>{test.type}</div>
         </div>
+        {test.type === 'coding' && test.config.codingLanguage && (
+          <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
+            <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Coding language</div>
+            <div style={{ fontWeight: 500 }}>{CODING_LANGUAGE_LABELS[test.config.codingLanguage as CodingLanguageId] ?? test.config.codingLanguage}</div>
+          </div>
+        )}
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Status</div>
           <div><span style={badgeStyle(test.status)}>{formatStatusLabel(test.status)}</span></div>

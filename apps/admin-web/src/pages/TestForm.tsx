@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
+import { CODING_LANGUAGE_IDS, CODING_LANGUAGE_LABELS } from '../lib/codingLanguages';
 import { api } from '../lib/api';
 
 interface TestData {
@@ -18,6 +19,8 @@ interface TestData {
     passPercentage: number;
     scoreDistribution: 'equal' | 'custom';
     questionWeights?: Record<string, number>;
+    restrictBrowserDuringTest: boolean;
+    codingLanguage?: string;
   };
   schedule?: { startAt: string; endAt: string } | null;
   testQuestions?: { questionId: string; question: { id: string; content: { title: string }; type: string; difficulty: string } }[];
@@ -34,6 +37,7 @@ const defaultConfig: TestData['config'] = {
   passPercentage: 40,
   scoreDistribution: 'equal',
   questionWeights: {},
+  restrictBrowserDuringTest: false,
 };
 
 function clampNumberInput(raw: string, min: number, max: number, fallback: number): number {
@@ -163,7 +167,12 @@ export default function TestForm() {
   const currentSnapshot = buildFormSnapshot({ title, type, status, config, scheduleEnabled, startAt, endAt });
   const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
   const hasRequiredSchedule = !scheduleEnabled || (startAt.length > 0 && endAt.length > 0);
-  const canSubmit = !saving && title.trim().length >= 2 && hasRequiredSchedule && isDirty;
+  const canSubmit =
+    !saving &&
+    title.trim().length >= 2 &&
+    hasRequiredSchedule &&
+    isDirty &&
+    (type !== 'coding' || Boolean(config.codingLanguage));
 
   return (
     <div style={{ maxWidth: 640 }}>
@@ -174,14 +183,44 @@ export default function TestForm() {
           <label style={labelStyle}>Title</label>
           <input value={title} onChange={(e) => setTitle(e.target.value)} required minLength={2} style={inputStyle} />
         </div>
-        <div style={{ display: 'flex', gap: '1rem' }}>
+        <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>Type</label>
-            <select value={type} onChange={(e) => setType(e.target.value)} style={inputStyle}>
+            <select
+              value={type}
+              onChange={(e) => {
+                const next = e.target.value;
+                setType(next);
+                if (next === 'coding' && !config.codingLanguage) {
+                  setConfig((c) => ({ ...c, codingLanguage: 'typescript' }));
+                }
+              }}
+              style={inputStyle}
+            >
               <option value="mcq">MCQ</option>
               <option value="coding">Coding</option>
             </select>
           </div>
+          {type === 'coding' && (
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Coding language</label>
+              <select
+                value={config.codingLanguage ?? 'typescript'}
+                onChange={(e) => setConfig((c) => ({ ...c, codingLanguage: e.target.value }))}
+                required
+                style={inputStyle}
+              >
+                {CODING_LANGUAGE_IDS.map((id) => (
+                  <option key={id} value={id}>
+                    {CODING_LANGUAGE_LABELS[id]}
+                  </option>
+                ))}
+              </select>
+              <p style={{ margin: '0.35rem 0 0', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                Students only see coding questions tagged with this language; they cannot change language during the test.
+              </p>
+            </div>
+          )}
           {isEdit && (
             <div style={{ flex: 1 }}>
               <label style={labelStyle}>Status</label>
@@ -288,6 +327,7 @@ export default function TestForm() {
               ['partialScoring', 'Partial Scoring'],
               ['proctoringEnabled', 'Proctoring'],
               ['aiFeedbackEnabled', 'AI Feedback'],
+              ['restrictBrowserDuringTest', 'Restrict Browser During Test'],
             ] as const).map(([key, label]) => (
               <label key={key} style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
                 <input type="checkbox" checked={config[key as keyof typeof config] as boolean} onChange={(e) => setConfig({ ...config, [key]: e.target.checked })} />

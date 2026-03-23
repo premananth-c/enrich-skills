@@ -55,6 +55,7 @@ async function main() {
         content: {
           title: 'Sum of Two Numbers',
           description: 'Write a function that returns the sum of two numbers a and b.',
+          codingLanguage: 'python',
           examples: [{ input: '2 3', output: '5' }],
           constraints: ['-1000 <= a, b <= 1000'],
         },
@@ -89,6 +90,8 @@ async function main() {
           partialScoring: true,
           proctoringEnabled: false,
           aiFeedbackEnabled: true,
+          restrictBrowserDuringTest: false,
+          codingLanguage: 'python',
         },
         testQuestions: {
           create: [{ questionId: q.id, order: 0 }],

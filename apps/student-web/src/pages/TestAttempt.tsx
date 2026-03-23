@@ -3,6 +3,19 @@ import { useParams, useNavigate, useSearchParams, useLocation, Link } from 'reac
 import Editor from '@monaco-editor/react';
 import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
+import BrowserRestrictionOverlay from '../components/BrowserRestrictionOverlay';
+import { useBrowserRestriction } from '../hooks/useBrowserRestriction';
+import type { CodingLanguageId } from '../lib/codingLanguages';
+import {
+  CODING_LANGUAGE_IDS,
+  CODING_LANGUAGE_LABELS,
+  DEFAULT_CODE_TEMPLATES,
+  monacoLanguageForCodingId,
+} from '../lib/codingLanguagesUi';
+
+function defaultCodeForLang(lang: string): string {
+  return DEFAULT_CODE_TEMPLATES[lang as CodingLanguageId] ?? DEFAULT_CODE_TEMPLATES.python;
+}
 
 interface Question {
   id: string;
@@ -27,24 +40,33 @@ interface Submission {
   score?: number;
 }
 
+interface RunResult {
+  testCaseId: string;
+  input: string;
+  expectedOutput: string;
+  actualOutput: string;
+  passed: boolean;
+  stderr: string;
+  executionTimeMs: number;
+  timedOut: boolean;
+}
+
 interface AttemptData {
   id: string;
   startedAt: string;
   test: {
     title: string;
-    config: { durationMinutes: number; showResultsImmediately: boolean };
+    config: {
+      durationMinutes: number;
+      showResultsImmediately: boolean;
+      restrictBrowserDuringTest?: boolean;
+      codingLanguage?: string;
+    };
     testQuestions: { question: Question; order: number }[];
   };
   status: string;
   submissions: Submission[];
 }
-
-const DEFAULT_CODE: Record<string, string> = {
-  python: '# Write your solution here\ndef solve():\n    pass\n',
-  javascript: '// Write your solution here\nfunction solve() {\n    //\n}\n',
-  java: '// Write your solution here\npublic class Solution {\n    public static void main(String[] args) {\n        //\n    }\n}\n',
-  cpp: '// Write your solution here\n#include <iostream>\nusing namespace std;\n\nint main() {\n    //\n    return 0;\n}\n',
-};
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'var(--color-text-muted)',
@@ -70,6 +92,17 @@ export default function TestAttempt() {
   const [finishing, setFinishing] = useState(false);
   const [mcqFeedback, setMcqFeedback] = useState<Record<string, { status: string; correct: boolean } | null>>({});
   const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  const [running, setRunning] = useState(false);
+  const [runResults, setRunResults] = useState<RunResult[] | null>(null);
+
+  const restrictBrowser = attempt?.test?.config?.restrictBrowserDuringTest === true && attempt?.status === 'in_progress' && !reviewMode;
+  const restriction = useBrowserRestriction({ enabled: restrictBrowser });
+
+  useEffect(() => {
+    if (restrictBrowser && !document.fullscreenElement) {
+      restriction.requestFullscreen();
+    }
+  }, [restrictBrowser, restriction.requestFullscreen]);
 
   useEffect(() => {
     if (!attemptId) return;
@@ -79,9 +112,14 @@ export default function TestAttempt() {
       const codes: Record<string, string> = {};
       const langs: Record<string, string> = {};
       const selections: Record<string, string> = {};
+      const locked = data.test.config?.codingLanguage;
+      const qById = new Map(data.test.testQuestions.map((tq) => [tq.question.id, tq.question]));
       data.submissions.forEach((sub) => {
-        codes[sub.questionId] = sub.code || DEFAULT_CODE[sub.language || 'python'] || DEFAULT_CODE.python;
-        langs[sub.questionId] = sub.language || 'python';
+        const q = qById.get(sub.questionId);
+        const lang =
+          q?.type === 'coding' && locked ? locked : (sub.language || 'python');
+        codes[sub.questionId] = sub.code || defaultCodeForLang(lang);
+        langs[sub.questionId] = lang;
         if (sub.selectedOptionId) selections[sub.questionId] = sub.selectedOptionId;
       });
       setCodeMap(codes);
@@ -178,36 +216,6 @@ export default function TestAttempt() {
   const current = sorted[currentIdx];
   const submission = attempt.submissions.find((s) => s.questionId === current?.question.id);
   const qId = current?.question.id || '';
-  const currentCode = codeMap[qId] || DEFAULT_CODE.python;
-  const currentLang = langMap[qId] || 'python';
-  const savedCode = submission?.code || DEFAULT_CODE[submission?.language || 'python'] || DEFAULT_CODE.python;
-  const savedLang = submission?.language || 'python';
-
-  const handleCodeSubmit = async () => {
-    if (!current || current.question.type !== 'coding') return;
-    if (!attemptId) return;
-    setSubmitting(true);
-    try {
-      const res = await api<{ status: string }>(`/attempts/${attemptId}/submit-code`, {
-        method: 'POST',
-        body: JSON.stringify({ questionId: qId, code: currentCode, language: currentLang }),
-      });
-      setOutput(`Code submitted. Status: ${res.status}`);
-      setAttempt((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          submissions: prev.submissions.map((s) =>
-            s.questionId === qId ? { ...s, code: currentCode, language: currentLang, status: 'pending' } : s
-          ),
-        };
-      });
-    } catch (e) {
-      setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
-    } finally {
-      setSubmitting(false);
-    }
-  };
 
   const handleMcqSelect = (optionId: string) => {
     if (submission?.selectedOptionId) return;
@@ -245,6 +253,14 @@ export default function TestAttempt() {
   const content = current?.question.content;
   const isCoding = current?.question.type === 'coding';
   const isMcq = current?.question.type === 'mcq';
+  const lockedLang = attempt.test.config?.codingLanguage;
+  const effectiveLangForQ =
+    isCoding && lockedLang ? lockedLang : (langMap[qId] || 'python');
+  const currentCode = codeMap[qId] || defaultCodeForLang(effectiveLangForQ);
+  const currentLang = effectiveLangForQ;
+  const savedLang =
+    isCoding && lockedLang ? lockedLang : (submission?.language || 'python');
+  const savedCode = submission?.code || defaultCodeForLang(savedLang);
   const showImmediate = attempt.test.config.showResultsImmediately;
   const isReview = reviewMode || attempt.status !== 'in_progress';
   const hasAnyResponse = attempt.submissions.some((sub) => {
@@ -253,6 +269,32 @@ export default function TestAttempt() {
     return false;
   });
   const isCodeDirty = currentCode !== savedCode || currentLang !== savedLang;
+
+  const handleCodeSubmit = async () => {
+    if (!current || current.question.type !== 'coding') return;
+    if (!attemptId) return;
+    setSubmitting(true);
+    try {
+      const res = await api<{ status: string }>(`/attempts/${attemptId}/submit-code`, {
+        method: 'POST',
+        body: JSON.stringify({ questionId: qId, code: currentCode, language: currentLang }),
+      });
+      setOutput(`Code submitted. Status: ${res.status}`);
+      setAttempt((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          submissions: prev.submissions.map((s) =>
+            s.questionId === qId ? { ...s, code: currentCode, language: currentLang, status: 'pending' } : s
+          ),
+        };
+      });
+    } catch (e) {
+      setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 120px)' }}>
@@ -339,7 +381,7 @@ export default function TestAttempt() {
             return (
               <button
                 key={tq.question.id}
-                onClick={() => { setCurrentIdx(i); setOutput(''); }}
+                onClick={() => { setCurrentIdx(i); setOutput(''); setRunResults(null); }}
                 style={{
                   display: 'flex',
                   alignItems: 'center',
@@ -409,6 +451,29 @@ export default function TestAttempt() {
                 ))}
               </div>
             ) : null}
+
+            {isCoding && !isReview && (
+              <div style={{ marginTop: '0.75rem' }}>
+                <Link
+                  to={`/attempt/${attemptId}/compiler?q=${currentIdx}`}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: '0.4rem',
+                    padding: '0.5rem 1rem',
+                    background: 'var(--color-primary)',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '6px',
+                    textDecoration: 'none',
+                    fontWeight: 600,
+                    fontSize: '0.88rem',
+                  }}
+                >
+                  Open in Compiler
+                </Link>
+              </div>
+            )}
 
             {/* MCQ options */}
             {isMcq && content?.options && (() => {
@@ -564,35 +629,61 @@ export default function TestAttempt() {
             <>
               <div style={{ flex: 1, minHeight: 200, display: 'flex', flexDirection: 'column' }}>
                 {!isReview && <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <select
-                    value={currentLang}
-                    onChange={(e) => setLangMap((prev) => ({ ...prev, [qId]: e.target.value }))}
-                    style={{
-                      padding: '0.35rem 0.75rem',
-                      background: 'var(--color-surface)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: '6px',
-                      color: 'var(--color-text)',
-                      fontSize: '0.85rem',
-                    }}
-                  >
-                    <option value="python">Python</option>
-                    <option value="javascript">JavaScript</option>
-                    <option value="java">Java</option>
-                    <option value="cpp">C++</option>
-                  </select>
+                  {lockedLang ? (
+                    <span style={{ padding: '0.35rem 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)', alignSelf: 'center' }}>
+                      {CODING_LANGUAGE_LABELS[lockedLang as CodingLanguageId] ?? lockedLang}
+                    </span>
+                  ) : (
+                    <select
+                      value={currentLang}
+                      onChange={(e) => setLangMap((prev) => ({ ...prev, [qId]: e.target.value }))}
+                      style={{
+                        padding: '0.35rem 0.75rem',
+                        background: 'var(--color-surface)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: '6px',
+                        color: 'var(--color-text)',
+                        fontSize: '0.85rem',
+                      }}
+                    >
+                      {CODING_LANGUAGE_IDS.map((id) => (
+                        <option key={id} value={id}>{CODING_LANGUAGE_LABELS[id]}</option>
+                      ))}
+                    </select>
+                  )}
                   <button
-                    onClick={() => setOutput('Run is not yet implemented. Submit to evaluate.')}
+                    onClick={async () => {
+                      if (!attemptId || running) return;
+                      setRunning(true);
+                      setRunResults(null);
+                      setOutput('');
+                      try {
+                        const res = await api<{ results: RunResult[] }>(`/attempts/${attemptId}/run-code`, {
+                          method: 'POST',
+                          body: JSON.stringify({ questionId: qId, code: currentCode, language: currentLang }),
+                        });
+                        setRunResults(res.results);
+                        const passed = res.results.filter((r) => r.passed).length;
+                        setOutput(`Sample: ${passed}/${res.results.length} passed`);
+                      } catch (e) {
+                        setOutput(`Run error: ${e instanceof Error ? e.message : 'Failed'}`);
+                      } finally {
+                        setRunning(false);
+                      }
+                    }}
+                    disabled={running}
                     style={{
                       padding: '0.35rem 0.75rem',
-                      background: 'var(--color-surface)',
+                      background: running ? 'var(--color-primary)' : 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
                       borderRadius: '6px',
-                      color: 'var(--color-text)',
+                      color: running ? 'white' : 'var(--color-text)',
                       fontSize: '0.85rem',
+                      cursor: running ? 'not-allowed' : 'pointer',
+                      opacity: running ? 0.7 : 1,
                     }}
                   >
-                    Run
+                    {running ? 'Running...' : 'Run'}
                   </button>
                   <button
                     onClick={handleCodeSubmit}
@@ -614,7 +705,7 @@ export default function TestAttempt() {
                 <div style={{ flex: 1, border: '1px solid var(--color-border)', borderRadius: '8px', overflow: 'hidden' }}>
                   <Editor
                     height="100%"
-                    language={currentLang === 'cpp' ? 'cpp' : currentLang}
+                    language={monacoLanguageForCodingId(currentLang)}
                     value={currentCode}
                     onChange={(v) => setCodeMap((prev) => ({ ...prev, [qId]: v ?? '' }))}
                     theme="vs-dark"
@@ -622,27 +713,56 @@ export default function TestAttempt() {
                   />
                 </div>
               </div>
-              {!isReview && output && (
-                <pre
+              {!isReview && (output || runResults) && (
+                <div
                   style={{
                     background: 'var(--color-surface)',
                     border: '1px solid var(--color-border)',
                     borderRadius: '8px',
                     padding: '0.75rem',
-                    margin: 0,
                     overflow: 'auto',
-                    maxHeight: '100px',
+                    maxHeight: '200px',
                     fontSize: '0.85rem',
-                    color: 'var(--color-text-muted)',
                   }}
                 >
-                  {output}
-                </pre>
+                  {output && <div style={{ color: 'var(--color-text-muted)', marginBottom: runResults ? '0.5rem' : 0 }}>{output}</div>}
+                  {runResults && runResults.map((r, i) => (
+                    <div key={r.testCaseId} style={{
+                      padding: '0.4rem 0.6rem',
+                      marginBottom: '0.35rem',
+                      borderRadius: '4px',
+                      background: r.passed ? 'rgba(34,197,94,0.08)' : 'rgba(239,68,68,0.08)',
+                      border: `1px solid ${r.passed ? 'rgba(34,197,94,0.3)' : 'rgba(239,68,68,0.3)'}`,
+                    }}>
+                      <div style={{ fontWeight: 600, color: r.passed ? '#22c55e' : '#ef4444', fontSize: '0.82rem' }}>
+                        Sample {i + 1}: {r.passed ? 'PASS' : 'FAIL'}
+                        {r.timedOut && ' (Time Limit Exceeded)'}
+                        {r.executionTimeMs > 0 && <span style={{ fontWeight: 400, marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>{r.executionTimeMs}ms</span>}
+                      </div>
+                      {!r.passed && (
+                        <div style={{ marginTop: '0.25rem', fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                          <div>Input: <code>{r.input}</code></div>
+                          <div>Expected: <code>{r.expectedOutput}</code></div>
+                          <div>Got: <code>{r.actualOutput || '(empty)'}</code></div>
+                          {r.stderr && <div style={{ color: '#ef4444' }}>Error: {r.stderr}</div>}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
               )}
             </>
           )}
         </div>
       </div>
+      {restrictBrowser && (
+        <BrowserRestrictionOverlay
+          show={restriction.showWarning}
+          message={restriction.warningMessage}
+          violationCount={restriction.violationCount}
+          onDismiss={restriction.dismissWarning}
+        />
+      )}
     </div>
   );
 }

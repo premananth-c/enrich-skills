@@ -1,11 +1,13 @@
+// Judge reuses the API schema directly.
+// Run `npx prisma generate --schema=../../apps/api/prisma/schema.prisma` to generate the client.
+// Or use the shared generated client from the API.
+
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
 }
 
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
 }
-
-// Reuses same schema as API - run from api or use shared schema
-// For now judge connects to same DB

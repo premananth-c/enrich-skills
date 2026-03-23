@@ -46,8 +46,8 @@ export default function Layout() {
   };
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside style={{ width: 220, background: 'var(--color-surface)', borderRight: '1px solid var(--color-border)', padding: '1rem', display: 'flex', flexDirection: 'column' }}>
+    <div style={{ display: 'flex', minHeight: '100vh', overflow: 'hidden' }}>
+      <aside style={{ position: 'fixed', top: 0, left: 0, height: '100vh', width: 220, background: 'var(--color-surface)', borderRight: '1px solid var(--color-border)', padding: '1rem', display: 'flex', flexDirection: 'column', zIndex: 10 }}>
         <Link to="/" style={{ color: 'inherit', textDecoration: 'none', display: 'block' }}>
           <img src="/logo.png" alt="RankerShip" style={{ height: 52, display: 'block', marginBottom: '0.35rem' }} />
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
@@ -76,9 +76,11 @@ export default function Layout() {
           </div>
         </div>
       </aside>
-      <main style={{ flex: 1, padding: '1.5rem' }}>
-        <Outlet />
-      </main>
+      <div style={{ flex: 1, marginLeft: 220, minWidth: 0, height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+        <main style={{ flex: 1, padding: '1.5rem', overflow: 'auto' }}>
+          <Outlet />
+        </main>
+      </div>
 
       {showPasswordModal && (
         <div

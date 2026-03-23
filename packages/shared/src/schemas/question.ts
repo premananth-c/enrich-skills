@@ -1,15 +1,22 @@
 import { z } from 'zod';
+import { CODING_LANGUAGE_IDS } from '../lib/codingLanguages.js';
+
+const codingLanguageEnum = z.enum(CODING_LANGUAGE_IDS);
 
 export const testCaseSchema = z.object({
   input: z.string(),
   expectedOutput: z.string(),
   isPublic: z.boolean(),
   weight: z.number().min(0).max(100),
+  /** exact: string match. json-orderless: valid JSON; array order ignored at all levels (use JSON.stringify in solutions). */
+  outputMatchMode: z.enum(['exact', 'json-orderless']).default('exact'),
 });
 
 export const createCodingQuestionSchema = z.object({
   title: z.string().min(2),
   description: z.string().min(10),
+  /** Language this problem is written for; must match the coding test language when used in a test. */
+  codingLanguage: codingLanguageEnum,
   difficulty: z.enum(['easy', 'medium', 'hard']),
   tags: z.array(z.string()).default([]),
   examples: z.array(z.object({
@@ -19,6 +26,9 @@ export const createCodingQuestionSchema = z.object({
   constraints: z.array(z.string()).optional(),
   testCases: z.array(testCaseSchema).min(1),
   defaultWeight: z.number().min(0).optional(),
+  timeLimitMs: z.number().min(1000).max(30000).optional(),
+  memoryLimitMb: z.number().min(32).max(1024).optional(),
+  supportedLanguages: z.array(z.string()).optional(),
 });
 
 export const createMcqQuestionSchema = z.object({

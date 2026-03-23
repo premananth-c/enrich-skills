@@ -1,7 +1,14 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
-import { submitCodeSchema, submitMcqSchema } from '@enrich-skills/shared';
+import {
+  submitCodeSchema,
+  submitMcqSchema,
+  runCodeSchema,
+  outputsMatch,
+  isOutputMatchMode,
+} from '@enrich-skills/shared';
 import { requireTenant, authenticate } from '../lib/tenant.js';
+import { judgeQueue } from '../lib/judgeQueue.js';
 
 type AttemptTestConfig = {
   attemptLimit?: number;
@@ -9,6 +16,7 @@ type AttemptTestConfig = {
   passPercentage?: number;
   scoreDistribution?: 'equal' | 'custom';
   questionWeights?: Record<string, number>;
+  codingLanguage?: string;
 };
 
 function getQuestionWeight(config: AttemptTestConfig, questionId: string): number {
@@ -69,6 +77,41 @@ function stripCorrectAnswers(attempt: Record<string, unknown>) {
       }),
     },
   };
+}
+
+function getQuestionCodingLanguage(content: unknown): string {
+  const c = content as { codingLanguage?: string } | null;
+  if (c && typeof c.codingLanguage === 'string' && c.codingLanguage.length > 0) return c.codingLanguage;
+  return 'python';
+}
+
+function questionMatchesTestCodingLanguage(
+  question: { type: string; content: unknown },
+  testCodingLang: string | undefined
+): boolean {
+  if (question.type !== 'coding') return true;
+  if (!testCodingLang) return true;
+  return getQuestionCodingLanguage(question.content) === testCodingLang;
+}
+
+/** Only questions the student has a submission row for (matches filtered attempt creation). */
+function filterAttemptTestQuestionsBySubmissions(attempt: Record<string, unknown>): Record<string, unknown> {
+  const subs = attempt.submissions as { questionId: string }[] | undefined;
+  const test = attempt.test as Record<string, unknown> | undefined;
+  if (!subs?.length || !test?.testQuestions) return attempt;
+  const ids = new Set(subs.map((s) => s.questionId));
+  const tqs = test.testQuestions as { questionId: string }[];
+  return {
+    ...attempt,
+    test: {
+      ...test,
+      testQuestions: tqs.filter((tq) => ids.has(tq.questionId)),
+    },
+  };
+}
+
+function shapeStudentAttemptResponse(attempt: Record<string, unknown>): Record<string, unknown> {
+  return stripCorrectAnswers(filterAttemptTestQuestionsBySubmissions(attempt));
 }
 
 export async function attemptRoutes(app: FastifyInstance) {
@@ -173,13 +216,26 @@ export async function attemptRoutes(app: FastifyInstance) {
       },
     });
     if (inProgress) {
-      return reply.send(stripCorrectAnswers(inProgress as unknown as Record<string, unknown>));
+      return reply.send(shapeStudentAttemptResponse(inProgress as unknown as Record<string, unknown>));
     }
 
-    const selectedQuestions = allocation.variantId
+    const testCodingLang = (test.config as AttemptTestConfig).codingLanguage;
+
+    let selectedQuestions = allocation.variantId
       ? test.testQuestions.filter((tq) => tq.variantId === allocation.variantId)
       : test.testQuestions;
-    const questionsForAttempt = selectedQuestions.length > 0 ? selectedQuestions : test.testQuestions;
+    if (selectedQuestions.length === 0) selectedQuestions = test.testQuestions;
+
+    const questionsForAttempt = selectedQuestions.filter((tq) =>
+      questionMatchesTestCodingLanguage(tq.question, testCodingLang)
+    );
+
+    if (questionsForAttempt.length === 0) {
+      return reply.status(400).send({
+        error:
+          'This test has no questions for the selected coding language. Add matching questions or update the test language.',
+      });
+    }
 
     const attempt = await prisma.attempt.create({
       data: {
@@ -207,7 +263,7 @@ export async function attemptRoutes(app: FastifyInstance) {
       },
     });
 
-    return reply.status(201).send(stripCorrectAnswers(attempt as unknown as Record<string, unknown>));
+    return reply.status(201).send(shapeStudentAttemptResponse(attempt as unknown as Record<string, unknown>));
   });
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
@@ -227,7 +283,7 @@ export async function attemptRoutes(app: FastifyInstance) {
       },
     });
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
-    return reply.send(stripCorrectAnswers(attempt as unknown as Record<string, unknown>));
+    return reply.send(shapeStudentAttemptResponse(attempt as unknown as Record<string, unknown>));
   });
 
   // GET /:id/review — full attempt with correct answers for post-submit review
@@ -251,7 +307,7 @@ export async function attemptRoutes(app: FastifyInstance) {
     if (attempt.status === 'in_progress') {
       return reply.status(400).send({ error: 'Submit the test first to review answers' });
     }
-    return reply.send(attempt);
+    return reply.send(filterAttemptTestQuestionsBySubmissions(attempt as unknown as Record<string, unknown>));
   });
 
   // GET /:id/result — returns full attempt result when available
@@ -298,6 +354,92 @@ export async function attemptRoutes(app: FastifyInstance) {
     });
   });
 
+  app.post('/:id/run-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const user = request.user as { sub: string };
+    const parsed = runCodeSchema.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.status(400).send({ error: parsed.error.flatten() });
+    }
+    const { questionId, code, language } = parsed.data;
+
+    const attempt = await prisma.attempt.findFirst({
+      where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
+      include: { submissions: true, test: { select: { config: true } } },
+    });
+    if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
+
+    const submission = attempt.submissions.find((s) => s.questionId === questionId);
+    if (!submission) return reply.status(404).send({ error: 'Question not in this attempt' });
+
+    const lockedLang = (attempt.test.config as AttemptTestConfig).codingLanguage;
+    if (lockedLang && language !== lockedLang) {
+      return reply.status(400).send({
+        error: 'This test uses a fixed coding language. You cannot change language during the attempt.',
+      });
+    }
+
+    const question = await prisma.question.findUnique({
+      where: { id: questionId },
+      include: { testCases: { where: { isPublic: true } } },
+    });
+    if (!question || question.type !== 'coding') {
+      return reply.status(400).send({ error: 'Not a coding question' });
+    }
+
+    if (question.testCases.length === 0) {
+      return reply.send({ results: [], message: 'No sample test cases available' });
+    }
+
+    const content = question.content as { timeLimitMs?: number; memoryLimitMb?: number };
+    const timeLimitMs = content.timeLimitMs ?? 5000;
+    const memoryLimitMb = content.memoryLimitMb ?? 256;
+    const judgeUrl = process.env.JUDGE_URL || 'http://localhost:4000';
+
+    const results = [];
+    for (const tc of question.testCases) {
+      try {
+        const res = await fetch(`${judgeUrl}/run`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ code, language, input: tc.input, timeLimitMs, memoryLimitMb }),
+        });
+        const data = await res.json() as {
+          stdout: string; stderr: string; exitCode: number;
+          executionTimeMs: number; timedOut: boolean;
+        };
+        const actual = data.stdout.replace(/\r\n/g, '\n').trim();
+        const modeRaw = (tc as { outputMatchMode?: string }).outputMatchMode ?? 'exact';
+        const mode = isOutputMatchMode(modeRaw) ? modeRaw : 'exact';
+        results.push({
+          testCaseId: tc.id,
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: actual,
+          passed:
+            data.exitCode === 0 &&
+            !data.timedOut &&
+            outputsMatch(actual, tc.expectedOutput, mode),
+          stderr: data.stderr?.slice(0, 500) || '',
+          executionTimeMs: data.executionTimeMs,
+          timedOut: data.timedOut,
+        });
+      } catch (err) {
+        results.push({
+          testCaseId: tc.id,
+          input: tc.input,
+          expectedOutput: tc.expectedOutput,
+          actualOutput: '',
+          passed: false,
+          stderr: err instanceof Error ? err.message : 'Judge service unavailable',
+          executionTimeMs: 0,
+          timedOut: false,
+        });
+      }
+    }
+
+    return reply.send({ results });
+  });
+
   app.post('/:id/submit-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
     const parsed = submitCodeSchema.safeParse(request.body);
@@ -308,19 +450,73 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
-      include: { submissions: true },
+      include: { submissions: true, test: { select: { config: true } } },
     });
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
 
     const submission = attempt.submissions.find((s) => s.questionId === questionId);
     if (!submission) return reply.status(404).send({ error: 'Question not in this attempt' });
 
+    const lockedLang = (attempt.test.config as AttemptTestConfig).codingLanguage;
+    if (lockedLang && language !== lockedLang) {
+      return reply.status(400).send({
+        error: 'This test uses a fixed coding language. You cannot change language during the attempt.',
+      });
+    }
+
     await prisma.submission.update({
       where: { id: submission.id },
       data: { code, language, status: 'pending' },
     });
 
+    await judgeQueue.add('evaluate', {
+      submissionId: submission.id,
+      attemptId: attempt.id,
+      questionId,
+      code,
+      language,
+    });
+
     return reply.send({ message: 'Submitted. Code will be evaluated.', status: 'pending' });
+  });
+
+  app.get('/:id/submission-status/:questionId', async (
+    request: FastifyRequest<{ Params: { id: string; questionId: string } }>,
+    reply: FastifyReply
+  ) => {
+    const user = request.user as { sub: string };
+    const submission = await prisma.submission.findFirst({
+      where: {
+        attemptId: request.params.id,
+        questionId: request.params.questionId,
+        attempt: { userId: user.sub },
+      },
+      include: {
+        testCaseResults: {
+          include: { testCase: { select: { isPublic: true, input: true, expectedOutput: true, weight: true } } },
+        },
+      },
+    });
+    if (!submission) return reply.status(404).send({ error: 'Submission not found' });
+
+    return reply.send({
+      status: submission.status,
+      score: submission.score,
+      output: submission.output,
+      errorMessage: submission.errorMessage,
+      executionDetails: submission.executionDetails,
+      testCaseResults: submission.testCaseResults.map((tcr) => ({
+        testCaseId: tcr.testCaseId,
+        passed: tcr.passed,
+        actualOutput: tcr.testCase.isPublic ? tcr.actualOutput : undefined,
+        executionTimeMs: tcr.executionTimeMs,
+        timedOut: tcr.timedOut,
+        isPublic: tcr.testCase.isPublic,
+        input: tcr.testCase.isPublic ? tcr.testCase.input : undefined,
+        expectedOutput: tcr.testCase.isPublic ? tcr.testCase.expectedOutput : undefined,
+        weight: tcr.testCase.weight,
+      })),
+    });
   });
 
   app.post('/:id/submit-mcq', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {

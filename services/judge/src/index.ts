@@ -1,113 +1,63 @@
 /**
- * Docker-based Code Execution (Judge) Service
+ * Judge Service Entry Point
  *
- * Polls for pending submissions, runs code in isolated containers,
- * and updates results. Designed to run as a separate worker process.
+ * Starts the BullMQ worker for async submission evaluation
+ * and an HTTP server for synchronous run-code (sample test cases).
  *
- * Setup: Ensure Docker is running. Uses images per language:
- * - python:3.11-slim
- * - node:18-slim
- * - openjdk:11-slim
- * - gcc (for C++)
+ * Docker images used:
+ * - python:3.12-slim
+ * - node:22-bookworm-slim (JavaScript, TypeScript/tsx, React TSX, Angular-style TS)
+ * - eclipse-temurin:21-jdk
+ * - gcc:13  (C / C++)
  */
 
-import Docker from 'dockerode';
+import 'dotenv/config';
+import './worker.js';
+import http from 'http';
+import { runCode, type RunResult } from './runner.js';
 
-const docker = new Docker();
+const PORT = parseInt(process.env.JUDGE_PORT || '4000', 10);
 
-const LANGUAGE_IMAGES: Record<string, string> = {
-  python: 'python:3.11-slim',
-  javascript: 'node:18-slim',
-  java: 'openjdk:11-slim',
-  cpp: 'gcc:latest',
-};
+const server = http.createServer(async (req, res) => {
+  if (req.method === 'POST' && req.url === '/run') {
+    let body = '';
+    for await (const chunk of req) body += chunk;
 
-async function runInContainer(
-  code: string,
-  language: string,
-  input: string,
-  timeLimitMs: number = 5000,
-  memoryLimitMb: number = 512
-): Promise<{ stdout: string; stderr: string; exitCode: number }> {
-  const image = LANGUAGE_IMAGES[language] || LANGUAGE_IMAGES.python;
-
-  let cmd: string[];
-  let wrappedCode = code;
-
-  switch (language) {
-    case 'python':
-      cmd = ['python', '-c', code];
-      break;
-    case 'javascript':
-      cmd = ['node', '-e', code];
-      break;
-    case 'java':
-      // Simplified: would need to write .java file and compile
-      cmd = ['sh', '-c', 'echo "Java execution not fully implemented in this MVP"'];
-      break;
-    case 'cpp':
-      cmd = ['sh', '-c', 'echo "C++ execution not fully implemented in this MVP"'];
-      break;
-    default:
-      cmd = ['python', '-c', code];
+    try {
+      const { code, language, input, timeLimitMs, memoryLimitMb } = JSON.parse(body);
+      if (!code || !language) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: 'code and language are required' }));
+        return;
+      }
+      const result: RunResult = await runCode(
+        code,
+        language,
+        input ?? '',
+        timeLimitMs ?? 5000,
+        memoryLimitMb ?? 256,
+      );
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+    } catch (err) {
+      res.writeHead(500, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: err instanceof Error ? err.message : 'Internal error' }));
+    }
+    return;
   }
 
-  try {
-    const container = await docker.createContainer({
-      Image: image,
-      Cmd: cmd,
-      HostConfig: {
-        Memory: memoryLimitMb * 1024 * 1024,
-        MemorySwap: memoryLimitMb * 1024 * 1024,
-        NetworkMode: 'none',
-        AutoRemove: true,
-      },
-      AttachStdin: true,
-      AttachStdout: true,
-      AttachStderr: true,
-      Tty: false,
-    });
-
-    const timeout = setTimeout(() => {
-      container.kill().catch(() => {});
-    }, timeLimitMs);
-
-    await container.start();
-
-    const stream = await container.attach({ stream: true, stdout: true, stderr: true });
-    let stdout = '';
-    let stderr = '';
-
-    stream.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
-    });
-    stream.on('err', (chunk: Buffer) => {
-      stderr += chunk.toString();
-    });
-
-    const exitCode = await new Promise<number>((resolve) => {
-      container.wait((err, data) => {
-        clearTimeout(timeout);
-        resolve(data?.StatusCode ?? -1);
-      });
-    });
-
-    return { stdout, stderr, exitCode };
-  } catch (err) {
-    return {
-      stdout: '',
-      stderr: err instanceof Error ? err.message : 'Execution failed',
-      exitCode: -1,
-    };
+  if (req.method === 'GET' && req.url === '/health') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ status: 'ok' }));
+    return;
   }
-}
 
-// Poll loop placeholder - integrate with DB/queue in production
-async function pollAndExecute() {
-  console.log('[Judge] Service started. Poll for pending submissions (integrate with Prisma/Redis queue).');
-  // In production: query Submission where status='pending', run code, update status/score
-}
+  res.writeHead(404, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify({ error: 'Not found' }));
+});
 
-pollAndExecute().catch(console.error);
+server.listen(PORT, () => {
+  console.log(`[Judge] HTTP server listening on port ${PORT}`);
+});
 
-export { runInContainer };
+export { runCode } from './runner.js';

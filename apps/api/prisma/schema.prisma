@@ -119,9 +119,12 @@ model TestCase {
   expectedOutput String
   isPublic      Boolean  @default(false)
   weight        Int      @default(1)
+  /// exact | json-orderless — see @enrich-skills/shared outputsMatch
+  outputMatchMode String  @default("exact")
   createdAt     DateTime @default(now())
 
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  testCaseResults TestCaseResult[]
 
   @@index([questionId])
 }
@@ -223,14 +226,34 @@ model Submission {
   aiRatings       Json?
   output          String?
   errorMessage    String?
+  executionDetails Json?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
-  attempt  Attempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
-  question Question @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  attempt         Attempt          @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question        Question         @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  testCaseResults TestCaseResult[]
 
   @@unique([attemptId, questionId])
   @@index([attemptId])
+}
+
+model TestCaseResult {
+  id              String   @id @default(uuid())
+  submissionId    String
+  testCaseId      String
+  passed          Boolean
+  actualOutput    String?
+  executionTimeMs Int?
+  memoryMb        Float?
+  timedOut        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+
+  submission Submission @relation(fields: [submissionId], references: [id], onDelete: Cascade)
+  testCase   TestCase   @relation(fields: [testCaseId], references: [id], onDelete: Cascade)
+
+  @@unique([submissionId, testCaseId])
+  @@index([submissionId])
 }
 
 model Course {

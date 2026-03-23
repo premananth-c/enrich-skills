@@ -801,26 +801,43 @@ export default function CourseDetail() {
       </div>
 
       <div style={{ marginTop: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-        <h3 style={{ margin: '0 0 0.75rem' }}>Assignments</h3>
+        <h3 style={{ margin: '0 0 0.75rem' }}>Assign Students</h3>
         <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', margin: '0 0 0.75rem' }}>Assign this course to batches or individual students.</p>
-        {assignments.length > 0 && (
-          <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 1rem' }}>
-            {assignments.map((a) => (
-              <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
-                <span style={{ fontWeight: 500 }}>
-                  {a.batch ? (
-                    <Link to={`/batches/${a.batch.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Batch: {a.batch.name}</Link>
-                  ) : a.user ? (
-                    <span>Student: {a.user.name || a.user.email}</span>
-                  ) : null}
-                </span>
-                {a.dueDate && (
-                  <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</span>
-                )}
-                <button onClick={() => removeAssignment(a.id)} style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
-              </li>
-            ))}
-          </ul>
+        
+        {assignments.filter((a) => a.user).length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>Students</h4>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {assignments.filter((a) => a.user).map((a) => (
+                <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
+                  <span style={{ fontWeight: 500 }}>{a.user!.name || a.user!.email}</span>
+                  {a.dueDate && (
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</span>
+                  )}
+                  <button onClick={() => removeAssignment(a.id)} style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        
+        {assignments.filter((a) => a.batch).length > 0 && (
+          <div style={{ marginBottom: '1rem' }}>
+            <h4 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem', color: 'var(--color-text-muted)' }}>Batches</h4>
+            <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+              {assignments.filter((a) => a.batch).map((a) => (
+                <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.35rem 0', borderBottom: '1px solid var(--color-border)' }}>
+                  <span style={{ fontWeight: 500 }}>
+                    <Link to={`/batches/${a.batch!.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{a.batch!.name}</Link>
+                  </span>
+                  {a.dueDate && (
+                    <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</span>
+                  )}
+                  <button onClick={() => removeAssignment(a.id)} style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
         {addAssignmentOpen ? (
           <div style={{ padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 6, border: '1px solid var(--color-border)' }}>

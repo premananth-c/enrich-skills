@@ -1,5 +1,6 @@
 export type QuestionType = 'coding' | 'mcq';
 export type Difficulty = 'easy' | 'medium' | 'hard';
+export type OutputMatchMode = 'exact' | 'json-orderless';
 
 export interface Question {
   id: string;
@@ -17,6 +18,10 @@ export interface QuestionContent {
   description: string;
   examples?: { input: string; output: string }[];
   constraints?: string[];
+  timeLimitMs?: number;
+  memoryLimitMb?: number;
+  supportedLanguages?: string[];
+  codingLanguage?: string;
   // MCQ specific
   options?: { id: string; text: string; isCorrect: boolean }[];
   explanation?: string;
@@ -29,4 +34,5 @@ export interface TestCase {
   expectedOutput: string;
   isPublic: boolean;
   weight: number;
+  outputMatchMode?: OutputMatchMode;
 }
