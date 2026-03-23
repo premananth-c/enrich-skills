@@ -53,6 +53,10 @@ async function main() {
 
   app.get('/health', async () => ({ status: 'ok' }));
 
+  app.get('/debug-sentry', async () => {
+    throw new Error('Sentry test error — safe to delete this route');
+  });
+
   app.get('/ready', async (request, reply) => {
     try {
       await prisma.$queryRaw`SELECT 1`;
