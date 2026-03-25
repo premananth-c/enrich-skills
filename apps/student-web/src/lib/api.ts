@@ -7,7 +7,12 @@ const TENANT_KEY = 'enrich_tenant_id';
 
 let refreshPromise: Promise<string | null> | null = null;
 
-function getSuccessMessage(method: string): string {
+/** Returns null when the UI should not show a generic success toast (caller feedback or misleading default). */
+function getSuccessMessage(method: string, path: string): string | null {
+  // Starting an attempt is not a submission; toast was shown as the test page opened.
+  if (path === '/attempts/start' || path.startsWith('/attempts/start')) return null;
+  // Run output is shown in the editor; "Submitted successfully" is wrong here too.
+  if (path.includes('/run-code')) return null;
   if (method === 'POST') return 'Submitted successfully';
   if (method === 'PUT' || method === 'PATCH') return 'Updated successfully';
   if (method === 'DELETE') return 'Deleted successfully';
@@ -97,13 +102,19 @@ export async function api<T>(
     throw new Error(message);
   }
   if (res.status === 204) {
-    if (isMutation) emitToast('success', getSuccessMessage(method));
+    if (isMutation) {
+      const msg = getSuccessMessage(method, path);
+      if (msg) emitToast('success', msg);
+    }
     return undefined as T;
   }
   const data = await res.json();
   if (isMutation) {
-    const msg = typeof data?.message === 'string' && data.message.trim() ? data.message : getSuccessMessage(method);
-    emitToast('success', msg);
+    const msg =
+      typeof data?.message === 'string' && data.message.trim()
+        ? data.message
+        : getSuccessMessage(method, path);
+    if (msg) emitToast('success', msg);
   }
   return data;
 }
