@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Link, useParams, useNavigate } from 'react-router-dom';
 import { api, apiUpload } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
+import { formatAttemptFraction, formatReportResult } from '../lib/reportDisplay';
+import { downloadXlsxRows, reportAttemptsToFlatRows, sanitizeReportFilename } from '../lib/reportExport';
 import { emitToast } from '../lib/toast';
 
 type Tab = 'members' | 'calendar' | 'notes' | 'videos' | 'assignments' | 'tests' | 'reports';
@@ -57,6 +59,9 @@ interface BatchReportAttempt {
   score: number | null;
   maxScore: number | null;
   status: string;
+  attemptNumber: number;
+  maxAttempts: number;
+  result: 'passed' | 'failed' | null;
   user: { id: string; name: string; email: string };
   test: { id: string; title: string };
 }
@@ -169,6 +174,16 @@ export default function BatchDetail() {
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Assign failed');
     }
+  };
+
+  const exportBatchReportsXlsx = () => {
+    if (!batch || reportAttempts.length === 0) return;
+    const date = new Date().toISOString().slice(0, 10);
+    downloadXlsxRows(
+      reportAttemptsToFlatRows(reportAttempts),
+      `${sanitizeReportFilename(`reports-batch-${batch.name}-${date}`)}.xlsx`,
+      'Batch report'
+    );
   };
 
   const unassignTest = async (testId: string) => {
@@ -599,14 +614,28 @@ export default function BatchDetail() {
 
       {tab === 'reports' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <h3 style={{ margin: '0 0 1rem' }}>Batch progress & test scores</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
+            <h3 style={{ margin: 0 }}>Batch progress & test scores</h3>
+            {reportAttempts.length > 0 && (
+              <button
+                type="button"
+                onClick={exportBatchReportsXlsx}
+                style={{ padding: '0.5rem 1rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
+              >
+                Export to XLSX
+              </button>
+            )}
+          </div>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Attempts and scores for students in this batch.</p>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Student</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Test</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempts</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Result</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Score</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Started</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Submitted</th>
@@ -616,8 +645,11 @@ export default function BatchDetail() {
               {reportAttempts.map((a) => (
                 <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.75rem 1rem' }}>{a.user.name}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.user.email}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.test.title}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{formatAttemptFraction(a.attemptNumber, a.maxAttempts)}</td>
                   <td style={{ padding: '0.75rem 1rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: a.status === 'submitted' || a.status === 'graded' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{formatStatusLabel(a.status)}</span></td>
+                  <td style={{ padding: '0.75rem 1rem' }}>{formatReportResult(a.result)}</td>
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 600 }}>{a.score != null && a.maxScore != null ? `${a.score} / ${a.maxScore}` : '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{new Date(a.startedAt).toLocaleString()}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.submittedAt ? new Date(a.submittedAt).toLocaleString() : '--'}</td>

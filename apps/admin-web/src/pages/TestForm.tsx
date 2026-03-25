@@ -12,6 +12,7 @@ interface TestData {
     durationMinutes: number;
     attemptLimit: number;
     shuffleQuestions: boolean;
+    showResultsPerQuestion: boolean;
     showResultsImmediately: boolean;
     partialScoring: boolean;
     proctoringEnabled: boolean;
@@ -30,6 +31,7 @@ const defaultConfig: TestData['config'] = {
   durationMinutes: 60,
   attemptLimit: 3,
   shuffleQuestions: false,
+  showResultsPerQuestion: true,
   showResultsImmediately: true,
   partialScoring: true,
   proctoringEnabled: false,
@@ -95,7 +97,13 @@ export default function TestForm() {
         setTitle(t.title);
         setType(t.type);
         setStatus(t.status);
-        setConfig({ ...defaultConfig, ...t.config });
+        const merged = { ...defaultConfig, ...t.config };
+        const c = t.config;
+        if (c.showResultsPerQuestion === undefined && typeof c.showResultsImmediately === 'boolean') {
+          merged.showResultsPerQuestion = c.showResultsImmediately;
+          merged.showResultsImmediately = c.showResultsImmediately;
+        }
+        setConfig(merged);
         setDurationInput(String(t.config.durationMinutes ?? defaultConfig.durationMinutes));
         setAttemptLimitInput(String(t.config.attemptLimit ?? defaultConfig.attemptLimit));
         setPassPercentageInput(String(t.config.passPercentage ?? defaultConfig.passPercentage));
@@ -104,13 +112,12 @@ export default function TestForm() {
           setStartAt(t.schedule.startAt?.slice(0, 16) || '');
           setEndAt(t.schedule.endAt?.slice(0, 16) || '');
         }
-        const configWithDefaults = { ...defaultConfig, ...t.config };
         setInitialSnapshot(
           buildFormSnapshot({
             title: t.title,
             type: t.type,
             status: t.status,
-            config: configWithDefaults,
+            config: merged,
             scheduleEnabled: Boolean(t.schedule),
             startAt: t.schedule?.startAt?.slice(0, 16) || '',
             endAt: t.schedule?.endAt?.slice(0, 16) || '',
@@ -323,6 +330,7 @@ export default function TestForm() {
           <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginTop: '1rem' }}>
             {([
               ['shuffleQuestions', 'Shuffle Questions'],
+              ['showResultsPerQuestion', 'Show Results for Each Question'],
               ['showResultsImmediately', 'Show Results Immediately'],
               ['partialScoring', 'Partial Scoring'],
               ['proctoringEnabled', 'Proctoring'],

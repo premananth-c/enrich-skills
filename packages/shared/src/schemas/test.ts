@@ -11,10 +11,11 @@ export const proctoringConfigSchema = z.object({
   retentionDays: z.number().min(0).max(365),
 });
 
-export const testConfigSchema = z.object({
+const testConfigSchemaInner = z.object({
   durationMinutes: z.number().min(1).max(480),
   attemptLimit: z.number().min(1).max(100),
   shuffleQuestions: z.boolean(),
+  showResultsPerQuestion: z.boolean(),
   showResultsImmediately: z.boolean(),
   partialScoring: z.boolean(),
   proctoringEnabled: z.boolean(),
@@ -27,6 +28,17 @@ export const testConfigSchema = z.object({
   /** Required for new coding tests; students only see coding questions for this language. */
   codingLanguage: codingLanguageEnum.optional(),
 });
+
+/** Legacy single-flag configs map `showResultsImmediately` to both per-question and final-score visibility. */
+export const testConfigSchema = z.preprocess((data: unknown) => {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return data;
+  const o = data as Record<string, unknown>;
+  if (o.showResultsPerQuestion === undefined && o.showResultsImmediately !== undefined) {
+    const v = !!o.showResultsImmediately;
+    return { ...o, showResultsPerQuestion: v, showResultsImmediately: v };
+  }
+  return data;
+}, testConfigSchemaInner);
 
 export const testScheduleSchema = z.object({
   startAt: z.coerce.date(),

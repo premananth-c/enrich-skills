@@ -22,3 +22,4 @@ export * from './schemas/enquiry.js';
 export * from './lib/sanitize.js';
 export * from './lib/codingLanguages.js';
 export * from './lib/outputCompare.js';
+export * from './lib/testConfig.js';

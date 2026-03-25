@@ -38,6 +38,7 @@ interface TestData {
     durationMinutes: number;
     attemptLimit: number;
     shuffleQuestions: boolean;
+    showResultsPerQuestion: boolean;
     showResultsImmediately: boolean;
     partialScoring: boolean;
     proctoringEnabled: boolean;
@@ -86,6 +87,7 @@ const defaultConfig: TestData['config'] = {
   durationMinutes: 60,
   attemptLimit: 3,
   shuffleQuestions: false,
+  showResultsPerQuestion: true,
   showResultsImmediately: true,
   partialScoring: true,
   proctoringEnabled: false,
@@ -184,13 +186,19 @@ export default function TestDetail() {
       setTitle(t.title);
       setType(t.type as 'mcq' | 'coding');
       setStatus(t.status as 'draft' | 'published' | 'archived');
-      setConfig({
+      const merged: TestData['config'] = {
         ...defaultConfig,
         ...t.config,
         passPercentage: t.config.passPercentage ?? 40,
         scoreDistribution: t.config.scoreDistribution ?? 'equal',
         questionWeights: t.config.questionWeights ?? {},
-      });
+      };
+      const c = t.config;
+      if (c.showResultsPerQuestion === undefined && typeof c.showResultsImmediately === 'boolean') {
+        merged.showResultsPerQuestion = c.showResultsImmediately;
+        merged.showResultsImmediately = c.showResultsImmediately;
+      }
+      setConfig(merged);
       setDurationInput(String(t.config.durationMinutes ?? defaultConfig.durationMinutes));
       setAttemptLimitInput(String(t.config.attemptLimit ?? defaultConfig.attemptLimit));
       setPassPercentageInput(String(t.config.passPercentage ?? 40));
@@ -208,13 +216,7 @@ export default function TestDetail() {
           title: t.title,
           type: t.type as 'mcq' | 'coding',
           status: t.status as 'draft' | 'published' | 'archived',
-          config: {
-            ...defaultConfig,
-            ...t.config,
-            passPercentage: t.config.passPercentage ?? 40,
-            scoreDistribution: t.config.scoreDistribution ?? 'equal',
-            questionWeights: t.config.questionWeights ?? {},
-          },
+          config: merged,
           scheduleEnabled: Boolean(t.schedule?.startAt && t.schedule?.endAt),
           startAt: t.schedule?.startAt?.slice(0, 16) || '',
           endAt: t.schedule?.endAt?.slice(0, 16) || '',
@@ -451,13 +453,19 @@ export default function TestDetail() {
     setTitle(test.title);
     setType(test.type as 'mcq' | 'coding');
     setStatus(test.status as 'draft' | 'published' | 'archived');
-    setConfig({
+    const mergedReset: TestData['config'] = {
       ...defaultConfig,
       ...test.config,
       passPercentage: test.config.passPercentage ?? 40,
       scoreDistribution: test.config.scoreDistribution ?? 'equal',
       questionWeights: test.config.questionWeights ?? {},
-    });
+    };
+    const cr = test.config;
+    if (cr.showResultsPerQuestion === undefined && typeof cr.showResultsImmediately === 'boolean') {
+      mergedReset.showResultsPerQuestion = cr.showResultsImmediately;
+      mergedReset.showResultsImmediately = cr.showResultsImmediately;
+    }
+    setConfig(mergedReset);
     setDurationInput(String(test.config.durationMinutes ?? defaultConfig.durationMinutes));
     setAttemptLimitInput(String(test.config.attemptLimit ?? defaultConfig.attemptLimit));
     setPassPercentageInput(String(test.config.passPercentage ?? 40));
@@ -654,6 +662,7 @@ export default function TestDetail() {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '1rem', marginBottom: '1rem' }}>
           {([
             ['shuffleQuestions', 'Shuffle Questions'],
+            ['showResultsPerQuestion', 'Show Results for Each Question'],
             ['showResultsImmediately', 'Show Results Immediately'],
             ['partialScoring', 'Partial Scoring'],
             ['proctoringEnabled', 'Proctoring'],

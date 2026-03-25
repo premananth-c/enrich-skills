@@ -45,7 +45,8 @@ interface AttemptData {
     title: string;
     config: {
       durationMinutes: number;
-      showResultsImmediately: boolean;
+      showResultsPerQuestion?: boolean;
+      showResultsImmediately?: boolean;
       restrictBrowserDuringTest?: boolean;
       codingLanguage?: string;
     };
@@ -96,9 +97,7 @@ export default function CodingCompiler() {
     if (!attemptId) return;
     api<AttemptData>(`/attempts/${attemptId}`).then((data) => {
       setAttempt(data);
-      const codingQuestions = data.test.testQuestions
-        .filter((tq) => tq.question.type === 'coding')
-        .sort((a, b) => a.order - b.order);
+      const codingQuestions = data.test.testQuestions.filter((tq) => tq.question.type === 'coding');
       const idx = Math.min(currentIdx, codingQuestions.length - 1);
       setCurrentIdx(idx >= 0 ? idx : 0);
       const q = codingQuestions[idx >= 0 ? idx : 0];
@@ -112,9 +111,8 @@ export default function CodingCompiler() {
     });
   }, [attemptId]);
 
-  const codingQuestions = attempt?.test.testQuestions
-    .filter((tq) => tq.question.type === 'coding')
-    .sort((a, b) => a.order - b.order) || [];
+  const codingQuestions =
+    attempt?.test.testQuestions.filter((tq) => tq.question.type === 'coding') || [];
 
   const current = codingQuestions[currentIdx];
   const qId = current?.question.id || '';
