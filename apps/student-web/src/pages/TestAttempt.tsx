@@ -12,6 +12,7 @@ import {
   DEFAULT_CODE_TEMPLATES,
   monacoLanguageForCodingId,
 } from '../lib/codingLanguagesUi';
+import { getEffectiveShowResultsFlags } from '../lib/testConfig';
 
 function defaultCodeForLang(lang: string): string {
   return DEFAULT_CODE_TEMPLATES[lang as CodingLanguageId] ?? DEFAULT_CODE_TEMPLATES.python;
@@ -58,7 +59,8 @@ interface AttemptData {
     title: string;
     config: {
       durationMinutes: number;
-      showResultsImmediately: boolean;
+      showResultsPerQuestion?: boolean;
+      showResultsImmediately?: boolean;
       restrictBrowserDuringTest?: boolean;
       codingLanguage?: string;
     };
@@ -212,8 +214,9 @@ export default function TestAttempt() {
     );
   }
 
-  const sorted = [...attempt.test.testQuestions].sort((a, b) => a.order - b.order);
-  const current = sorted[currentIdx];
+  const { showResultsPerQuestion } = getEffectiveShowResultsFlags(attempt.test.config);
+  const orderedQuestions = attempt.test.testQuestions;
+  const current = orderedQuestions[currentIdx];
   const submission = attempt.submissions.find((s) => s.questionId === current?.question.id);
   const qId = current?.question.id || '';
 
@@ -229,20 +232,30 @@ export default function TestAttempt() {
     if (!optionId) return;
     setSubmitting(true);
     try {
-      const res = await api<{ status: string; correct: boolean }>(`/attempts/${attemptId}/submit-mcq`, {
-        method: 'POST',
-        body: JSON.stringify({ questionId: qId, selectedOptionId: optionId }),
-      });
-      setMcqFeedback((prev) => ({ ...prev, [qId]: { status: res.status, correct: res.correct } }));
-      setAttempt((prev) => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          submissions: prev.submissions.map((s) =>
-            s.questionId === qId ? { ...s, selectedOptionId: optionId, status: res.status, score: res.correct ? 1 : 0 } : s
-          ),
-        };
-      });
+      const res = await api<{ status?: string; correct?: boolean; score?: number; message?: string }>(
+        `/attempts/${attemptId}/submit-mcq`,
+        {
+          method: 'POST',
+          body: JSON.stringify({ questionId: qId, selectedOptionId: optionId }),
+        }
+      );
+      if (typeof res.correct === 'boolean' && res.status) {
+        const correct = res.correct;
+        const nextScore = typeof res.score === 'number' ? res.score : correct ? 1 : 0;
+        setMcqFeedback((prev) => ({ ...prev, [qId]: { status: res.status!, correct } }));
+        setAttempt((prev) => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            submissions: prev.submissions.map((s) =>
+              s.questionId === qId ? { ...s, selectedOptionId: optionId, status: res.status!, score: nextScore } : s
+            ),
+          };
+        });
+      } else {
+        const fresh = await api<AttemptData>(`/attempts/${attemptId}`);
+        setAttempt(fresh);
+      }
     } catch (e) {
       setOutput(`Error: ${e instanceof Error ? e.message : 'Submit failed'}`);
     } finally {
@@ -261,7 +274,6 @@ export default function TestAttempt() {
   const savedLang =
     isCoding && lockedLang ? lockedLang : (submission?.language || 'python');
   const savedCode = submission?.code || defaultCodeForLang(savedLang);
-  const showImmediate = attempt.test.config.showResultsImmediately;
   const isReview = reviewMode || attempt.status !== 'in_progress';
   const hasAnyResponse = attempt.submissions.some((sub) => {
     if (sub.selectedOptionId) return true;
@@ -375,7 +387,7 @@ export default function TestAttempt() {
             padding: '0.75rem',
           }}
         >
-          {sorted.map((tq, i) => {
+          {orderedQuestions.map((tq, i) => {
             const sub = attempt.submissions.find((s) => s.questionId === tq.question.id);
             const statusColor = sub ? STATUS_COLORS[sub.status] || 'var(--color-text-muted)' : 'var(--color-text-muted)';
             return (
@@ -497,7 +509,7 @@ export default function TestAttempt() {
                       } else if (isReview && isSelected && !opt.isCorrect) {
                         borderColor = '#ef4444';
                         bg = 'rgba(239,68,68,0.1)';
-                      } else if (isSubmitted && isSelected && feedback && showImmediate) {
+                      } else if (isSubmitted && isSelected && feedback && showResultsPerQuestion) {
                         borderColor = feedback.correct ? '#22c55e' : '#ef4444';
                         bg = feedback.correct ? 'rgba(34,197,94,0.1)' : 'rgba(239,68,68,0.1)';
                       } else if (isSelected) {
@@ -561,7 +573,7 @@ export default function TestAttempt() {
                     </button>
                   )}
 
-                  {!isReview && isSubmitted && showImmediate && feedback && (
+                  {!isReview && isSubmitted && showResultsPerQuestion && feedback && (
                     <div
                       style={{
                         marginTop: '0.75rem',
@@ -582,7 +594,7 @@ export default function TestAttempt() {
                     </div>
                   )}
 
-                  {!isReview && isSubmitted && !showImmediate && (
+                  {!isReview && isSubmitted && !showResultsPerQuestion && (
                     <div
                       style={{
                         marginTop: '0.75rem',

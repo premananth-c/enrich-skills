@@ -13,6 +13,9 @@
     "db:generate": "pnpm --filter @enrich-skills/api exec prisma generate",
     "db:push": "pnpm --filter @enrich-skills/api exec prisma db push",
     "db:migrate": "pnpm --filter @enrich-skills/api exec prisma migrate dev",
+    "db:migrate:deploy": "pnpm --filter @enrich-skills/api run db:migrate:deploy",
+    "db:migrate:reset": "pnpm --filter @enrich-skills/api run db:migrate:reset",
+    "db:migrate:status": "pnpm --filter @enrich-skills/api run db:migrate:status",
     "db:seed": "pnpm --filter @enrich-skills/api exec tsx prisma/seed.ts"
   },
   "engines": {

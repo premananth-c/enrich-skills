@@ -86,6 +86,7 @@ async function main() {
           durationMinutes: 60,
           attemptLimit: 3,
           shuffleQuestions: false,
+          showResultsPerQuestion: true,
           showResultsImmediately: true,
           partialScoring: true,
           proctoringEnabled: false,

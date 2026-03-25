@@ -24,11 +24,8 @@ jobs:
             docker compose -f docker-compose.prod.yml build --no-cache api judge-worker
             docker compose -f docker-compose.prod.yml up -d
 
-            # Baseline: mark the initial migration as already applied if _prisma_migrations table is empty or missing
-            docker compose -f docker-compose.prod.yml exec -T -w /app/apps/api api \
-              npx prisma migrate resolve --applied 0_baseline --schema ./prisma/schema.prisma 2>/dev/null || true
-
-            # Apply any pending migrations
+            # Apply pending migrations (fails the job if DB is unreachable or migration errors).
+            # If you see P3005 on a legacy DB, baseline once on the server — see docs/database-migrations.md
             docker compose -f docker-compose.prod.yml exec -T -w /app/apps/api api \
               npx prisma migrate deploy --schema ./prisma/schema.prisma
 

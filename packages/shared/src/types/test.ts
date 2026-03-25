@@ -18,6 +18,9 @@ export interface TestConfig {
   durationMinutes: number;
   attemptLimit: number;
   shuffleQuestions: boolean;
+  /** When true, show correctness (e.g. MCQ) after each question is submitted. */
+  showResultsPerQuestion: boolean;
+  /** When true, show score and pass/fail right after the student submits the whole test. */
   showResultsImmediately: boolean;
   partialScoring: boolean;
   proctoringEnabled: boolean;

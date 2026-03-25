@@ -1,4 +1,5 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma.js';
 import {
   submitCodeSchema,
@@ -6,6 +7,7 @@ import {
   runCodeSchema,
   outputsMatch,
   isOutputMatchMode,
+  getEffectiveShowResultsFlags,
 } from '@enrich-skills/shared';
 import { requireTenant, authenticate } from '../lib/tenant.js';
 import { judgeQueue } from '../lib/judgeQueue.js';
@@ -13,11 +15,29 @@ import { judgeQueue } from '../lib/judgeQueue.js';
 type AttemptTestConfig = {
   attemptLimit?: number;
   showResultsImmediately?: boolean;
+  showResultsPerQuestion?: boolean;
+  shuffleQuestions?: boolean;
   passPercentage?: number;
   scoreDistribution?: 'equal' | 'custom';
   questionWeights?: Record<string, number>;
   codingLanguage?: string;
 };
+
+/** Prisma expects DB columns to match the schema; missing columns surface as P2022 or raw DB errors. */
+function isMissingAttemptSchemaError(err: unknown): boolean {
+  if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2022') return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /questionOrder|column .*does not exist/i.test(msg);
+}
+
+function shuffleQuestionIds(ids: string[]): string[] {
+  const copy = [...ids];
+  for (let i = copy.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy;
+}
 
 function getQuestionWeight(config: AttemptTestConfig, questionId: string): number {
   if (config.scoreDistribution === 'custom' && config.questionWeights && Number.isFinite(config.questionWeights[questionId])) {
@@ -110,8 +130,49 @@ function filterAttemptTestQuestionsBySubmissions(attempt: Record<string, unknown
   };
 }
 
+function applyQuestionOrder(attempt: Record<string, unknown>): Record<string, unknown> {
+  const order = attempt.questionOrder as string[] | null | undefined;
+  const test = attempt.test as Record<string, unknown> | undefined;
+  if (!order?.length || !test?.testQuestions) return attempt;
+  const tqs = test.testQuestions as { questionId: string }[];
+  const index = new Map(order.map((id, i) => [id, i]));
+  const sorted = [...tqs].sort((a, b) => {
+    const ia = index.get(a.questionId);
+    const ib = index.get(b.questionId);
+    if (ia === undefined && ib === undefined) return 0;
+    if (ia === undefined) return 1;
+    if (ib === undefined) return -1;
+    return ia - ib;
+  });
+  return {
+    ...attempt,
+    test: { ...test, testQuestions: sorted },
+  };
+}
+
+/** When per-question results are hidden, do not expose MCQ pass/fail or score on the in-progress attempt payload. */
+function maskMcqFeedbackDuringAttempt(attempt: Record<string, unknown>): Record<string, unknown> {
+  if (attempt.status !== 'in_progress') return attempt;
+  const test = attempt.test as { config?: unknown } | undefined;
+  const flags = getEffectiveShowResultsFlags(test?.config);
+  if (flags.showResultsPerQuestion) return attempt;
+  const subs = attempt.submissions as
+    | Array<{ question?: { type?: string }; selectedOptionId?: string | null; status?: string; score?: number | null }>
+    | undefined;
+  if (!subs?.length) return attempt;
+  return {
+    ...attempt,
+    submissions: subs.map((s) => {
+      if (s.question?.type !== 'mcq' || !s.selectedOptionId) return s;
+      return { ...s, status: 'answered', score: null };
+    }),
+  };
+}
+
 function shapeStudentAttemptResponse(attempt: Record<string, unknown>): Record<string, unknown> {
-  return stripCorrectAnswers(filterAttemptTestQuestionsBySubmissions(attempt));
+  return stripCorrectAnswers(
+    maskMcqFeedbackDuringAttempt(applyQuestionOrder(filterAttemptTestQuestionsBySubmissions(attempt)))
+  );
 }
 
 export async function attemptRoutes(app: FastifyInstance) {
@@ -237,31 +298,50 @@ export async function attemptRoutes(app: FastifyInstance) {
       });
     }
 
-    const attempt = await prisma.attempt.create({
-      data: {
-        userId: user.sub,
-        testId: body.testId,
-        variantId: allocation.variantId ?? null,
-        status: 'in_progress',
-        submissions: {
-          create: questionsForAttempt.map((tq) => ({
-            questionId: tq.questionId,
-            status: 'pending',
-          })),
-        },
+    const questionIds = questionsForAttempt.map((tq) => tq.questionId);
+    const questionOrder =
+      config.shuffleQuestions && questionIds.length > 0 ? shuffleQuestionIds(questionIds) : undefined;
+
+    const createPayload = {
+      userId: user.sub,
+      testId: body.testId,
+      variantId: allocation.variantId ?? null,
+      status: 'in_progress' as const,
+      questionOrder: questionOrder ?? undefined,
+      submissions: {
+        create: questionsForAttempt.map((tq) => ({
+          questionId: tq.questionId,
+          status: 'pending' as const,
+        })),
       },
-      include: {
-        test: {
-          include: {
-            testQuestions: {
-              include: { question: { include: { testCases: { where: { isPublic: true } } } } },
-              orderBy: { order: 'asc' },
-            },
+    };
+    const createInclude = {
+      test: {
+        include: {
+          testQuestions: {
+            include: { question: { include: { testCases: { where: { isPublic: true } } } } },
+            orderBy: { order: 'asc' as const },
           },
         },
-        submissions: true,
       },
-    });
+      submissions: true,
+    } as const;
+
+    let attempt;
+    try {
+      attempt = await prisma.attempt.create({
+        data: createPayload,
+        include: createInclude,
+      });
+    } catch (err) {
+      if (isMissingAttemptSchemaError(err)) {
+        return reply.status(503).send({
+          error:
+            'Database schema is out of date (missing columns on Attempt, e.g. questionOrder). Apply migrations: from apps/api run `pnpm exec prisma migrate deploy`, or run `apps/api/prisma/manual-fix-question-order.sql` on PostgreSQL.',
+        });
+      }
+      throw err;
+    }
 
     return reply.status(201).send(shapeStudentAttemptResponse(attempt as unknown as Record<string, unknown>));
   });
@@ -307,7 +387,9 @@ export async function attemptRoutes(app: FastifyInstance) {
     if (attempt.status === 'in_progress') {
       return reply.status(400).send({ error: 'Submit the test first to review answers' });
     }
-    return reply.send(filterAttemptTestQuestionsBySubmissions(attempt as unknown as Record<string, unknown>));
+    return reply.send(
+      applyQuestionOrder(filterAttemptTestQuestionsBySubmissions(attempt as unknown as Record<string, unknown>))
+    );
   });
 
   // GET /:id/result — returns full attempt result when available
@@ -331,7 +413,8 @@ export async function attemptRoutes(app: FastifyInstance) {
     }
 
     const config = attempt.test.config as AttemptTestConfig;
-    if (!config.showResultsImmediately && attempt.status !== 'graded') {
+    const { showResultsImmediately } = getEffectiveShowResultsFlags(config);
+    if (!showResultsImmediately && attempt.status !== 'graded') {
       return reply.send({
         id: attempt.id,
         status: attempt.status,
@@ -546,11 +629,19 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     const config = attempt.test.config as AttemptTestConfig;
     const weight = getQuestionWeight(config, questionId);
+    const { showResultsPerQuestion } = getEffectiveShowResultsFlags(config);
 
     const updatedSubmission = await prisma.submission.update({
       where: { id: submission.id },
       data: { selectedOptionId, status: correct ? 'passed' : 'failed', score: correct ? weight : 0 },
     });
+
+    if (!showResultsPerQuestion) {
+      return reply.send({
+        message: 'Submitted',
+        submittedAt: updatedSubmission.updatedAt,
+      });
+    }
 
     return reply.send({
       message: 'Submitted',
@@ -570,6 +661,7 @@ export async function attemptRoutes(app: FastifyInstance) {
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
 
     const config = attempt.test.config as AttemptTestConfig;
+    const { showResultsImmediately } = getEffectiveShowResultsFlags(config);
     const result = computeAttemptResult(
       attempt.submissions.map((s) => ({ questionId: s.questionId, score: s.score ?? 0 })),
       config
@@ -581,7 +673,7 @@ export async function attemptRoutes(app: FastifyInstance) {
       data: { submittedAt, score: result.totalScore, maxScore: result.maxScore, status: 'submitted' },
     });
 
-    if (config.showResultsImmediately) {
+    if (showResultsImmediately) {
       return reply.send({
         message: 'Attempt submitted',
         score: result.totalScore,
