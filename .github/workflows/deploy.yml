@@ -23,7 +23,15 @@ jobs:
             git pull origin main
             docker compose -f docker-compose.prod.yml build --no-cache api judge-worker
             docker compose -f docker-compose.prod.yml up -d
-            docker compose -f docker-compose.prod.yml exec -T api npx prisma migrate deploy
+
+            # Baseline: mark the initial migration as already applied if _prisma_migrations table is empty or missing
+            docker compose -f docker-compose.prod.yml exec -T -w /app/apps/api api \
+              npx prisma migrate resolve --applied 0_baseline --schema ./prisma/schema.prisma 2>/dev/null || true
+
+            # Apply any pending migrations
+            docker compose -f docker-compose.prod.yml exec -T -w /app/apps/api api \
+              npx prisma migrate deploy --schema ./prisma/schema.prisma
+
             docker system prune -f
 
   deploy-frontends:
