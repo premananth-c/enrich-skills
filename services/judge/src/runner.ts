@@ -3,6 +3,22 @@ import { Writable } from 'stream';
 
 const docker = new Docker();
 
+/** Ensure the runtime image exists locally (createContainer does not pull). */
+async function ensureImage(image: string): Promise<void> {
+  try {
+    await docker.getImage(image).inspect();
+    return;
+  } catch {
+    await new Promise<void>((resolve, reject) => {
+      docker.pull(image, (err: Error | null, stream: NodeJS.ReadableStream | undefined) => {
+        if (err) return reject(err);
+        if (!stream) return reject(new Error(`docker.pull returned no stream for ${image}`));
+        docker.modem.followProgress(stream, (err2: Error | null) => (err2 ? reject(err2) : resolve()));
+      });
+    });
+  }
+}
+
 export interface RunResult {
   stdout: string;
   stderr: string;
@@ -121,6 +137,7 @@ export async function runCode(
   let timedOut = false;
 
   try {
+    await ensureImage(config.image);
     container = await docker.createContainer({
       Image: config.image,
       Cmd: fullCmd,
