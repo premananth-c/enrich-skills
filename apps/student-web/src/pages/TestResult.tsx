@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
 
 interface ResultSubmission {
@@ -48,6 +48,14 @@ const cardStyle: React.CSSProperties = {
 
 export default function TestResult() {
   const { attemptId } = useParams();
+  const location = useLocation();
+  const courseNav = (location.state as { fromCourse?: string; fromTopic?: string } | null) ?? {};
+  const fromCourseId = courseNav.fromCourse;
+  const fromTopicId = courseNav.fromTopic;
+  const courseBackPath =
+    fromCourseId &&
+    `/courses/${fromCourseId}${fromTopicId ? `?topic=${encodeURIComponent(fromTopicId)}` : ''}`;
+  const reviewState = fromCourseId || fromTopicId ? { fromCourse: fromCourseId, fromTopic: fromTopicId } : undefined;
   const [result, setResult] = useState<AttemptResult | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -63,15 +71,39 @@ export default function TestResult() {
   if (!result) return <div style={{ padding: '2rem', color: '#ef4444' }}>Failed to load results.</div>;
 
   if (!result.resultsAvailable) {
+    const deferredPct =
+      result.maxScore != null && result.maxScore > 0
+        ? Math.round(((result.score ?? 0) / result.maxScore) * 100)
+        : result.percentage;
     return (
       <div style={{ textAlign: 'center', padding: '3rem 1rem' }}>
+        {courseBackPath ? (
+          <div style={{ marginBottom: '1rem' }}>
+            <Link to={courseBackPath} style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              &larr; Back to course
+            </Link>
+          </div>
+        ) : (
+          <div style={{ marginBottom: '1rem' }}>
+            <Link to="/tests" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+              &larr; Back to Tests
+            </Link>
+          </div>
+        )}
         <h1 style={{ marginBottom: '0.5rem' }}>Test Submitted</h1>
+        {result.maxScore != null && result.maxScore > 0 && (
+          <p style={{ fontSize: '1.15rem', fontWeight: 600, marginBottom: '0.75rem' }}>
+            Score: {result.score ?? 0} / {result.maxScore}
+            {deferredPct != null ? ` (${deferredPct}%)` : ''}
+          </p>
+        )}
         <p style={{ color: 'var(--color-text-muted)', maxWidth: 400, margin: '0 auto 1.5rem' }}>
           {result.message || 'Results will be shared by your instructor once they are ready.'}
         </p>
-        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center' }}>
+        <div style={{ display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
           <Link
             to={`/attempt/${attemptId}?review=1`}
+            state={reviewState}
             style={{
               padding: '0.6rem 1.5rem',
               border: '1px solid var(--color-border)',
@@ -83,19 +115,35 @@ export default function TestResult() {
           >
             Review Answers
           </Link>
-          <Link
-            to="/tests"
-            style={{
-              padding: '0.6rem 1.5rem',
-              background: 'var(--color-primary)',
-              color: 'white',
-              borderRadius: '6px',
-              textDecoration: 'none',
-              fontWeight: 500,
-            }}
-          >
-            Back to Tests
-          </Link>
+          {courseBackPath ? (
+            <Link
+              to={courseBackPath}
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: 'var(--color-primary)',
+                color: 'white',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              Back to course
+            </Link>
+          ) : (
+            <Link
+              to="/tests"
+              style={{
+                padding: '0.6rem 1.5rem',
+                background: 'var(--color-primary)',
+                color: 'white',
+                borderRadius: '6px',
+                textDecoration: 'none',
+                fontWeight: 500,
+              }}
+            >
+              Back to Tests
+            </Link>
+          )}
         </div>
       </div>
     );
@@ -107,9 +155,15 @@ export default function TestResult() {
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
-      <Link to="/tests" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
-        &larr; Back to Tests
-      </Link>
+      {courseBackPath ? (
+        <Link to={courseBackPath} style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          &larr; Back to course
+        </Link>
+      ) : (
+        <Link to="/tests" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          &larr; Back to Tests
+        </Link>
+      )}
 
       <h1 style={{ margin: '0.75rem 0 0.25rem', fontSize: '1.5rem' }}>{result.test?.title}</h1>
       <p style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', marginBottom: '1.5rem' }}>
@@ -239,6 +293,7 @@ export default function TestResult() {
       <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'center' }}>
         <Link
           to={`/attempt/${attemptId}?review=1`}
+          state={reviewState}
           style={{
             padding: '0.6rem 1.25rem',
             border: '1px solid var(--color-border)',

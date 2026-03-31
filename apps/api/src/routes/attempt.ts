@@ -415,11 +415,17 @@ export async function attemptRoutes(app: FastifyInstance) {
     const config = attempt.test.config as AttemptTestConfig;
     const { showResultsImmediately } = getEffectiveShowResultsFlags(config);
     if (!showResultsImmediately && attempt.status !== 'graded') {
+      const max = attempt.maxScore ?? 0;
+      const sc = attempt.score ?? 0;
+      const pct = max > 0 ? Math.round((sc / max) * 100) : 0;
       return reply.send({
         id: attempt.id,
         status: attempt.status,
         resultsAvailable: false,
         message: 'Results will be shared by your instructor.',
+        score: attempt.score,
+        maxScore: attempt.maxScore,
+        percentage: pct,
       });
     }
 

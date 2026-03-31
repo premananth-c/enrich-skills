@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useRef } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import Editor from '@monaco-editor/react';
 import { api } from '../lib/api';
 import CountdownTimer from '../components/CountdownTimer';
@@ -70,7 +70,11 @@ interface RunResult {
 export default function CodingCompiler() {
   const { attemptId } = useParams();
   const navigate = useNavigate();
+  const location = useLocation();
   const [searchParams] = useSearchParams();
+  const courseNav = (location.state as { fromCourse?: string; fromTopic?: string } | null) ?? {};
+  const fromCourseId = courseNav.fromCourse;
+  const fromTopicId = courseNav.fromTopic;
   const questionIndexParam = searchParams.get('q');
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
   const [currentIdx, setCurrentIdx] = useState(questionIndexParam ? parseInt(questionIndexParam) : 0);
@@ -206,11 +210,16 @@ export default function CodingCompiler() {
     if (!skipConfirm && !window.confirm('Submit the entire test? You cannot change your answers after.')) return;
     try {
       await api(`/attempts/${attemptId}/finish`, { method: 'POST' });
-      navigate(`/result/${attemptId}`);
+      navigate(`/result/${attemptId}`, {
+        state:
+          fromCourseId || fromTopicId
+            ? { fromCourse: fromCourseId, fromTopic: fromTopicId }
+            : undefined,
+      });
     } catch (e) {
       setOutput(`Error: ${e instanceof Error ? e.message : 'Finish failed'}`);
     }
-  }, [attemptId, navigate]);
+  }, [attemptId, navigate, fromCourseId, fromTopicId]);
 
   if (!attempt || !current) {
     return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading compiler...</div>;
@@ -220,7 +229,19 @@ export default function CodingCompiler() {
     return (
       <div style={{ padding: '2rem', textAlign: 'center' }}>
         <h1>Test Already Submitted</h1>
-        <button onClick={() => navigate(`/result/${attemptId}`)} style={primaryBtnStyle}>View Results</button>
+        <button
+          onClick={() =>
+            navigate(`/result/${attemptId}`, {
+              state:
+                fromCourseId || fromTopicId
+                  ? { fromCourse: fromCourseId, fromTopic: fromTopicId }
+                  : undefined,
+            })
+          }
+          style={primaryBtnStyle}
+        >
+          View Results
+        </button>
       </div>
     );
   }
@@ -236,7 +257,14 @@ export default function CodingCompiler() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.5rem 1rem', borderBottom: '1px solid var(--color-border)', background: 'var(--color-surface)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
           <button
-            onClick={() => navigate(`/attempt/${attemptId}`)}
+            onClick={() =>
+              navigate(`/attempt/${attemptId}`, {
+                state:
+                  fromCourseId || fromTopicId
+                    ? { fromCourse: fromCourseId, fromTopic: fromTopicId }
+                    : undefined,
+              })
+            }
             style={{ padding: '0.3rem 0.6rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: '4px', color: 'var(--color-text)', cursor: 'pointer', fontSize: '0.82rem' }}
           >
             Back to Test

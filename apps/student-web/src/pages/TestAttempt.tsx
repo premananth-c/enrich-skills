@@ -84,7 +84,12 @@ export default function TestAttempt() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const reviewMode = searchParams.get('review') === '1';
-  const fromCourseId = (location.state as { fromCourse?: string } | null)?.fromCourse;
+  const courseNav = (location.state as { fromCourse?: string; fromTopic?: string } | null) ?? {};
+  const fromCourseId = courseNav.fromCourse;
+  const fromTopicId = courseNav.fromTopic;
+  const courseBackPath =
+    fromCourseId &&
+    `/courses/${fromCourseId}${fromTopicId ? `?topic=${encodeURIComponent(fromTopicId)}` : ''}`;
   const [attempt, setAttempt] = useState<AttemptData | null>(null);
   const [currentIdx, setCurrentIdx] = useState(0);
   const [codeMap, setCodeMap] = useState<Record<string, string>>({});
@@ -145,18 +150,19 @@ export default function TestAttempt() {
       setFinishing(true);
       try {
         await api<{ resultsAvailable: boolean }>(`/attempts/${attemptId}/finish`, { method: 'POST' });
-        if (fromCourseId) {
-          navigate(`/courses/${fromCourseId}`, { state: { testSubmitted: true, attemptId }, replace: true });
-        } else {
-          navigate(`/result/${attemptId}`);
-        }
+        navigate(`/result/${attemptId}`, {
+          state:
+            fromCourseId || fromTopicId
+              ? { fromCourse: fromCourseId, fromTopic: fromTopicId }
+              : undefined,
+        });
       } catch (e) {
         setOutput(`Error: ${e instanceof Error ? e.message : 'Finish failed'}`);
       } finally {
         setFinishing(false);
       }
     },
-    [attemptId, finishing, navigate, fromCourseId]
+    [attemptId, finishing, navigate, fromCourseId, fromTopicId]
   );
 
   if (!attempt) return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading...</div>;
@@ -167,9 +173,9 @@ export default function TestAttempt() {
         <h1>Test Submitted</h1>
         <p style={{ color: 'var(--color-text-muted)' }}>This attempt has already been submitted.</p>
         <div style={{ marginTop: '1rem', display: 'flex', gap: '0.75rem', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {fromCourseId && (
+          {courseBackPath && (
             <Link
-              to={`/courses/${fromCourseId}`}
+              to={courseBackPath}
               style={{
                 padding: '0.6rem 1.5rem',
                 border: '1px solid var(--color-border)',
@@ -183,7 +189,14 @@ export default function TestAttempt() {
             </Link>
           )}
           <button
-            onClick={() => navigate(`/result/${attemptId}`)}
+            onClick={() =>
+              navigate(`/result/${attemptId}`, {
+                state:
+                  fromCourseId || fromTopicId
+                    ? { fromCourse: fromCourseId, fromTopic: fromTopicId }
+                    : undefined,
+              })
+            }
             style={{
               padding: '0.6rem 1.5rem',
               background: 'var(--color-primary)',
@@ -197,7 +210,7 @@ export default function TestAttempt() {
           </button>
           <Link
             to={`/attempt/${attemptId}?review=1`}
-            state={fromCourseId ? { fromCourse: fromCourseId } : undefined}
+            state={fromCourseId || fromTopicId ? { fromCourse: fromCourseId, fromTopic: fromTopicId } : undefined}
             style={{
               padding: '0.6rem 1.5rem',
               border: '1px solid var(--color-border)',
@@ -468,6 +481,7 @@ export default function TestAttempt() {
               <div style={{ marginTop: '0.75rem' }}>
                 <Link
                   to={`/attempt/${attemptId}/compiler?q=${currentIdx}`}
+                  state={fromCourseId || fromTopicId ? { fromCourse: fromCourseId, fromTopic: fromTopicId } : undefined}
                   style={{
                     display: 'inline-flex',
                     alignItems: 'center',

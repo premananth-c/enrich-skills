@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useSearchParams } from 'react-router-dom';
 import DOMPurify from 'dompurify';
 import { api } from '../lib/api';
 import { useSidebar } from '../context/SidebarContext';
@@ -67,6 +67,8 @@ interface CourseData {
 export default function CourseDetail() {
   const { courseId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const topicFromUrl = searchParams.get('topic');
   const { setCustomSidebar } = useSidebar();
   const [data, setData] = useState<CourseData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -80,18 +82,34 @@ export default function CourseDetail() {
     api<CourseData>(`/student/courses/${courseId}`)
       .then((res) => {
         setData(res);
-        if (res.course.chapters.length > 0) {
-          const firstChapter = res.course.chapters.sort((a, b) => a.order - b.order)[0];
-          setOpenChapters(new Set([firstChapter.id]));
-          if (firstChapter.topics.length > 0) {
-            const firstTopic = firstChapter.topics.sort((a, b) => a.order - b.order)[0];
-            setSelectedTopicId(firstTopic.id);
-          }
-        }
       })
       .catch(() => {})
       .finally(() => setLoading(false));
   }, [courseId]);
+
+  useEffect(() => {
+    if (!data) return;
+    const chapters = [...data.course.chapters].sort((a, b) => a.order - b.order);
+    if (chapters.length === 0) return;
+
+    if (topicFromUrl) {
+      for (const ch of chapters) {
+        const topicIds = ch.topics.map((t) => t.id);
+        if (topicIds.includes(topicFromUrl)) {
+          setSelectedTopicId(topicFromUrl);
+          setOpenChapters((prev) => new Set([...prev, ch.id]));
+          return;
+        }
+      }
+    }
+
+    const firstChapter = chapters[0];
+    setOpenChapters(new Set([firstChapter.id]));
+    const sortedTopics = [...firstChapter.topics].sort((a, b) => a.order - b.order);
+    if (sortedTopics.length > 0) {
+      setSelectedTopicId(sortedTopics[0].id);
+    }
+  }, [data, topicFromUrl]);
 
   // Clear custom sidebar when unmounting
   useEffect(() => {
@@ -222,7 +240,9 @@ export default function CourseDetail() {
         method: 'POST',
         body: JSON.stringify({ testId }),
       });
-      navigate(`/attempt/${attempt.id}`, { state: { fromCourse: courseId } });
+      navigate(`/attempt/${attempt.id}`, {
+        state: { fromCourse: courseId, fromTopic: selectedTopicId ?? undefined },
+      });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to start test');
     } finally {
