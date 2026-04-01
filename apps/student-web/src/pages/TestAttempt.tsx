@@ -84,6 +84,12 @@ export default function TestAttempt() {
   const location = useLocation();
   const [searchParams] = useSearchParams();
   const reviewMode = searchParams.get('review') === '1';
+  const longTextStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.35,
+  };
   const courseNav = (location.state as { fromCourse?: string; fromTopic?: string } | null) ?? {};
   const fromCourseId = courseNav.fromCourse;
   const fromTopicId = courseNav.fromTopic;
@@ -452,7 +458,7 @@ export default function TestAttempt() {
               padding: '1rem',
             }}
           >
-            <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem' }}>{content?.title}</h2>
+            <h2 style={{ margin: '0 0 0.5rem', fontSize: '1.1rem', ...longTextStyle }}>{content?.title}</h2>
             <div style={{ whiteSpace: 'pre-wrap', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
               {content?.description}
             </div>
