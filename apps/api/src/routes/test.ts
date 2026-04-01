@@ -139,12 +139,32 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
-    const existing = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
+    const { deleteQuestions } = request.query as { deleteQuestions?: string };
+    const existing = await prisma.test.findFirst({
+      where: { id: request.params.id, tenantId },
+      include: { testQuestions: { select: { questionId: true } } },
+    });
     if (!existing) return reply.status(404).send({ error: 'Test not found' });
     if (existing.status !== 'archived') {
       return reply.status(400).send({ error: 'Only archived tests can be permanently deleted. Archive the test first.' });
     }
+
+    const questionIds = existing.testQuestions.map((tq) => tq.questionId);
+
     await prisma.test.delete({ where: { id: request.params.id } });
+
+    if (deleteQuestions === 'true' && questionIds.length > 0) {
+      const stillLinked = await prisma.testQuestion.findMany({
+        where: { questionId: { in: questionIds } },
+        select: { questionId: true },
+      });
+      const stillLinkedIds = new Set(stillLinked.map((tq) => tq.questionId));
+      const toDelete = questionIds.filter((qid) => !stillLinkedIds.has(qid));
+      if (toDelete.length > 0) {
+        await prisma.question.deleteMany({ where: { id: { in: toDelete }, tenantId } });
+      }
+    }
+
     return reply.status(204).send();
   });
 

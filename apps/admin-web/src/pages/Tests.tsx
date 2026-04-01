@@ -20,6 +20,9 @@ export default function Tests() {
   const [search, setSearch] = useState('');
   const [historyTarget, setHistoryTarget] = useState<{ id: string; title: string } | null>(null);
   const [createFromFileOpen, setCreateFromFileOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
+  const [deleteQuestions, setDeleteQuestions] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const navigate = useNavigate();
 
   const loadTests = () => {
@@ -52,13 +55,23 @@ export default function Tests() {
     }
   };
 
-  const handleDelete = async (id: string, title: string) => {
-    if (!confirm(`Permanently delete test "${title}"? This cannot be undone.`)) return;
+  const openDeleteModal = (id: string, title: string) => {
+    setDeleteTarget({ id, title });
+    setDeleteQuestions(false);
+  };
+
+  const confirmDelete = async () => {
+    if (!deleteTarget) return;
+    setDeleting(true);
     try {
-      await api(`/tests/${id}`, { method: 'DELETE' });
+      const qs = deleteQuestions ? '?deleteQuestions=true' : '';
+      await api(`/tests/${deleteTarget.id}${qs}`, { method: 'DELETE' });
+      setDeleteTarget(null);
       loadTests();
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Delete failed');
+    } finally {
+      setDeleting(false);
     }
   };
 
@@ -109,7 +122,7 @@ export default function Tests() {
                 {t.status === 'archived' && (
                   <>
                     <button onClick={() => handleRevoke(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
-                    <button onClick={() => handleDelete(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
+                    <button onClick={() => openDeleteModal(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
                   </>
                 )}
                 <button onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
@@ -176,6 +189,44 @@ export default function Tests() {
           onClose={() => setCreateFromFileOpen(false)}
           onCreated={loadTests}
         />
+      )}
+
+      {deleteTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 12, padding: '1.5rem', maxWidth: 440, width: '90%', boxShadow: '0 8px 24px rgba(0,0,0,0.15)' }}>
+            <h3 style={{ margin: '0 0 0.75rem', fontSize: '1.1rem' }}>Delete Test</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              Permanently delete <strong>{deleteTarget.title}</strong>? This cannot be undone.
+            </p>
+            <label style={{ display: 'flex', alignItems: 'flex-start', gap: '0.5rem', padding: '0.75rem', background: '#ef444410', border: '1px solid #ef444433', borderRadius: 8, cursor: 'pointer', marginBottom: '1.25rem' }}>
+              <input
+                type="checkbox"
+                checked={deleteQuestions}
+                onChange={(e) => setDeleteQuestions(e.target.checked)}
+                style={{ marginTop: 2, accentColor: '#ef4444' }}
+              />
+              <span style={{ fontSize: '0.88rem', color: '#f87171', lineHeight: 1.4 }}>
+                Also permanently delete all questions that belong <em>only</em> to this test. Questions shared with other tests will be kept.
+              </span>
+            </label>
+            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setDeleteTarget(null)}
+                disabled={deleting}
+                style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                disabled={deleting}
+                style={{ padding: '0.5rem 1rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: deleting ? 0.6 : 1 }}
+              >
+                {deleting ? 'Deleting…' : deleteQuestions ? 'Delete Test & Questions' : 'Delete Test'}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
