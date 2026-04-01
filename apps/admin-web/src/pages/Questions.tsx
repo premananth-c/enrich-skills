@@ -18,6 +18,7 @@ export default function Questions() {
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<'all' | 'mcq' | 'coding'>('all');
+  const [testFilter, setTestFilter] = useState('');
   const [search, setSearch] = useState('');
   const [historyTarget, setHistoryTarget] = useState<{ id: string; title: string } | null>(null);
   const navigate = useNavigate();
@@ -77,7 +78,26 @@ export default function Questions() {
   };
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
+
+  const allTests = (() => {
+    const map = new Map<string, string>();
+    for (const q of questions) {
+      for (const tq of q.testQuestions ?? []) {
+        if (!map.has(tq.test.id)) map.set(tq.test.id, tq.test.title);
+      }
+    }
+    return [...map.entries()]
+      .map(([id, title]) => ({ id, title }))
+      .sort((a, b) => a.title.localeCompare(b.title));
+  })();
+
   const filtered = questions.filter((q) => {
+    if (testFilter) {
+      const belongsToTest = (q.testQuestions ?? []).some((tq) => tq.test.id === testFilter);
+      if (testFilter === '__unassigned__') {
+        if ((q.testQuestions ?? []).length > 0) return false;
+      } else if (!belongsToTest) return false;
+    }
     const s = search.trim().toLowerCase();
     if (!s) return true;
     return (
@@ -102,12 +122,23 @@ export default function Questions() {
         </button>
       </div>
 
-      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', alignItems: 'center', flexWrap: 'wrap' }}>
         {(['all', 'mcq', 'coding'] as const).map((f) => (
           <button key={f} onClick={() => setFilter(f)} style={{ padding: '0.35rem 0.75rem', background: filter === f ? 'var(--color-primary)' : 'transparent', color: filter === f ? '#fff' : 'var(--color-text-muted)', border: filter === f ? 'none' : '1px solid var(--color-border)', borderRadius: 6, fontSize: '0.85rem', textTransform: 'uppercase' }}>
             {f}
           </button>
         ))}
+        <select
+          value={testFilter}
+          onChange={(e) => setTestFilter(e.target.value)}
+          style={{ padding: '0.35rem 0.75rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: testFilter ? 'var(--color-text)' : 'var(--color-text-muted)', fontSize: '0.85rem', minWidth: 180 }}
+        >
+          <option value="">All Tests</option>
+          <option value="__unassigned__">Unassigned (no test)</option>
+          {allTests.map((t) => (
+            <option key={t.id} value={t.id}>{t.title}</option>
+          ))}
+        </select>
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input

@@ -326,7 +326,7 @@ export default function QuestionForm() {
 
         <div>
           <label style={labelStyle}>Title</label>
-          <input value={title} onChange={(e) => setTitle(e.target.value)} required minLength={2} style={inputStyle} />
+          <textarea value={title} onChange={(e) => setTitle(e.target.value)} required minLength={2} style={{ ...inputStyle, minHeight: 60, resize: 'vertical' }} placeholder="Enter the full question text…" />
         </div>
 
         <div>

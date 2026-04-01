@@ -227,7 +227,7 @@ export default function CreateTestFromFileModal({ onClose, onCreated }: CreateTe
           text: r.optionTexts[idx] || `Option ${letter}`,
           isCorrect: r.correctKey === letter,
         }));
-        const rawTitle = r.title.slice(0, 200).trim() || `Question ${i + 1}`;
+        const rawTitle = r.title.trim() || `Question ${i + 1}`;
         const title = rawTitle.length >= 2 ? rawTitle : `${rawTitle}.`;
         const created = await api<{ id: string }>('/questions/mcq', {
           method: 'POST',
