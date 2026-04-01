@@ -69,6 +69,12 @@ export default function Questions() {
     background: d === 'easy' ? '#16a34a22' : d === 'medium' ? '#eab30822' : '#ef444422',
     color: d === 'easy' ? '#4ade80' : d === 'medium' ? '#fbbf24' : '#f87171',
   });
+  const longTextCellStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.4,
+  };
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
   const filtered = questions.filter((q) => {
@@ -131,7 +137,7 @@ export default function Questions() {
             <tbody>
               {activeQuestions.map((q) => (
                 <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{q.content?.title || '(untitled)'}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500, ...longTextCellStyle }}>{q.content?.title || '(untitled)'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: '0.85rem' }}>{q.type}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <span style={badgeStyle(q.difficulty)}>{q.difficulty}</span>
@@ -179,7 +185,7 @@ export default function Questions() {
             <tbody>
               {archivedQuestions.map((q) => (
                 <tr key={q.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{q.content?.title || '(untitled)'}</td>
+                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500, ...longTextCellStyle }}>{q.content?.title || '(untitled)'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: '0.85rem' }}>{q.type}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{typeof q.content?.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>

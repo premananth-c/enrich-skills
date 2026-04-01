@@ -47,6 +47,12 @@ const cardStyle: React.CSSProperties = {
 };
 
 export default function TestResult() {
+  const longTextStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.35,
+  };
   const { attemptId } = useParams();
   const location = useLocation();
   const courseNav = (location.state as { fromCourse?: string; fromTopic?: string } | null) ?? {};
@@ -215,8 +221,8 @@ export default function TestResult() {
       <h2 style={{ fontSize: '1.1rem', margin: '1.5rem 0 0.75rem' }}>Question Breakdown</h2>
       {result.submissions?.map((sub, i) => (
         <div key={sub.id} style={cardStyle}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>
-            <span style={{ fontWeight: 500 }}>Q{i + 1}: {sub.question.content.title}</span>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
+            <span style={{ fontWeight: 500, minWidth: 0, ...longTextStyle }}>Q{i + 1}: {sub.question.content.title}</span>
             <span
               style={{
                 fontSize: '0.8rem',
@@ -225,6 +231,7 @@ export default function TestResult() {
                 borderRadius: '4px',
                 background: sub.status === 'passed' ? 'rgba(34,197,94,0.15)' : 'rgba(239,68,68,0.15)',
                 color: sub.status === 'passed' ? '#22c55e' : '#ef4444',
+                flexShrink: 0,
               }}
             >
               {sub.status === 'passed' ? 'Correct' : sub.status === 'failed' ? 'Incorrect' : sub.status}

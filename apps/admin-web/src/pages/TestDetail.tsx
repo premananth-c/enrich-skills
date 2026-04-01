@@ -374,6 +374,12 @@ export default function TestDetail() {
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
+  const longTextCellStyle: React.CSSProperties = {
+    whiteSpace: 'normal',
+    overflowWrap: 'anywhere',
+    wordBreak: 'break-word',
+    lineHeight: 1.4,
+  };
 
   const variants = test.variants || [];
   const isCustomWeights = test.config.scoreDistribution === 'custom';
@@ -786,7 +792,7 @@ export default function TestDetail() {
                     return (
                       <tr key={tq.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{i + 1}</td>
-                        <td style={{ padding: '0.75rem 1rem' }}>{tq.question.content?.title || '(untitled)'}</td>
+                        <td style={{ padding: '0.75rem 1rem', ...longTextCellStyle }}>{tq.question.content?.title || '(untitled)'}</td>
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', textTransform: 'uppercase', fontSize: '0.85rem' }}>{tq.question.type}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <span style={badgeStyle(tq.question.difficulty)}>{tq.question.difficulty}</span>
@@ -968,7 +974,7 @@ export default function TestDetail() {
                       }}
                     />
                     <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 500 }}>{q.content?.title || '(untitled)'}</div>
+                      <div style={{ fontWeight: 500, ...longTextCellStyle }}>{q.content?.title || '(untitled)'}</div>
                       <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{q.type} &bull; {q.difficulty}{q.tags.length ? ` &bull; ${q.tags.join(', ')}` : ''}</div>
                     </div>
                   </label>
@@ -1036,7 +1042,7 @@ export default function TestDetail() {
                     }}
                   />
                   <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 500 }}>{tq.question.content?.title || '(untitled)'}</div>
+                    <div style={{ fontWeight: 500, ...longTextCellStyle }}>{tq.question.content?.title || '(untitled)'}</div>
                     <div style={{ fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>{tq.question.type} &bull; {tq.question.difficulty}</div>
                   </div>
                 </label>
