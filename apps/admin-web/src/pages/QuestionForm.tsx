@@ -33,6 +33,7 @@ interface QuestionData {
     options?: McqOption[];
     explanation?: string;
     defaultWeight?: number;
+    starterCode?: string;
   };
   testCases?: (TestCaseEntry & { outputMatchMode?: string })[];
 }
@@ -50,6 +51,7 @@ function buildQuestionSnapshot(input: {
   testCases: TestCaseEntry[];
   defaultWeight: number | '';
   codingLanguage?: string;
+  starterCode?: string;
 }) {
   return JSON.stringify({
     type: input.type,
@@ -63,7 +65,7 @@ function buildQuestionSnapshot(input: {
     constraints: input.constraints,
     testCases: input.testCases,
     defaultWeight: input.defaultWeight === '' ? undefined : input.defaultWeight,
-    ...(input.type === 'coding' ? { codingLanguage: input.codingLanguage ?? '' } : {}),
+    ...(input.type === 'coding' ? { codingLanguage: input.codingLanguage ?? '', starterCode: input.starterCode ?? '' } : {}),
   });
 }
 
@@ -95,6 +97,7 @@ export default function QuestionForm() {
     { input: '', expectedOutput: '', isPublic: true, weight: 1, outputMatchMode: 'exact' },
   ]);
   const [codingLanguage, setCodingLanguage] = useState('typescript');
+  const [starterCode, setStarterCode] = useState('');
   const [linkedTest, setLinkedTest] = useState<{ type: string; codingLanguage?: string } | null>(null);
 
   const [saving, setSaving] = useState(false);
@@ -141,6 +144,7 @@ export default function QuestionForm() {
             }))
           );
           setCodingLanguage(q.content.codingLanguage ?? 'python');
+          setStarterCode(q.content.starterCode ?? '');
         }
         setInitialSnapshot(
           buildQuestionSnapshot({
@@ -161,7 +165,7 @@ export default function QuestionForm() {
               outputMatchMode: 'outputMatchMode' in tc && tc.outputMatchMode === 'json-orderless' ? 'json-orderless' : 'exact',
             })),
             defaultWeight: typeof q.content.defaultWeight === 'number' && Number.isFinite(q.content.defaultWeight) ? q.content.defaultWeight : 1,
-            ...(q.type === 'coding' ? { codingLanguage: q.content.codingLanguage ?? 'python' } : {}),
+            ...(q.type === 'coding' ? { codingLanguage: q.content.codingLanguage ?? 'python', starterCode: q.content.starterCode ?? '' } : {}),
           })
         );
       })
@@ -234,6 +238,7 @@ export default function QuestionForm() {
           constraints: constraints.split('\n').filter(Boolean),
           testCases,
           ...(defaultWeight !== '' && Number.isFinite(Number(defaultWeight)) && { defaultWeight: Number(defaultWeight) }),
+          ...(starterCode.trim() && { starterCode: starterCode }),
         };
         if (isEdit) {
           await api(`/questions/${id}`, { method: 'PATCH', body: JSON.stringify(payload) });
@@ -276,7 +281,7 @@ export default function QuestionForm() {
     constraints,
     testCases,
     defaultWeight,
-    ...(type === 'coding' ? { codingLanguage } : {}),
+    ...(type === 'coding' ? { codingLanguage, starterCode } : {}),
   });
   const isDirty = !isEdit || currentSnapshot !== initialSnapshot;
   const hasCorrect = options.some((o) => o.isCorrect);
@@ -425,6 +430,21 @@ export default function QuestionForm() {
                   Matches this test&apos;s coding language.
                 </p>
               )}
+            </div>
+            <div>
+              <label style={labelStyle}>Starter Code (optional)</label>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.8rem', color: 'var(--color-text-muted)', lineHeight: 1.45 }}>
+                Pre-filled code shown in the student's editor. Use this to provide the function signature they must implement.
+                For stdin-based languages (Python, Java, C, C++), include the I/O boilerplate.
+                For append-based languages (JS, TS), provide the function stub that test cases will call.
+              </p>
+              <textarea
+                value={starterCode}
+                onChange={(e) => setStarterCode(e.target.value)}
+                style={{ ...inputStyle, minHeight: 120, fontFamily: 'monospace', fontSize: '0.88rem', resize: 'vertical' as const, whiteSpace: 'pre', overflowWrap: 'normal', overflowX: 'auto' }}
+                placeholder={`e.g.\nfunction twoSum(nums, target) {\n  // your code here\n}`}
+                spellCheck={false}
+              />
             </div>
             <fieldset style={{ border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
               <legend style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem', padding: '0 0.5rem' }}>Examples</legend>

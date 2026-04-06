@@ -5,6 +5,7 @@ import { formatStatusLabel } from '../lib/status';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 import CreateTestFromFileModal from '../components/CreateTestFromFileModal';
+import CreateCodingTestFromFileModal from '../components/CreateCodingTestFromFileModal';
 
 interface Test {
   id: string;
@@ -20,6 +21,7 @@ export default function Tests() {
   const [search, setSearch] = useState('');
   const [historyTarget, setHistoryTarget] = useState<{ id: string; title: string } | null>(null);
   const [createFromFileOpen, setCreateFromFileOpen] = useState(false);
+  const [createCodingFromFileOpen, setCreateCodingFromFileOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; title: string } | null>(null);
   const [deleteQuestions, setDeleteQuestions] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -141,9 +143,15 @@ export default function Tests() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           <button
             onClick={() => setCreateFromFileOpen(true)}
-            style={{ padding: '0.5rem 1.25rem', background: 'transparent', color: 'var(--color-primary)', border: '1px solid var(--color-primary)', borderRadius: 6, fontWeight: 500 }}
+            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
           >
-            Create Test From File
+            Create MCQ Test From File
+          </button>
+          <button
+            onClick={() => setCreateCodingFromFileOpen(true)}
+            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
+          >
+            Create Coding Test From File
           </button>
           <button
             onClick={() => navigate('/tests/new')}
@@ -187,6 +195,12 @@ export default function Tests() {
       {createFromFileOpen && (
         <CreateTestFromFileModal
           onClose={() => setCreateFromFileOpen(false)}
+          onCreated={loadTests}
+        />
+      )}
+      {createCodingFromFileOpen && (
+        <CreateCodingTestFromFileModal
+          onClose={() => setCreateCodingFromFileOpen(false)}
           onCreated={loadTests}
         />
       )}

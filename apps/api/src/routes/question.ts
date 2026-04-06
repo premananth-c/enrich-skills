@@ -59,6 +59,7 @@ export async function questionRoutes(app: FastifyInstance) {
           ...(data.timeLimitMs !== undefined && { timeLimitMs: data.timeLimitMs }),
           ...(data.memoryLimitMb !== undefined && { memoryLimitMb: data.memoryLimitMb }),
           ...(data.supportedLanguages !== undefined && { supportedLanguages: data.supportedLanguages }),
+          ...(data.starterCode !== undefined && { starterCode: data.starterCode }),
         },
         difficulty: data.difficulty,
         tags: data.tags,
@@ -160,6 +161,7 @@ export async function questionRoutes(app: FastifyInstance) {
             ...(data.timeLimitMs !== undefined && { timeLimitMs: data.timeLimitMs }),
             ...(data.memoryLimitMb !== undefined && { memoryLimitMb: data.memoryLimitMb }),
             ...(data.supportedLanguages !== undefined && { supportedLanguages: data.supportedLanguages }),
+            ...(data.starterCode !== undefined && { starterCode: data.starterCode }),
           },
           ...(data.testCases && {
             testCases: {
