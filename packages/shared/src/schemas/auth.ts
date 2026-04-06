@@ -24,11 +24,21 @@ export const registerWithInviteSchema = z.object({
   address: z.string().min(1, 'Address is required'),
 });
 
-export const createInviteSchema = z.object({
-  email: z.string().email(),
-  testId: z.string().uuid().optional(),
-  variantId: z.string().uuid().optional(),
-});
+export const createInviteSchema = z
+  .object({
+    email: z.string().email(),
+    testId: z.string().uuid().optional(),
+    variantId: z.string().uuid().optional(),
+    batchId: z.string().uuid().optional(),
+    courseId: z.string().uuid().optional(),
+    /** ISO date string (YYYY-MM-DD) for course assignment when invite is accepted */
+    courseDueDate: z.string().optional(),
+  })
+  .refine((d) => !d.variantId || Boolean(d.testId), { message: 'variantId requires testId', path: ['variantId'] })
+  .refine((d) => !d.courseDueDate?.trim() || Boolean(d.courseId), {
+    message: 'courseDueDate requires courseId',
+    path: ['courseDueDate'],
+  });
 
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;

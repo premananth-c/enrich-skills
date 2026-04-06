@@ -40,15 +40,30 @@ export async function sendAdminInviteEmail(to: string, tempPassword: string): Pr
   }
 }
 
-export async function sendInviteEmail(to: string, token: string, testTitle?: string): Promise<void> {
+export type InviteEmailContext = {
+  testTitle?: string;
+  batchName?: string;
+  courseName?: string;
+};
+
+export async function sendInviteEmail(to: string, token: string, context?: InviteEmailContext): Promise<void> {
   const inviteUrl = `${INVITE_BASE_URL}/invite?token=${encodeURIComponent(token)}`;
-  const subject = testTitle
-    ? `You're invited to take a test: ${testTitle}`
-    : "You're invited to join Ranker Ship (by Vihaan Digital Solutions)";
+  const { testTitle, batchName, courseName } = context || {};
+  const subjectBits = [
+    testTitle && `Test: ${testTitle}`,
+    batchName && `Batch: ${batchName}`,
+    courseName && `Course: ${courseName}`,
+  ].filter(Boolean) as string[];
+  const subject =
+    subjectBits.length > 0
+      ? `You're invited — ${subjectBits.join(' · ')}`
+      : "You're invited to join Ranker Ship (by Vihaan Digital Solutions)";
 
   const html = `
     <p>You have been invited to join Ranker Ship (by Vihaan Digital Solutions).</p>
     ${testTitle ? `<p>You have been assigned to the test: <strong>${testTitle}</strong>.</p>` : ''}
+    ${batchName ? `<p>You will be added to the batch: <strong>${batchName}</strong> after you sign up.</p>` : ''}
+    ${courseName ? `<p>You will be enrolled in the course: <strong>${courseName}</strong> after you sign up.</p>` : ''}
     <p>Click the link below to create your account and complete your profile. This link expires in 2 days.</p>
     <p>
       <a href="${inviteUrl}" style="display:inline-block;padding:10px 20px;background:#8b5cf6;color:#fff;text-decoration:none;border-radius:6px;">

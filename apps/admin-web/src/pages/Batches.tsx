@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
+import {
+  adminBtnCancelSm,
+  adminBtnDestructiveTable,
+  adminBtnPrimary,
+  adminBtnPrimarySm,
+} from '../lib/adminButtonStyles';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 
 interface Batch {
@@ -73,10 +79,7 @@ export default function Batches() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Batches</h1>
-        <button
-          onClick={() => navigate('/batches/new')}
-          style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-        >
+        <button type="button" onClick={() => navigate('/batches/new')} style={adminBtnPrimary}>
           + Create Batch
         </button>
       </div>
@@ -109,9 +112,9 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b._count?.members ?? 0}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => navigate(`/batches/${b.id}/edit`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
-                      <button onClick={() => handleArchive(b.id, b.name)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Archive</button>
-                      <button onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                      <button type="button" onClick={() => navigate(`/batches/${b.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
+                      <button type="button" onClick={() => handleArchive(b.id, b.name)} style={adminBtnDestructiveTable}>Archive</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>
@@ -140,9 +143,9 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b._count?.members ?? 0}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleRevoke(b.id, b.name)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
-                      <button onClick={() => handleDelete(b.id, b.name)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
-                      <button onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                      <button type="button" onClick={() => handleRevoke(b.id, b.name)} style={adminBtnPrimarySm}>Revoke</button>
+                      <button type="button" onClick={() => handleDelete(b.id, b.name)} style={adminBtnDestructiveTable}>Delete</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>

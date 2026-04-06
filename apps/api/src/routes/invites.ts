@@ -7,6 +7,14 @@ import { sendInviteEmail } from '../lib/email.js';
 
 const INVITE_EXPIRY_DAYS = 2;
 
+function parseCourseDueDateYmd(raw: string | undefined): Date | undefined {
+  if (!raw?.trim()) return undefined;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw.trim());
+  if (!m) return undefined;
+  const d = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 0, 0, 0, 0));
+  return Number.isNaN(d.getTime()) ? undefined : d;
+}
+
 export async function inviteRoutes(app: FastifyInstance) {
   app.addHook('preHandler', async (request: FastifyRequest, reply: FastifyReply) => {
     if (request.url.includes('/validate') && request.method === 'GET') return;
@@ -54,10 +62,10 @@ export async function inviteRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
-    const { email, testId, variantId } = parsed.data;
+    const { email, testId, variantId, batchId, courseId, courseDueDate } = parsed.data;
 
     const existingUser = await prisma.user.findUnique({
-      where: { tenantId_email: { tenantId, email } },
+      where: { tenantId_email: { tenantId, email: email.toLowerCase() } },
     });
     if (existingUser) {
       return reply.status(409).send({ error: 'A student with this email is already registered' });
@@ -82,6 +90,22 @@ export async function inviteRoutes(app: FastifyInstance) {
       }
     }
 
+    let batchName: string | undefined;
+    if (batchId) {
+      const batch = await prisma.batch.findFirst({ where: { id: batchId, tenantId } });
+      if (!batch) return reply.status(400).send({ error: 'Batch not found' });
+      batchName = batch.name;
+    }
+
+    let courseName: string | undefined;
+    let courseDueDateVal: Date | undefined;
+    if (courseId) {
+      const course = await prisma.course.findFirst({ where: { id: courseId, tenantId } });
+      if (!course) return reply.status(400).send({ error: 'Course not found' });
+      courseName = course.title;
+      courseDueDateVal = parseCourseDueDateYmd(courseDueDate);
+    }
+
     const invite = await prisma.invite.create({
       data: {
         tenantId,
@@ -91,10 +115,13 @@ export async function inviteRoutes(app: FastifyInstance) {
         invitedBy: admin.sub,
         testId: testId || undefined,
         variantId: variantId || undefined,
+        batchId: batchId || undefined,
+        courseId: courseId || undefined,
+        courseDueDate: courseDueDateVal ?? undefined,
       },
     });
 
-    await sendInviteEmail(invite.email, invite.token, testTitle);
+    await sendInviteEmail(invite.email, invite.token, { testTitle, batchName, courseName });
 
     return reply.status(201).send({
       id: invite.id,
@@ -102,6 +129,8 @@ export async function inviteRoutes(app: FastifyInstance) {
       expiresAt: invite.expiresAt,
       testId: invite.testId ?? undefined,
       variantId: invite.variantId ?? undefined,
+      batchId: invite.batchId ?? undefined,
+      courseId: invite.courseId ?? undefined,
       message: 'Invite sent successfully',
     });
   });
@@ -125,7 +154,11 @@ export async function inviteRoutes(app: FastifyInstance) {
 
     const invite = await prisma.invite.findFirst({
       where: { id: request.params.id, tenantId },
-      include: { test: { select: { title: true } } },
+      include: {
+        test: { select: { title: true } },
+        batch: { select: { name: true } },
+        course: { select: { title: true } },
+      },
     });
     if (!invite) return reply.status(404).send({ error: 'Invite not found' });
     if (invite.usedAt) return reply.status(400).send({ error: 'This invite has already been accepted' });
@@ -139,11 +172,17 @@ export async function inviteRoutes(app: FastifyInstance) {
       data: { token, expiresAt },
       include: {
         test: { select: { id: true, title: true } },
+        batch: { select: { id: true, name: true } },
+        course: { select: { id: true, title: true } },
         inviter: { select: { name: true, email: true } },
       },
     });
 
-    await sendInviteEmail(updated.email, updated.token, invite.test?.title);
+    await sendInviteEmail(updated.email, updated.token, {
+      testTitle: invite.test?.title,
+      batchName: invite.batch?.name,
+      courseName: invite.course?.title,
+    });
 
     return reply.send(updated);
   });

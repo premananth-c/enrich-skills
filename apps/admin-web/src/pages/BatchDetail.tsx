@@ -5,6 +5,16 @@ import { formatStatusLabel } from '../lib/status';
 import { formatAttemptFraction, formatReportResult } from '../lib/reportDisplay';
 import { downloadXlsxRows, reportAttemptsToFlatRows, sanitizeReportFilename } from '../lib/reportExport';
 import { emitToast } from '../lib/toast';
+import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
+import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import {
+  adminBtnCancel,
+  adminBtnCancelSm,
+  adminBtnDestructiveTable,
+  adminBtnPrimary,
+  adminBtnPrimaryDisabled,
+  adminBtnPrimarySm,
+} from '../lib/adminButtonStyles';
 
 type Tab = 'members' | 'calendar' | 'notes' | 'videos' | 'assignments' | 'tests' | 'reports';
 
@@ -98,6 +108,12 @@ export default function BatchDetail() {
   const [assignTestOpen, setAssignTestOpen] = useState(false);
   const [assignTestId, setAssignTestId] = useState('');
   const [reportAttempts, setReportAttempts] = useState<BatchReportAttempt[]>([]);
+  const [bulkMembersFile, setBulkMembersFile] = useState<File | null>(null);
+  const [bulkMembersBusy, setBulkMembersBusy] = useState(false);
+  const [bulkMembersProgress, setBulkMembersProgress] = useState('');
+  const [inviteMemberEmail, setInviteMemberEmail] = useState('');
+  const [inviteMemberSending, setInviteMemberSending] = useState(false);
+  const [inviteMemberError, setInviteMemberError] = useState('');
 
   useEffect(() => {
     if (!id) return;
@@ -250,6 +266,76 @@ export default function BatchDetail() {
     }
   };
 
+  const inviteMemberByEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!id || !inviteMemberEmail.trim()) return;
+    setInviteMemberSending(true);
+    setInviteMemberError('');
+    try {
+      await api('/invites', {
+        method: 'POST',
+        body: JSON.stringify({ email: inviteMemberEmail.trim(), batchId: id }),
+      });
+      emitToast('success', `Invite sent to ${inviteMemberEmail.trim()}`);
+      setInviteMemberEmail('');
+    } catch (err) {
+      setInviteMemberError(err instanceof Error ? err.message : 'Failed to send invite');
+    } finally {
+      setInviteMemberSending(false);
+    }
+  };
+
+  const bulkAddMembersFromSpreadsheet = async () => {
+    if (!id || !bulkMembersFile) {
+      emitToast('error', 'Choose a spreadsheet with an Email column.');
+      return;
+    }
+    setBulkMembersBusy(true);
+    setBulkMembersProgress('');
+    try {
+      const buf = await bulkMembersFile.arrayBuffer();
+      const parsed = parseEmailsFromSpreadsheetBuffer(buf);
+      if (parsed.error) {
+        emitToast('error', parsed.error);
+        return;
+      }
+      let added = 0;
+      let invited = 0;
+      let failed = 0;
+      const failures: string[] = [];
+      for (let i = 0; i < parsed.emails.length; i++) {
+        const email = parsed.emails[i];
+        setBulkMembersProgress(`Row ${i + 1} of ${parsed.emails.length}…`);
+        const st = students.find((s) => (s.email || '').toLowerCase() === email);
+        try {
+          if (st) {
+            if (batch?.members.some((m) => m.user.id === st.id)) continue;
+            await api(`/batches/${id}/members`, { method: 'POST', body: JSON.stringify({ userId: st.id }) });
+            added++;
+          } else {
+            await api('/invites', { method: 'POST', body: JSON.stringify({ email, batchId: id }) });
+            invited++;
+          }
+        } catch (err) {
+          failed++;
+          failures.push(`${email}: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+      const b = await api<BatchInfo>(`/batches/${id}`);
+      setBatch(b);
+      setBulkMembersFile(null);
+      emitToast('success', `Bulk add finished: ${added} added to batch, ${invited} invite(s) sent${failed ? `, ${failed} failed` : ''}.`);
+      if (failures.length > 0) {
+        emitToast('error', failures.slice(0, 3).join(' · ') + (failures.length > 3 ? '…' : ''));
+      }
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Could not read file');
+    } finally {
+      setBulkMembersBusy(false);
+      setBulkMembersProgress('');
+    }
+  };
+
   const removeMember = async (userId: string) => {
     if (!id || !confirm('Remove this student from the batch?')) return;
     try {
@@ -337,12 +423,14 @@ export default function BatchDetail() {
     eventsByDay[day].push(ev);
   });
 
+  const membersAvailableStudents = students.filter((s) => !batch.members.some((m) => m.user.id === s.id));
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
         <Link to="/batches" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>← Batches</Link>
         <h1 style={{ margin: 0 }}>{batch.name}</h1>
-        <button onClick={() => navigate(`/batches/${id}/edit`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
+        <button type="button" onClick={() => navigate(`/batches/${id}/edit`)} style={adminBtnCancelSm}>Edit</button>
       </div>
       {batch.description && <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>{batch.description}</p>}
 
@@ -369,14 +457,63 @@ export default function BatchDetail() {
 
       {tab === 'members' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
-            <select value={addMemberUserId} onChange={(e) => setAddMemberUserId(e.target.value)} style={{ ...inputStyle, width: 260 }}>
-              <option value="">Add student to batch...</option>
-              {students.filter((s) => !batch.members.some((m) => m.user.id === s.id)).map((s) => (
-                <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
-              ))}
-            </select>
-            <button onClick={addMember} disabled={!addMemberUserId} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Add</button>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <label htmlFor="batch-add-student-combobox" style={{ ...labelStyle, marginBottom: '0.35rem' }}>Add student</label>
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+              <StudentSearchCombobox
+                id="batch-add-student-combobox"
+                options={membersAvailableStudents}
+                value={addMemberUserId}
+                onChange={setAddMemberUserId}
+                maxWidth={280}
+                emptyMessage={membersAvailableStudents.length === 0 ? 'No students left to add' : 'No students match'}
+              />
+              <button type="button" onClick={addMember} disabled={!addMemberUserId} style={adminBtnPrimaryDisabled(!addMemberUserId)}>Add Student</button>
+            </div>
+          </div>
+          <form onSubmit={inviteMemberByEmail} style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
+            <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Invite by email</div>
+            <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+              Send a registration invite. When they sign up, they are added to this batch automatically.
+            </p>
+            {inviteMemberError && (
+              <div style={{ padding: '0.45rem 0.6rem', marginBottom: '0.5rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.85rem' }}>{inviteMemberError}</div>
+            )}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="email"
+                value={inviteMemberEmail}
+                onChange={(e) => { setInviteMemberEmail(e.target.value); setInviteMemberError(''); }}
+                placeholder="student@example.com"
+                style={{ ...inputStyle, flex: '1 1 200px', minWidth: 180, maxWidth: 280 }}
+              />
+              <button type="submit" disabled={inviteMemberSending || !inviteMemberEmail.trim()} style={adminBtnPrimaryDisabled(inviteMemberSending || !inviteMemberEmail.trim())}>
+                {inviteMemberSending ? 'Sending…' : 'Send Invite'}
+              </button>
+            </div>
+          </form>
+          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
+            <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Bulk assign (spreadsheet)</div>
+            <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+              File must include a column header named <strong>Email</strong>. Existing students are added to this batch immediately; others receive an invite and join the batch when they register.
+            </p>
+            {bulkMembersProgress && <div style={{ marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{bulkMembersProgress}</div>}
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                onChange={(e) => setBulkMembersFile(e.target.files?.[0] ?? null)}
+                style={{ ...inputStyle, padding: '0.35rem', flex: '1 1 200px', minWidth: 180 }}
+              />
+              <button
+                type="button"
+                onClick={bulkAddMembersFromSpreadsheet}
+                disabled={bulkMembersBusy || !bulkMembersFile}
+                style={adminBtnPrimaryDisabled(bulkMembersBusy || !bulkMembersFile)}
+              >
+                {bulkMembersBusy ? 'Processing…' : 'Run Bulk Add'}
+              </button>
+            </div>
           </div>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
@@ -392,7 +529,7 @@ export default function BatchDetail() {
                   <td style={{ padding: '0.5rem' }}>{m.user.name}</td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{m.user.email}</td>
                   <td style={{ padding: '0.5rem' }}>
-                    <button onClick={() => removeMember(m.user.id)} style={{ padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
+                    <button type="button" onClick={() => removeMember(m.user.id)} style={adminBtnDestructiveTable}>Remove</button>
                   </td>
                 </tr>
               ))}
@@ -406,13 +543,13 @@ export default function BatchDetail() {
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>This calendar is visible to students assigned to this batch. Add events and notes below.</p>
           <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1rem', flexWrap: 'wrap' }}>
-            <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1))} style={{ padding: '0.35rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: 'pointer' }}>← Prev</button>
+            <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1))} style={{ ...adminBtnCancel, padding: '0.35rem 0.75rem', color: 'var(--color-text)' }}>← Prev</button>
             <span style={{ fontWeight: 600, minWidth: 160 }}>{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
-            <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1))} style={{ padding: '0.35rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: 'pointer' }}>Next →</button>
+            <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1))} style={{ ...adminBtnCancel, padding: '0.35rem 0.75rem', color: 'var(--color-text)' }}>Next →</button>
             {!eventForm ? (
-              <button onClick={() => setEventForm(true)} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>+ Add event</button>
+              <button type="button" onClick={() => setEventForm(true)} style={adminBtnPrimary}>+ Add Event</button>
             ) : (
-              <button type="button" onClick={() => setEventForm(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel new event</button>
+              <button type="button" onClick={() => setEventForm(false)} style={adminBtnCancel}>Cancel New Event</button>
             )}
           </div>
           {eventForm && (
@@ -423,8 +560,8 @@ export default function BatchDetail() {
               <div><label style={labelStyle}>Type (optional)</label><input value={newEvent.type} onChange={(e) => setNewEvent((p) => ({ ...p, type: e.target.value }))} placeholder="e.g. class, exam" style={inputStyle} /></div>
               <div><label style={labelStyle}>Location (optional)</label><input value={newEvent.location} onChange={(e) => setNewEvent((p) => ({ ...p, location: e.target.value }))} style={inputStyle} /></div>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Save event</button>
-                <button type="button" onClick={() => setEventForm(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
+                <button type="submit" style={adminBtnPrimary}>Save Event</button>
+                <button type="button" onClick={() => setEventForm(false)} style={adminBtnCancel}>Cancel</button>
               </div>
             </form>
           )}
@@ -457,12 +594,12 @@ export default function BatchDetail() {
             <div style={{ marginTop: '1rem', padding: '1rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
               <div style={{ marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                 <strong>Note for {selectedDayForNote}</strong>
-                <button type="button" onClick={() => { setSelectedDayForNote(null); setNoteDate(''); setCurrentNote(null); setNoteContent(''); }} style={{ padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4 }}>Close</button>
+                <button type="button" onClick={() => { setSelectedDayForNote(null); setNoteDate(''); setCurrentNote(null); setNoteContent(''); }} style={{ ...adminBtnCancelSm, padding: '2px 6px' }}>Close</button>
               </div>
               {noteLoading ? <div>Loading...</div> : (
                 <>
                   <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} rows={4} style={{ ...inputStyle, marginBottom: '0.5rem' }} placeholder="Note for this day (visible to batch students)" />
-                  <button onClick={saveNote} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Save note</button>
+                  <button type="button" onClick={saveNote} style={adminBtnPrimary}>Save Note</button>
                 </>
               )}
             </div>
@@ -478,7 +615,7 @@ export default function BatchDetail() {
                     {ev.location && ` · ${ev.location}`}
                   </span>
                 </div>
-                <button onClick={() => deleteEvent(ev.id)} style={{ padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Delete</button>
+                <button type="button" onClick={() => deleteEvent(ev.id)} style={adminBtnDestructiveTable}>Delete</button>
               </div>
             ))}
           </div>
@@ -497,7 +634,7 @@ export default function BatchDetail() {
                 <>
                   <textarea value={noteContent} onChange={(e) => setNoteContent(e.target.value)} rows={6} style={inputStyle} placeholder="Note for this day (visible only to this batch)" />
                   <div style={{ marginTop: '0.5rem' }}>
-                    <button onClick={saveNote} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Save note</button>
+                    <button type="button" onClick={saveNote} style={adminBtnPrimary}>Save Note</button>
                   </div>
                 </>
               )}
@@ -521,8 +658,8 @@ export default function BatchDetail() {
                   <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{new Date(v.createdAt).toLocaleDateString()}</span>
                 </div>
                 <div style={{ display: 'flex', gap: '0.5rem' }}>
-                  <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/schedule/batches/${id}/videos/${v.id}/stream`} target="_blank" rel="noopener noreferrer" style={{ padding: '4px 10px', background: 'var(--color-primary)', color: '#fff', borderRadius: 4, textDecoration: 'none', fontSize: '0.85rem' }}>Play</a>
-                  <button onClick={() => deleteVideo(v.id)} style={{ padding: '4px 10px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Delete</button>
+                  <a href={`${import.meta.env.VITE_API_URL ?? ''}/api/v1/schedule/batches/${id}/videos/${v.id}/stream`} target="_blank" rel="noopener noreferrer" style={{ ...adminBtnPrimarySm, textDecoration: 'none', display: 'inline-block' }}>Play</a>
+                  <button type="button" onClick={() => deleteVideo(v.id)} style={adminBtnDestructiveTable}>Delete</button>
                 </div>
               </div>
             ))}
@@ -534,7 +671,7 @@ export default function BatchDetail() {
       {tab === 'assignments' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
           <div style={{ marginBottom: '1rem' }}>
-            <button onClick={() => setAssignCourseOpen(true)} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Assign course to batch</button>
+            <button type="button" onClick={() => setAssignCourseOpen(true)} style={adminBtnPrimary}>Assign Course To Batch</button>
           </div>
           {assignCourseOpen && (
             <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
@@ -544,8 +681,8 @@ export default function BatchDetail() {
                   <option key={c.id} value={c.id}>{c.title}</option>
                 ))}
               </select>
-              <button onClick={assignCourse} disabled={!assignCourseId}>Assign</button>
-              <button onClick={() => { setAssignCourseOpen(false); setAssignCourseId(''); }}>Cancel</button>
+              <button type="button" onClick={assignCourse} disabled={!assignCourseId} style={adminBtnPrimaryDisabled(!assignCourseId)}>Assign</button>
+              <button type="button" onClick={() => { setAssignCourseOpen(false); setAssignCourseId(''); }} style={adminBtnCancel}>Cancel</button>
             </div>
           )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -561,7 +698,7 @@ export default function BatchDetail() {
                 <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.5rem' }}><Link to={`/courses/${a.course.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{a.course.title}</Link></td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{a.dueDate ? new Date(a.dueDate).toLocaleDateString() : '—'}</td>
-                  <td><button onClick={() => unassignCourse(a.id)} style={{ padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button></td>
+                  <td><button type="button" onClick={() => unassignCourse(a.id)} style={adminBtnDestructiveTable}>Remove</button></td>
                 </tr>
               ))}
             </tbody>
@@ -574,7 +711,7 @@ export default function BatchDetail() {
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Assign tests from the test bank to this batch. Assigned tests will be available to all students in the batch.</p>
           <div style={{ marginBottom: '1rem' }}>
-            <button onClick={() => setAssignTestOpen(true)} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Assign test from test bank</button>
+            <button type="button" onClick={() => setAssignTestOpen(true)} style={adminBtnPrimary}>Assign Test From Test Bank</button>
           </div>
           {assignTestOpen && (
             <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
@@ -584,8 +721,8 @@ export default function BatchDetail() {
                   <option key={t.id} value={t.id}>{t.title} ({t.type})</option>
                 ))}
               </select>
-              <button onClick={assignTestToBatch} disabled={!assignTestId}>Assign</button>
-              <button onClick={() => { setAssignTestOpen(false); setAssignTestId(''); }}>Cancel</button>
+              <button type="button" onClick={assignTestToBatch} disabled={!assignTestId} style={adminBtnPrimaryDisabled(!assignTestId)}>Assign</button>
+              <button type="button" onClick={() => { setAssignTestOpen(false); setAssignTestId(''); }} style={adminBtnCancel}>Cancel</button>
             </div>
           )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -603,7 +740,7 @@ export default function BatchDetail() {
                   <td style={{ padding: '0.5rem' }}><Link to={`/tests/${bt.testId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{bt.test.title}</Link></td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{bt.test.type}</td>
                   <td style={{ padding: '0.5rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: bt.test.status === 'published' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{formatStatusLabel(bt.test.status)}</span></td>
-                  <td><button onClick={() => unassignTest(bt.testId)} style={{ padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button></td>
+                  <td><button type="button" onClick={() => unassignTest(bt.testId)} style={adminBtnDestructiveTable}>Remove</button></td>
                 </tr>
               ))}
             </tbody>
@@ -617,12 +754,8 @@ export default function BatchDetail() {
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '0.75rem', marginBottom: '1rem' }}>
             <h3 style={{ margin: 0 }}>Batch progress & test scores</h3>
             {reportAttempts.length > 0 && (
-              <button
-                type="button"
-                onClick={exportBatchReportsXlsx}
-                style={{ padding: '0.5rem 1rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, cursor: 'pointer', fontWeight: 500 }}
-              >
-                Export to XLSX
+              <button type="button" onClick={exportBatchReportsXlsx} style={adminBtnPrimary}>
+                Export To XLSX
               </button>
             )}
           </div>
