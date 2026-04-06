@@ -239,6 +239,53 @@ export async function authRoutes(app: FastifyInstance) {
       });
     }
 
+    if (invite.batchId) {
+      const batch = await prisma.batch.findFirst({
+        where: { id: invite.batchId, tenantId: invite.tenantId },
+      });
+      if (batch) {
+        await prisma.batchMember.upsert({
+          where: { batchId_userId: { batchId: invite.batchId, userId: user.id } },
+          update: {},
+          create: { batchId: invite.batchId, userId: user.id },
+        });
+        const batchTests = await prisma.batchTestAssignment.findMany({
+          where: { batchId: invite.batchId },
+          select: { testId: true },
+        });
+        for (const bt of batchTests) {
+          await prisma.testAllocation.upsert({
+            where: { userId_testId: { userId: user.id, testId: bt.testId } },
+            update: {},
+            create: { userId: user.id, testId: bt.testId, assignedBy: invite.invitedBy },
+          });
+        }
+      }
+    }
+
+    if (invite.courseId) {
+      const course = await prisma.course.findFirst({
+        where: { id: invite.courseId, tenantId: invite.tenantId },
+      });
+      if (course) {
+        const existingAssign = await prisma.courseAssignment.findFirst({
+          where: { tenantId: invite.tenantId, courseId: invite.courseId, userId: user.id, batchId: null },
+        });
+        if (!existingAssign) {
+          await prisma.courseAssignment.create({
+            data: {
+              tenantId: invite.tenantId,
+              courseId: invite.courseId,
+              userId: user.id,
+              batchId: null,
+              assignedBy: invite.invitedBy,
+              dueDate: invite.courseDueDate ?? null,
+            },
+          });
+        }
+      }
+    }
+
     const accessToken = app.jwt.sign(
       { sub: user.id, tenantId: user.tenantId, role: user.role },
       { expiresIn: '8h' }

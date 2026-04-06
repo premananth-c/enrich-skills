@@ -6,6 +6,17 @@ import { RichTextEditor } from '../components/RichTextEditor';
 import VideoPlayer from '../components/VideoPlayer';
 import { emitToast } from '../lib/toast';
 import { startVideoUpload } from '../lib/uploadManager';
+import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
+import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import {
+  adminBtnCancel,
+  adminBtnCancelSm,
+  adminBtnDestructiveTable,
+  adminBtnPrimary,
+  adminBtnPrimaryDisabled,
+  adminBtnPrimarySm,
+  adminBtnPrimarySmDisabled,
+} from '../lib/adminButtonStyles';
 
 interface CourseChapter {
   id: string;
@@ -62,8 +73,6 @@ interface CourseAssignmentItem {
 
 const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
 const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
-const addBtnStyle: React.CSSProperties = { padding: '0.4rem 0.75rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontSize: '0.9rem', fontWeight: 500, marginRight: 10 };
-const cancelBtnStyle: React.CSSProperties = { padding: '0.4rem 0.75rem', background: 'transparent', color: 'var(--color-text-muted)', border: '1px solid var(--color-border)', borderRadius: 6, fontSize: '0.9rem' };
 const formBlockStyle: React.CSSProperties = { marginTop: '0.5rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: '0.5rem', maxWidth: 520 };
 
 export default function CourseDetail() {
@@ -100,10 +109,13 @@ export default function CourseDetail() {
   const [batches, setBatches] = useState<{ id: string; name: string }[]>([]);
   const [students, setStudents] = useState<{ id: string; email: string; name: string }[]>([]);
   const [addAssignmentOpen, setAddAssignmentOpen] = useState(false);
-  const [assignType, setAssignType] = useState<'batch' | 'student'>('batch');
+  const [assignType, setAssignType] = useState<'batch' | 'student' | 'bulk'>('batch');
   const [assignBatchId, setAssignBatchId] = useState('');
   const [assignUserId, setAssignUserId] = useState('');
   const [assignDueDate, setAssignDueDate] = useState('');
+  const [bulkCourseFile, setBulkCourseFile] = useState<File | null>(null);
+  const [bulkCourseBusy, setBulkCourseBusy] = useState(false);
+  const [bulkCourseProgress, setBulkCourseProgress] = useState('');
 
   const loadCourse = () => {
     if (!id) return;
@@ -418,6 +430,7 @@ export default function CourseDetail() {
 
   const addAssignment = async () => {
     if (!id) return;
+    if (assignType === 'bulk') return;
     const isBatch = assignType === 'batch';
     if (isBatch && !assignBatchId) {
       emitToast('info', 'Select a batch');
@@ -441,10 +454,89 @@ export default function CourseDetail() {
       setAssignBatchId('');
       setAssignUserId('');
       setAssignDueDate('');
+      setBulkCourseFile(null);
       const list = await api<CourseAssignmentItem[]>(`/course-assignments?courseId=${id}`);
       setAssignments(list);
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Failed to assign');
+    }
+  };
+
+  const runBulkCourseAssign = async () => {
+    if (!id || !bulkCourseFile) {
+      emitToast('info', 'Choose a spreadsheet with an Email column.');
+      return;
+    }
+    setBulkCourseBusy(true);
+    setBulkCourseProgress('');
+    try {
+      const buf = await bulkCourseFile.arrayBuffer();
+      const parsed = parseEmailsFromSpreadsheetBuffer(buf);
+      if (parsed.error) {
+        emitToast('error', parsed.error);
+        return;
+      }
+      const due = assignDueDate.trim() || null;
+      let assigned = 0;
+      let invited = 0;
+      let skipped = 0;
+      let failed = 0;
+      const failures: string[] = [];
+      for (let i = 0; i < parsed.emails.length; i++) {
+        const email = parsed.emails[i];
+        setBulkCourseProgress(`Processing ${i + 1} of ${parsed.emails.length}…`);
+        const st = students.find((s) => (s.email || '').toLowerCase() === email);
+        try {
+          if (st) {
+            if (assignments.some((a) => a.user?.id === st.id)) {
+              skipped++;
+              continue;
+            }
+            await api('/course-assignments', {
+              method: 'POST',
+              body: JSON.stringify({
+                courseId: id,
+                userId: st.id,
+                batchId: null,
+                dueDate: due,
+              }),
+            });
+            assigned++;
+          } else {
+            await api('/invites', {
+              method: 'POST',
+              body: JSON.stringify({
+                email,
+                courseId: id,
+                ...(due ? { courseDueDate: due } : {}),
+              }),
+            });
+            invited++;
+          }
+        } catch (err) {
+          failed++;
+          failures.push(`${email}: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+      const list = await api<CourseAssignmentItem[]>(`/course-assignments?courseId=${id}`);
+      setAssignments(list);
+      setAddAssignmentOpen(false);
+      setAssignBatchId('');
+      setAssignUserId('');
+      setAssignDueDate('');
+      setBulkCourseFile(null);
+      emitToast(
+        'success',
+        `Bulk assign finished: ${assigned} assigned, ${invited} invite(s) sent${skipped ? `, ${skipped} already assigned` : ''}${failed ? `, ${failed} failed` : ''}.`
+      );
+      if (failures.length > 0) {
+        emitToast('error', failures.slice(0, 3).join(' · ') + (failures.length > 3 ? '…' : ''));
+      }
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Could not read file');
+    } finally {
+      setBulkCourseBusy(false);
+      setBulkCourseProgress('');
     }
   };
 
@@ -460,12 +552,14 @@ export default function CourseDetail() {
 
   if (loading || !course) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
+  const courseStudentsAvailable = students.filter((s) => !assignments.some((a) => a.user?.id === s.id));
+
   return (
     <div>
       <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginBottom: '1.5rem' }}>
         <Link to="/courses" style={{ color: 'var(--color-text-muted)', textDecoration: 'none' }}>← Courses</Link>
         <h1 style={{ margin: 0 }}>{course.title}</h1>
-        <button onClick={() => navigate(`/courses/${id}/edit`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
+        <button type="button" onClick={() => navigate(`/courses/${id}/edit`)} style={adminBtnCancelSm}>Edit</button>
       </div>
       {course.description && <p style={{ color: 'var(--color-text-muted)', marginBottom: '1rem' }}>{course.description}</p>}
 
@@ -490,7 +584,7 @@ export default function CourseDetail() {
                   <button type="button" onClick={() => startEditChapterTitle(ch)} title="Edit chapter name" style={{ padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '0.9rem' }} aria-label="Edit">✎</button>
                 </>
               )}
-              <button onClick={() => deleteChapter(ch.id)} style={{ padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Delete</button>
+              <button type="button" onClick={() => deleteChapter(ch.id)} style={{ ...adminBtnDestructiveTable, padding: '2px 6px', fontSize: '0.75rem' }}>Delete</button>
             </div>
             {expandedChapter === ch.id && (
               <div style={{ marginLeft: '1.5rem' }}>
@@ -513,7 +607,7 @@ export default function CourseDetail() {
                           <button type="button" onClick={() => startEditTopicTitle(topic)} title="Edit topic name" style={{ padding: '2px 4px', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--color-text-muted)', fontSize: '0.85rem' }} aria-label="Edit">✎</button>
                         </>
                       )}
-                      <button onClick={() => deleteTopic(ch.id, topic.id)} style={{ padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Delete</button>
+                      <button type="button" onClick={() => deleteTopic(ch.id, topic.id)} style={{ ...adminBtnDestructiveTable, padding: '2px 6px', fontSize: '0.75rem' }}>Delete</button>
                     </div>
                     {expandedTopic === topic.id && (
                       <div style={{ marginLeft: '1rem', fontSize: '0.9rem' }}>
@@ -528,8 +622,8 @@ export default function CourseDetail() {
                                 minHeight="180px"
                               />
                               <div style={{ marginTop: '0.5rem' }}>
-                                <button onClick={() => saveTopicContent(ch.id, topic.id)} style={{ padding: '4px 10px', marginRight: 8, background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4 }}>Save content</button>
-                                <button onClick={() => { setEditTopicContent(null); setEditingTopicContent(''); }} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)' }}>Cancel</button>
+                                <button type="button" onClick={() => saveTopicContent(ch.id, topic.id)} style={{ ...adminBtnPrimarySm, marginRight: 8 }}>Save Content</button>
+                                <button type="button" onClick={() => { setEditTopicContent(null); setEditingTopicContent(''); }} style={adminBtnCancelSm}>Cancel</button>
                               </div>
                             </div>
                           ) : (
@@ -543,7 +637,7 @@ export default function CourseDetail() {
                               ) : (
                                 <span style={{ color: 'var(--color-text-muted)', fontStyle: 'italic' }}>No content yet.</span>
                               )}
-                              <button onClick={() => startEditTopicContent(topic)} style={{ marginLeft: 8, padding: '2px 8px', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)' }}>{topic.content ? 'Edit content' : 'Add content'}</button>
+                              <button type="button" onClick={() => startEditTopicContent(topic)} style={{ ...adminBtnCancelSm, marginLeft: 8 }}>{topic.content ? 'Edit Content' : 'Add Content'}</button>
                             </>
                           )}
                         </div>
@@ -554,17 +648,17 @@ export default function CourseDetail() {
                               {m.type === 'video' ? (
                                 <div>
                                   <VideoPlayer materialId={m.id} title={m.title} />
-                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginTop: 4, padding: '2px 8px', fontSize: '0.75rem', color: '#f87171', background: 'transparent', border: '1px solid rgba(248,113,113,0.3)', borderRadius: 4 }}>Delete video</button>
+                                  <button type="button" onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ ...adminBtnDestructiveTable, marginTop: 4, fontSize: '0.75rem' }}>Delete Video</button>
                                 </div>
                               ) : m.type === 'pdf' ? (
                                 <>
                                   <Link to={`/pdf/${m.id}?title=${encodeURIComponent(m.title)}&back=${encodeURIComponent(`/courses/${id}`)}`} style={{ color: 'var(--color-primary)' }}>{m.title}</Link>
-                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                                  <button type="button" onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 6, padding: '2px 8px', fontSize: '0.75rem' }}>×</button>
                                 </>
                               ) : (
                                 <>
                                   <a href={m.url ?? '#'} target="_blank" rel="noopener noreferrer">{m.title}</a>
-                                  <button onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ marginLeft: 6, padding: '0 4px', fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                                  <button type="button" onClick={() => deleteMaterial(ch.id, topic.id, m.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 6, padding: '2px 8px', fontSize: '0.75rem' }}>×</button>
                                 </>
                               )}
                             </div>
@@ -592,13 +686,13 @@ export default function CourseDetail() {
                               )}
                               <div style={{ display: 'flex', gap: 0, marginTop: '0.25rem' }}>
                                 {newMaterial.type !== 'video' && (
-                                  <button type="button" onClick={() => saveMaterial(topic.id)} style={addBtnStyle}>Add</button>
+                                  <button type="button" onClick={() => saveMaterial(topic.id)} style={{ ...adminBtnPrimarySm, marginRight: 10 }}>Add</button>
                                 )}
-                                <button type="button" onClick={() => setAddMaterial(null)} style={cancelBtnStyle}>Cancel</button>
+                                <button type="button" onClick={() => setAddMaterial(null)} style={{ ...adminBtnCancel, padding: '0.4rem 0.75rem' }}>Cancel</button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => setAddMaterial(topic.id)} style={{ marginTop: '0.25rem', padding: '2px 8px', fontSize: '0.8rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4 }}>+ Material</button>
+                            <button type="button" onClick={() => setAddMaterial(topic.id)} style={{ ...adminBtnPrimarySm, marginTop: '0.25rem' }}>+ Material</button>
                           )}
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
@@ -606,7 +700,7 @@ export default function CourseDetail() {
                           {(activities[topic.id] ?? []).map((a) => (
                             <div key={a.id} style={{ marginBottom: '0.25rem' }}>
                               {a.title}
-                              <button onClick={() => deleteActivity(ch.id, topic.id, a.id)} style={{ marginLeft: 6, fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                              <button type="button" onClick={() => deleteActivity(ch.id, topic.id, a.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 6, padding: '2px 8px', fontSize: '0.75rem' }}>×</button>
                             </div>
                           ))}
                           {addActivity === topic.id ? (
@@ -627,12 +721,12 @@ export default function CourseDetail() {
                                 />
                               </div>
                               <div style={{ display: 'flex', gap: 0, marginTop: '0.25rem' }}>
-                                <button onClick={() => saveActivity(topic.id)} style={addBtnStyle}>Add</button>
-                                <button onClick={() => { setAddActivity(null); setNewActivity({ type: 'assignment', title: '', description: '' }); }} style={cancelBtnStyle}>Cancel</button>
+                                <button type="button" onClick={() => saveActivity(topic.id)} style={{ ...adminBtnPrimarySm, marginRight: 10 }}>Add</button>
+                                <button type="button" onClick={() => { setAddActivity(null); setNewActivity({ type: 'assignment', title: '', description: '' }); }} style={{ ...adminBtnCancel, padding: '0.4rem 0.75rem' }}>Cancel</button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => setAddActivity(topic.id)} style={{ marginTop: '0.25rem', padding: '2px 8px', fontSize: '0.8rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4 }}>+ Activity</button>
+                            <button type="button" onClick={() => setAddActivity(topic.id)} style={{ ...adminBtnPrimarySm, marginTop: '0.25rem' }}>+ Activity</button>
                           )}
                         </div>
                         <div style={{ marginBottom: '1rem' }}>
@@ -640,7 +734,7 @@ export default function CourseDetail() {
                           {(evaluations[topic.id] ?? []).map((ev) => (
                             <div key={ev.id} style={{ marginBottom: '0.25rem' }}>
                               {ev.title} {ev.test && `(${ev.test.title})`}
-                              <button onClick={() => deleteEvaluation(ch.id, topic.id, ev.id)} style={{ marginLeft: 6, fontSize: '0.75rem', color: '#f87171' }}>×</button>
+                              <button type="button" onClick={() => deleteEvaluation(ch.id, topic.id, ev.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 6, padding: '2px 8px', fontSize: '0.75rem' }}>×</button>
                             </div>
                           ))}
                           {addEvaluation === topic.id ? (
@@ -743,22 +837,23 @@ export default function CourseDetail() {
                                 );
                               })()}
                               <div style={{ display: 'flex', gap: 0, marginTop: '0.25rem' }}>
-                                <button onClick={() => saveEvaluation(topic.id)} disabled={!newEvaluation.title.trim()} style={addBtnStyle}>Add</button>
+                                <button type="button" onClick={() => saveEvaluation(topic.id)} disabled={!newEvaluation.title.trim()} style={{ ...adminBtnPrimarySmDisabled(!newEvaluation.title.trim()), marginRight: 10 }}>Add</button>
                                 <button
+                                  type="button"
                                   onClick={() => {
                                     setAddEvaluation(null);
                                     setNewEvaluation({ type: 'mcq', title: '', testId: '' });
                                     setEvaluationTestFilter('');
                                     setEvaluationTestDropdownOpen(false);
                                   }}
-                                  style={cancelBtnStyle}
+                                  style={{ ...adminBtnCancel, padding: '0.4rem 0.75rem' }}
                                 >
                                   Cancel
                                 </button>
                               </div>
                             </div>
                           ) : (
-                            <button onClick={() => setAddEvaluation(topic.id)} style={{ marginTop: '0.25rem', padding: '2px 8px', fontSize: '0.8rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4 }}>+ Evaluation</button>
+                            <button type="button" onClick={() => setAddEvaluation(topic.id)} style={{ ...adminBtnPrimarySm, marginTop: '0.25rem' }}>+ Evaluation</button>
                           )}
                         </div>
                       </div>
@@ -769,8 +864,8 @@ export default function CourseDetail() {
                   <div style={{ marginBottom: '1rem', marginLeft: '0.5rem' }}>
                     <div style={{ marginBottom: '0.5rem' }}>
                       <input value={newTopicTitle} onChange={(e) => setNewTopicTitle(e.target.value)} placeholder="Topic title" style={{ ...inputStyle, width: 260, display: 'inline-block', marginRight: '0.5rem' }} />
-                      <button onClick={() => saveTopic(ch.id)}>Add topic</button>
-                      <button onClick={() => { setAddTopic(null); setNewTopicTitle(''); setNewTopicContent(''); }}>Cancel</button>
+                      <button type="button" onClick={() => saveTopic(ch.id)} style={{ ...adminBtnPrimarySm, marginRight: 8 }}>Add Topic</button>
+                      <button type="button" onClick={() => { setAddTopic(null); setNewTopicTitle(''); setNewTopicContent(''); }} style={adminBtnCancelSm}>Cancel</button>
                     </div>
                     <div style={{ marginTop: '0.5rem' }}>
                       <span style={{ ...labelStyle, marginBottom: '0.25rem' }}>Content (optional, rich text)</span>
@@ -783,7 +878,7 @@ export default function CourseDetail() {
                     </div>
                   </div>
                 ) : (
-                  <button onClick={() => setAddTopic(ch.id)} style={{ padding: '4px 10px', fontSize: '0.85rem', background: 'transparent', border: '1px dashed var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)' }}>+ Add topic</button>
+                  <button type="button" onClick={() => setAddTopic(ch.id)} style={{ ...adminBtnCancelSm, borderStyle: 'dashed', fontSize: '0.85rem' }}>+ Add Topic</button>
                 )}
               </div>
             )}
@@ -792,11 +887,11 @@ export default function CourseDetail() {
         {addChapter ? (
           <div style={{ marginBottom: '0.5rem' }}>
             <input value={newChapterTitle} onChange={(e) => setNewChapterTitle(e.target.value)} placeholder="Chapter title" style={{ ...inputStyle, width: 280, display: 'inline-block', marginRight: '0.5rem' }} />
-            <button onClick={saveChapter}>Add chapter</button>
-            <button onClick={() => { setAddChapter(false); setNewChapterTitle(''); }}>Cancel</button>
+            <button type="button" onClick={saveChapter} style={{ ...adminBtnPrimarySm, marginRight: 8 }}>Add Chapter</button>
+            <button type="button" onClick={() => { setAddChapter(false); setNewChapterTitle(''); }} style={adminBtnCancelSm}>Cancel</button>
           </div>
         ) : (
-          <button onClick={() => setAddChapter(true)} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>+ Add chapter</button>
+          <button type="button" onClick={() => setAddChapter(true)} style={adminBtnPrimary}>+ Add Chapter</button>
         )}
       </div>
 
@@ -814,7 +909,7 @@ export default function CourseDetail() {
                   {a.dueDate && (
                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</span>
                   )}
-                  <button onClick={() => removeAssignment(a.id)} style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
+                  <button type="button" onClick={() => removeAssignment(a.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 'auto', fontSize: '0.75rem', padding: '2px 8px' }}>Remove</button>
                 </li>
               ))}
             </ul>
@@ -833,7 +928,7 @@ export default function CourseDetail() {
                   {a.dueDate && (
                     <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due: {new Date(a.dueDate).toLocaleDateString()}</span>
                   )}
-                  <button onClick={() => removeAssignment(a.id)} style={{ marginLeft: 'auto', padding: '2px 6px', fontSize: '0.75rem', background: 'transparent', border: '1px solid #ef444444', color: '#f87171', borderRadius: 4 }}>Remove</button>
+                  <button type="button" onClick={() => removeAssignment(a.id)} style={{ ...adminBtnDestructiveTable, marginLeft: 'auto', fontSize: '0.75rem', padding: '2px 8px' }}>Remove</button>
                 </li>
               ))}
             </ul>
@@ -843,9 +938,20 @@ export default function CourseDetail() {
           <div style={{ padding: '0.75rem', background: 'var(--color-bg)', borderRadius: 6, border: '1px solid var(--color-border)' }}>
             <div style={{ marginBottom: '0.5rem' }}>
               <label style={labelStyle}>Assign to</label>
-              <select value={assignType} onChange={(e) => { setAssignType(e.target.value as 'batch' | 'student'); setAssignBatchId(''); setAssignUserId(''); }} style={{ ...inputStyle, width: 120, display: 'inline-block', marginRight: '0.5rem' }}>
+              <select
+                value={assignType}
+                onChange={(e) => {
+                  const v = e.target.value as 'batch' | 'student' | 'bulk';
+                  setAssignType(v);
+                  setAssignBatchId('');
+                  setAssignUserId('');
+                  setBulkCourseFile(null);
+                }}
+                style={{ ...inputStyle, width: 220, display: 'inline-block', marginRight: '0.5rem' }}
+              >
+                <option value="student">Individual Student</option>
                 <option value="batch">Batch</option>
-                <option value="student">Student</option>
+                <option value="bulk">Bulk Assign</option>
               </select>
             </div>
             {assignType === 'batch' ? (
@@ -861,18 +967,37 @@ export default function CourseDetail() {
                   )}
                 </select>
               </div>
-            ) : (
+            ) : assignType === 'student' ? (
               <div style={{ marginBottom: '0.5rem' }}>
-                <label style={labelStyle}>Student</label>
-                <select value={assignUserId} onChange={(e) => setAssignUserId(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }}>
-                  <option value="">Select a student</option>
-                  {students.filter((s) => !assignments.some((a) => a.user?.id === s.id)).map((s) => (
-                    <option key={s.id} value={s.id}>{s.name || s.email}</option>
-                  ))}
-                  {students.length > 0 && students.every((s) => assignments.some((a) => a.user?.id === s.id)) && (
-                    <option value="" disabled>All students already assigned</option>
-                  )}
-                </select>
+                <label htmlFor="course-assign-student-combobox" style={labelStyle}>Student</label>
+                {courseStudentsAvailable.length === 0 ? (
+                  <div style={{ ...inputStyle, maxWidth: 320, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                    {students.length === 0 ? 'No students registered' : 'All students already assigned'}
+                  </div>
+                ) : (
+                  <StudentSearchCombobox
+                    id="course-assign-student-combobox"
+                    options={courseStudentsAvailable}
+                    value={assignUserId}
+                    onChange={setAssignUserId}
+                    maxWidth={320}
+                    emptyMessage="No students match"
+                  />
+                )}
+              </div>
+            ) : (
+              <div style={{ marginBottom: '0.75rem' }}>
+                <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  Upload a spreadsheet with a column header named <strong>Email</strong>. Registered students are assigned this course immediately; others receive an individual invite and are enrolled when they sign up.
+                </p>
+                {bulkCourseProgress && <div style={{ marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{bulkCourseProgress}</div>}
+                <label style={labelStyle}>Spreadsheet *</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  onChange={(e) => setBulkCourseFile(e.target.files?.[0] ?? null)}
+                  style={{ ...inputStyle, padding: '0.35rem', maxWidth: 360 }}
+                />
               </div>
             )}
             <div style={{ marginBottom: '0.75rem' }}>
@@ -880,12 +1005,37 @@ export default function CourseDetail() {
               <input type="date" value={assignDueDate} onChange={(e) => setAssignDueDate(e.target.value)} style={{ ...inputStyle, width: 180 }} />
             </div>
             <div>
-              <button onClick={addAssignment} style={{ padding: '4px 12px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4, marginRight: 8 }}>Assign</button>
-              <button onClick={() => { setAddAssignmentOpen(false); setAssignBatchId(''); setAssignUserId(''); setAssignDueDate(''); }} style={{ padding: '4px 12px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)' }}>Cancel</button>
+              {assignType === 'bulk' ? (
+                <button
+                  type="button"
+                  onClick={runBulkCourseAssign}
+                  disabled={bulkCourseBusy || !bulkCourseFile}
+                  style={{ ...adminBtnPrimaryDisabled(bulkCourseBusy || !bulkCourseFile), padding: '4px 12px', marginRight: 8 }}
+                >
+                  {bulkCourseBusy ? 'Processing…' : 'Run Bulk Assign'}
+                </button>
+              ) : (
+                <button type="button" onClick={addAssignment} style={{ ...adminBtnPrimarySm, marginRight: 8 }}>Assign</button>
+              )}
+              <button
+                type="button"
+                onClick={() => {
+                  setAddAssignmentOpen(false);
+                  setAssignBatchId('');
+                  setAssignUserId('');
+                  setAssignDueDate('');
+                  setBulkCourseFile(null);
+                }}
+                style={{ ...adminBtnCancelSm, padding: '4px 12px' }}
+              >
+                Cancel
+              </button>
             </div>
           </div>
         ) : (
-          <button onClick={() => setAddAssignmentOpen(true)} style={{ padding: '4px 10px', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 4 }}>+ Add assignment</button>
+          <button type="button" onClick={() => setAddAssignmentOpen(true)} style={adminBtnPrimarySm}>
+            + Add Students
+          </button>
         )}
       </div>
     </div>

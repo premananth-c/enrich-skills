@@ -4,6 +4,18 @@ import { CODING_LANGUAGE_IDS, CODING_LANGUAGE_LABELS, type CodingLanguageId } fr
 import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
 import { useAuth } from '../context/AuthContext';
+import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
+import { emitToast } from '../lib/toast';
+import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import {
+  adminBtnCancel,
+  adminBtnCancelSm,
+  adminBtnDestructiveTable,
+  adminBtnDestructiveTableDisabled,
+  adminBtnPrimaryCompact,
+  adminBtnPrimaryDisabled,
+  adminBtnPrimarySm,
+} from '../lib/adminButtonStyles';
 
 interface QuestionItem {
   id: string;
@@ -156,6 +168,10 @@ export default function TestDetail() {
   const [allocVariantId, setAllocVariantId] = useState('');
   const [allocError, setAllocError] = useState('');
   const [allocResetAttempts, setAllocResetAttempts] = useState(false);
+  const [allocTab, setAllocTab] = useState<'single' | 'bulk'>('single');
+  const [bulkAllocFile, setBulkAllocFile] = useState<File | null>(null);
+  const [bulkAllocBusy, setBulkAllocBusy] = useState(false);
+  const [bulkAllocProgress, setBulkAllocProgress] = useState('');
   const [removingUserId, setRemovingUserId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [type, setType] = useState<'mcq' | 'coding'>('mcq');
@@ -326,6 +342,9 @@ export default function TestDetail() {
     setAllocVariantId('');
     setAllocError('');
     setAllocResetAttempts(false);
+    setAllocTab('single');
+    setBulkAllocFile(null);
+    setBulkAllocProgress('');
     setAllocateOpen(true);
   };
 
@@ -347,6 +366,53 @@ export default function TestDetail() {
       loadTest();
     } catch (e) {
       setAllocError(e instanceof Error ? e.message : 'Failed to assign');
+    }
+  };
+
+  const allocateTestBulk = async () => {
+    if (!test || !bulkAllocFile) {
+      setAllocError('Choose a spreadsheet with an Email column.');
+      return;
+    }
+    setAllocError('');
+    setBulkAllocBusy(true);
+    setBulkAllocProgress('');
+    try {
+      const buf = await bulkAllocFile.arrayBuffer();
+      const parsed = parseEmailsFromSpreadsheetBuffer(buf);
+      if (parsed.error) {
+        setAllocError(parsed.error);
+        return;
+      }
+      let ok = 0;
+      let failed = 0;
+      const failures: string[] = [];
+      for (let i = 0; i < parsed.emails.length; i++) {
+        const email = parsed.emails[i];
+        setBulkAllocProgress(`Processing ${i + 1} of ${parsed.emails.length}…`);
+        try {
+          await api(`/tests/${test.id}/allocations`, {
+            method: 'POST',
+            body: JSON.stringify({ email, variantId: allocVariantId || undefined }),
+          });
+          ok++;
+        } catch (err) {
+          failed++;
+          failures.push(`${email}: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+      setAllocateOpen(false);
+      setBulkAllocFile(null);
+      loadTest();
+      emitToast('success', `Bulk assign finished: ${ok} ok${failed ? `, ${failed} failed` : ''}.`);
+      if (failures.length > 0) {
+        emitToast('error', failures.slice(0, 3).join(' · ') + (failures.length > 3 ? '…' : ''));
+      }
+    } catch (e) {
+      setAllocError(e instanceof Error ? e.message : 'Could not read file');
+    } finally {
+      setBulkAllocBusy(false);
+      setBulkAllocProgress('');
     }
   };
 
@@ -514,20 +580,12 @@ export default function TestDetail() {
         </div>
         <div>
           <button
+            type="button"
             onClick={openAllocate}
             disabled={!canEdit('tests') || !canAssignToStudents}
-            style={{
-              padding: '0.5rem 1rem',
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              color: 'var(--color-text)',
-              fontSize: '0.9rem',
-              cursor: canEdit('tests') && canAssignToStudents ? 'pointer' : 'not-allowed',
-              opacity: canEdit('tests') && canAssignToStudents ? 1 : 0.6,
-            }}
+            style={adminBtnPrimaryDisabled(!canEdit('tests') || !canAssignToStudents)}
           >
-            Assign to Student
+            Assign To Students
           </button>
         </div>
       </div>
@@ -700,10 +758,10 @@ export default function TestDetail() {
           )}
         </div>
         <div style={{ display: 'flex', gap: '0.75rem' }}>
-          <button type="submit" disabled={!canUpdateTest} style={{ padding: '0.6rem 1.5rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canUpdateTest ? 1 : 0.65, cursor: canUpdateTest ? 'pointer' : 'not-allowed' }}>
-            {saving ? 'Saving...' : 'Update Test'}
+          <button type="submit" disabled={!canUpdateTest} style={{ ...adminBtnPrimaryDisabled(!canUpdateTest), padding: '0.6rem 1.5rem' }}>
+            {saving ? 'Saving…' : 'Update Test'}
           </button>
-          <button type="button" onClick={resetForm} style={{ padding: '0.6rem 1.5rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>
+          <button type="button" onClick={resetForm} style={{ ...adminBtnCancel, padding: '0.6rem 1.5rem' }}>
             Cancel
           </button>
         </div>
@@ -763,10 +821,10 @@ export default function TestDetail() {
       {tab === 'questions' && (
         <div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button onClick={openPool} style={{ padding: '0.4rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
-              + Add from Question Bank
+            <button type="button" onClick={openPool} style={adminBtnPrimaryCompact}>
+              + Add From Question Bank
             </button>
-            <button onClick={() => navigate(`/questions/new?testId=${test.id}`)} style={{ padding: '0.4rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
+            <button type="button" onClick={() => navigate(`/questions/new?testId=${test.id}`)} style={adminBtnPrimaryCompact}>
               + Create New Question
             </button>
           </div>
@@ -813,8 +871,8 @@ export default function TestDetail() {
                         </td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => navigate(`/questions/${tq.questionId}/edit`)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
-                            <button onClick={() => removeQuestion(tq.questionId)} style={{ padding: '3px 8px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Remove</button>
+                            <button type="button" onClick={() => navigate(`/questions/${tq.questionId}/edit`)} style={adminBtnCancelSm}>Edit</button>
+                            <button type="button" onClick={() => removeQuestion(tq.questionId)} style={adminBtnDestructiveTable}>Remove</button>
                           </div>
                         </td>
                       </tr>
@@ -831,7 +889,7 @@ export default function TestDetail() {
       {tab === 'variants' && (
         <div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
-            <button onClick={() => openVariantForm()} style={{ padding: '0.4rem 1rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.9rem' }}>
+            <button type="button" onClick={() => openVariantForm()} style={adminBtnPrimaryCompact}>
               + Add Variant
             </button>
           </div>
@@ -861,9 +919,9 @@ export default function TestDetail() {
                         <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{qCount}</td>
                         <td style={{ padding: '0.75rem 1rem' }}>
                           <div style={{ display: 'flex', gap: '0.5rem' }}>
-                            <button onClick={() => openAssignQuestions(v)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Assign Qs</button>
-                            <button onClick={() => openVariantForm(v)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
-                            <button onClick={() => deleteVariant(v.id)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
+                            <button type="button" onClick={() => openAssignQuestions(v)} style={adminBtnPrimarySm}>Assign Questions</button>
+                            <button type="button" onClick={() => openVariantForm(v)} style={adminBtnCancelSm}>Edit</button>
+                            <button type="button" onClick={() => deleteVariant(v.id)} style={adminBtnDestructiveTable}>Delete</button>
                           </div>
                         </td>
                       </tr>
@@ -928,17 +986,11 @@ export default function TestDetail() {
                           onClick={() => removeStudentFromTest(s.userId)}
                           disabled={removingUserId === s.userId}
                           style={{
-                            padding: '4px 10px',
-                            background: 'transparent',
-                            border: '1px solid #ef444444',
-                            borderRadius: 4,
-                            color: '#f87171',
-                            fontSize: '0.8rem',
+                            ...adminBtnDestructiveTableDisabled(removingUserId === s.userId),
                             cursor: removingUserId === s.userId ? 'wait' : 'pointer',
-                            opacity: removingUserId === s.userId ? 0.6 : 1,
                           }}
                         >
-                          {removingUserId === s.userId ? 'Removing…' : 'Remove from test'}
+                          {removingUserId === s.userId ? 'Removing…' : 'Remove From Test'}
                         </button>
                       </td>
                     )}
@@ -982,8 +1034,8 @@ export default function TestDetail() {
               )}
             </div>
             <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button onClick={() => setPoolOpen(false)} style={{ padding: '0.4rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-              <button onClick={addFromPool} disabled={selectedPoolIds.size === 0} style={{ padding: '0.4rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: selectedPoolIds.size === 0 ? 0.5 : 1 }}>
+              <button type="button" onClick={() => setPoolOpen(false)} style={{ ...adminBtnCancel, padding: '0.4rem 1rem' }}>Cancel</button>
+              <button type="button" onClick={addFromPool} disabled={selectedPoolIds.size === 0} style={{ ...adminBtnPrimaryDisabled(selectedPoolIds.size === 0), padding: '0.4rem 1rem' }}>
                 Add {selectedPoolIds.size} Question{selectedPoolIds.size !== 1 ? 's' : ''}
               </button>
             </div>
@@ -1009,9 +1061,9 @@ export default function TestDetail() {
               </select>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setVariantFormOpen(false)} style={{ padding: '0.4rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-              <button onClick={saveVariant} disabled={!variantName} style={{ padding: '0.4rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: !variantName ? 0.5 : 1 }}>
-                {editingVariant ? 'Update' : 'Create'}
+              <button type="button" onClick={() => setVariantFormOpen(false)} style={{ ...adminBtnCancel, padding: '0.4rem 1rem' }}>Cancel</button>
+              <button type="button" onClick={saveVariant} disabled={!variantName} style={{ ...adminBtnPrimaryDisabled(!variantName), padding: '0.4rem 1rem' }}>
+                {editingVariant ? 'Update Variant' : 'Create Variant'}
               </button>
             </div>
           </div>
@@ -1049,9 +1101,9 @@ export default function TestDetail() {
               ))}
             </div>
             <div style={{ padding: '0.75rem 1.25rem', borderTop: '1px solid var(--color-border)', display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
-              <button onClick={() => setAssignVariantId(null)} style={{ padding: '0.4rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-              <button onClick={saveVariantQuestions} style={{ padding: '0.4rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}>
-                Save ({variantQuestionIds.size} selected)
+              <button type="button" onClick={() => setAssignVariantId(null)} style={{ ...adminBtnCancel, padding: '0.4rem 1rem' }}>Cancel</button>
+              <button type="button" onClick={saveVariantQuestions} style={{ ...adminBtnPrimaryDisabled(false), padding: '0.4rem 1rem' }}>
+                Save ({variantQuestionIds.size} Selected)
               </button>
             </div>
           </div>
@@ -1061,51 +1113,114 @@ export default function TestDetail() {
       {/* Allocate Test to Student Modal */}
       {allocateOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 400, padding: '1.5rem' }}>
-            <h3 style={{ margin: '0 0 1rem' }}>Assign Test to Student</h3>
-            <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Select an existing student or enter an email to invite a new student (an invite will be sent if they have not signed up yet).</p>
-            {allocError && <div style={{ padding: '0.5rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.9rem' }}>{allocError}</div>}
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 440, maxWidth: '95vw', padding: '1.5rem', maxHeight: '90vh', overflow: 'auto' }}>
+            <h3 style={{ margin: '0 0 1rem' }}>Assign To Students</h3>
             <div style={{ marginBottom: '1rem' }}>
-              <label style={labelStyle}>Existing student</label>
-              <select value={allocStudentId} onChange={(e) => { setAllocStudentId(e.target.value); if (e.target.value) setAllocEmail(''); }} style={inputStyle}>
-                <option value="">-- Select Student --</option>
-                {students.map((s) => (
-                  <option key={s.id} value={s.id}>{s.name} ({s.email})</option>
-                ))}
+              <label style={labelStyle}>Assign to</label>
+              <select
+                value={allocTab}
+                onChange={(e) => setAllocTab(e.target.value as 'single' | 'bulk')}
+                style={{ ...inputStyle, width: '100%', maxWidth: 280 }}
+              >
+                <option value="single">Individual student</option>
+                <option value="bulk">Bulk assign (spreadsheet)</option>
               </select>
             </div>
-            <div style={{ marginBottom: '1rem' }}>
-              <label style={labelStyle}>Or invite by email (new student)</label>
-              <input type="email" value={allocEmail} onChange={(e) => setAllocEmail(e.target.value)} placeholder="student@example.com" style={inputStyle} onFocus={() => setAllocStudentId('')} />
-            </div>
-            {variants.length > 0 && (
-              <div style={{ marginBottom: '1.25rem' }}>
-                <label style={labelStyle}>Difficulty Variant (optional)</label>
-                <select value={allocVariantId} onChange={(e) => setAllocVariantId(e.target.value)} style={inputStyle}>
-                  <option value="">-- Default (all questions) --</option>
-                  {variants.map((v) => (
-                    <option key={v.id} value={v.id}>{v.name} ({v.difficulty})</option>
-                  ))}
-                </select>
-              </div>
+            {allocError && <div style={{ padding: '0.5rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.9rem' }}>{allocError}</div>}
+            {allocTab === 'single' ? (
+              <>
+                <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Select an existing student or enter an email to invite a new student (an invite will be sent if they have not signed up yet).</p>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label htmlFor="test-alloc-student-combobox" style={labelStyle}>Existing student</label>
+                  <StudentSearchCombobox
+                    id="test-alloc-student-combobox"
+                    options={students}
+                    value={allocStudentId}
+                    onChange={(sid) => {
+                      setAllocStudentId(sid);
+                      if (sid) setAllocEmail('');
+                    }}
+                    placeholder="Search by name or email…"
+                    emptyMessage={students.length === 0 ? 'No students registered' : 'No students match'}
+                  />
+                </div>
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={labelStyle}>Or invite by email (new student)</label>
+                  <input type="email" value={allocEmail} onChange={(e) => setAllocEmail(e.target.value)} placeholder="student@example.com" style={inputStyle} onFocus={() => setAllocStudentId('')} />
+                </div>
+                {variants.length > 0 && (
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={labelStyle}>Difficulty Variant (optional)</label>
+                    <select value={allocVariantId} onChange={(e) => setAllocVariantId(e.target.value)} style={inputStyle}>
+                      <option value="">-- Default (all questions) --</option>
+                      {variants.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name} ({v.difficulty})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ marginBottom: '1.25rem' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={allocResetAttempts}
+                      onChange={(e) => setAllocResetAttempts(e.target.checked)}
+                      disabled={!allocStudentId}
+                    />
+                    Reset previous attempts for this student before reassigning
+                  </label>
+                </div>
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => setAllocateOpen(false)} style={{ ...adminBtnCancel, padding: '0.4rem 1rem' }}>Cancel</button>
+                  <button
+                    type="button"
+                    onClick={allocateTest}
+                    disabled={!allocStudentId.trim() && !allocEmail.trim()}
+                    style={{ ...adminBtnPrimaryDisabled(!allocStudentId.trim() && !allocEmail.trim()), padding: '0.4rem 1rem' }}
+                  >
+                    {allocEmail.trim() && !allocStudentId ? 'Send Invite & Assign' : 'Assign'}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <>
+                <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  Upload a spreadsheet with a column header named <strong>Email</strong>. Registered students are assigned immediately; others receive an individual invite with this test (same as single-email flow).
+                </p>
+                {bulkAllocProgress && <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{bulkAllocProgress}</div>}
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={labelStyle}>Spreadsheet *</label>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                    onChange={(e) => setBulkAllocFile(e.target.files?.[0] ?? null)}
+                    style={{ ...inputStyle, padding: '0.35rem' }}
+                  />
+                </div>
+                {variants.length > 0 && (
+                  <div style={{ marginBottom: '1.25rem' }}>
+                    <label style={labelStyle}>Difficulty variant (optional)</label>
+                    <select value={allocVariantId} onChange={(e) => setAllocVariantId(e.target.value)} style={inputStyle}>
+                      <option value="">-- Default (all questions) --</option>
+                      {variants.map((v) => (
+                        <option key={v.id} value={v.id}>{v.name} ({v.difficulty})</option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                  <button type="button" onClick={() => setAllocateOpen(false)} style={{ ...adminBtnCancel, padding: '0.4rem 1rem' }}>Cancel</button>
+                  <button
+                    type="button"
+                    onClick={allocateTestBulk}
+                    disabled={bulkAllocBusy || !bulkAllocFile}
+                    style={{ ...adminBtnPrimaryDisabled(bulkAllocBusy || !bulkAllocFile), padding: '0.4rem 1rem' }}
+                  >
+                    {bulkAllocBusy ? 'Processing…' : 'Run Bulk Assign'}
+                  </button>
+                </div>
+              </>
             )}
-            <div style={{ marginBottom: '1.25rem' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: 'var(--color-text-muted)', fontSize: '0.9rem', cursor: 'pointer' }}>
-                <input
-                  type="checkbox"
-                  checked={allocResetAttempts}
-                  onChange={(e) => setAllocResetAttempts(e.target.checked)}
-                  disabled={!allocStudentId}
-                />
-                Reset previous attempts for this student before reassigning
-              </label>
-            </div>
-            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button onClick={() => setAllocateOpen(false)} style={{ padding: '0.4rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-              <button onClick={allocateTest} disabled={!allocStudentId.trim() && !allocEmail.trim()} style={{ padding: '0.4rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: !allocStudentId.trim() && !allocEmail.trim() ? 0.5 : 1 }}>
-                {allocEmail.trim() && !allocStudentId ? 'Send invite & assign' : 'Assign'}
-              </button>
-            </div>
           </div>
         </div>
       )}

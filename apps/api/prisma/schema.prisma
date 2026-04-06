@@ -177,21 +177,26 @@ model TestAllocation {
 }
 
 model Invite {
-  id        String    @id @default(uuid())
-  tenantId  String
-  email     String
-  token     String    @unique
-  expiresAt DateTime
-  invitedBy String
-  testId    String?
-  variantId String?
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
+  id              String    @id @default(uuid())
+  tenantId        String
+  email           String
+  token           String    @unique
+  expiresAt       DateTime
+  invitedBy       String
+  testId          String?
+  variantId       String?
+  batchId         String?
+  courseId        String?
+  courseDueDate   DateTime?
+  usedAt          DateTime?
+  createdAt       DateTime  @default(now())
 
   tenant  Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   inviter User         @relation("InvitedBy", fields: [invitedBy], references: [id], onDelete: Cascade)
   test    Test?        @relation(fields: [testId], references: [id], onDelete: SetNull)
   variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  batch   Batch?       @relation("InviteBatch", fields: [batchId], references: [id], onDelete: SetNull)
+  course  Course?      @relation("InviteCourse", fields: [courseId], references: [id], onDelete: SetNull)
 
   @@index([token])
   @@index([tenantId, email])
@@ -272,6 +277,7 @@ model Course {
   chapters          CourseChapter[]
   courseAssignments  CourseAssignment[]
   scheduleEvents    BatchScheduleEvent[]
+  invitesFromCourse Invite[]           @relation("InviteCourse")
 }
 
 model Assignment {
@@ -316,6 +322,7 @@ model Batch {
   batchVideos       BatchVideo[]
   courseAssignments  CourseAssignment[]
   batchTests        BatchTestAssignment[]
+  invitesFromBatch  Invite[]             @relation("InviteBatch")
 
   @@index([tenantId])
 }

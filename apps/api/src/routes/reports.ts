@@ -155,6 +155,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           select: { id: true, name: true, email: true },
           take: 5,
         });
+        if (users.length === 0) return reply.send({ search: true, users: [] });
         if (users.length === 1) targetUserId = users[0].id;
         else if (users.length > 1) return reply.send({ search: true, users, message: 'Multiple matches; specify userId' });
       }

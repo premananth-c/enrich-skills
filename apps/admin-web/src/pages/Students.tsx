@@ -3,6 +3,19 @@ import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 import { useAuth } from '../context/AuthContext';
+import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
+import {
+  adminBtnCancel,
+  adminBtnDestructive,
+  adminBtnDestructiveMd,
+  adminBtnDestructiveMdDisabled,
+  adminBtnDestructiveDisabled,
+  adminBtnPrimary,
+  adminBtnPrimaryDisabled,
+  adminBtnPrimarySm,
+  adminBtnPrimarySmDisabled,
+  adminBtnCancelSm,
+} from '../lib/adminButtonStyles';
 
 interface Student {
   id: string;
@@ -45,7 +58,16 @@ export default function Students() {
   const [inviteVariantId, setInviteVariantId] = useState('');
   const [inviteSending, setInviteSending] = useState(false);
   const [inviteError, setInviteError] = useState('');
+  const [bulkInviteOpen, setBulkInviteOpen] = useState(false);
+  const [bulkInviteFile, setBulkInviteFile] = useState<File | null>(null);
+  const [bulkInviteRunning, setBulkInviteRunning] = useState(false);
+  const [bulkInviteError, setBulkInviteError] = useState('');
+  const [bulkInviteProgress, setBulkInviteProgress] = useState('');
+  const [bulkInviteTestId, setBulkInviteTestId] = useState('');
+  const [bulkInviteVariantId, setBulkInviteVariantId] = useState('');
   const [tests, setTests] = useState<TestOption[]>([]);
+  const [testDetail, setTestDetail] = useState<TestOption | null>(null);
+  const [bulkTestDetail, setBulkTestDetail] = useState<TestOption | null>(null);
   const [editOpen, setEditOpen] = useState(false);
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editForm, setEditForm] = useState({ name: '', email: '', phoneNumber: '', address: '', isActive: true });
@@ -81,19 +103,78 @@ export default function Students() {
   }, []);
 
   useEffect(() => {
-    if (inviteOpen) {
+    if (inviteOpen || bulkInviteOpen) {
       api<TestOption[]>('/tests')
         .then((data) => setTests(data.filter((t) => t.status === 'published')))
         .catch(() => setTests([]));
     }
-  }, [inviteOpen]);
+  }, [inviteOpen, bulkInviteOpen]);
 
-  const [testDetail, setTestDetail] = useState<TestOption | null>(null);
   useEffect(() => {
     if (!inviteTestId) { setTestDetail(null); return; }
     api<TestOption>(`/tests/${inviteTestId}`).then(setTestDetail).catch(() => setTestDetail(null));
   }, [inviteTestId]);
+  useEffect(() => {
+    if (!bulkInviteTestId) { setBulkTestDetail(null); return; }
+    api<TestOption>(`/tests/${bulkInviteTestId}`).then(setBulkTestDetail).catch(() => setBulkTestDetail(null));
+  }, [bulkInviteTestId]);
   const variants = testDetail?.variants || [];
+  const bulkVariants = bulkTestDetail?.variants || [];
+
+  const handleBulkInviteSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!bulkInviteFile) {
+      setBulkInviteError('Choose a spreadsheet file.');
+      return;
+    }
+    setBulkInviteRunning(true);
+    setBulkInviteError('');
+    setBulkInviteProgress('');
+    try {
+      const buf = await bulkInviteFile.arrayBuffer();
+      const parsed = parseEmailsFromSpreadsheetBuffer(buf);
+      if (parsed.error) {
+        setBulkInviteError(parsed.error);
+        return;
+      }
+      let ok = 0;
+      let failed = 0;
+      const failures: string[] = [];
+      for (let i = 0; i < parsed.emails.length; i++) {
+        const email = parsed.emails[i];
+        setBulkInviteProgress(`Sending ${i + 1} of ${parsed.emails.length}…`);
+        try {
+          await api('/invites', {
+            method: 'POST',
+            body: JSON.stringify({
+              email,
+              ...(bulkInviteTestId && { testId: bulkInviteTestId }),
+              ...(bulkInviteVariantId && { variantId: bulkInviteVariantId }),
+            }),
+          });
+          ok++;
+        } catch (err) {
+          failed++;
+          failures.push(`${email}: ${err instanceof Error ? err.message : 'failed'}`);
+        }
+      }
+      setBulkInviteOpen(false);
+      setBulkInviteFile(null);
+      setBulkInviteTestId('');
+      setBulkInviteVariantId('');
+      loadStudents();
+      loadInvites();
+      emitToast('success', `Bulk invite finished: ${ok} sent${failed ? `, ${failed} failed` : ''}.`);
+      if (failures.length > 0) {
+        emitToast('error', failures.slice(0, 3).join(' · ') + (failures.length > 3 ? '…' : ''));
+      }
+    } catch (err) {
+      setBulkInviteError(err instanceof Error ? err.message : 'Could not read file');
+    } finally {
+      setBulkInviteRunning(false);
+      setBulkInviteProgress('');
+    }
+  };
 
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -292,7 +373,7 @@ export default function Students() {
               type="button"
               onClick={() => handleResendInvite(inv)}
               disabled={!canEdit('students')}
-              style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}
+              style={adminBtnPrimarySmDisabled(!canEdit('students'))}
             >
               Resend
             </button>
@@ -300,7 +381,7 @@ export default function Students() {
               type="button"
               onClick={() => handleRevokeInvite(inv)}
               disabled={!canEdit('students')}
-              style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}
+              style={adminBtnDestructiveDisabled(!canEdit('students'))}
             >
               Revoke
             </button>
@@ -316,19 +397,35 @@ export default function Students() {
         <div style={{ display: 'flex', gap: '0.5rem' }}>
           {isSuperAdmin && (
             <button
+              type="button"
               onClick={() => setDirectOpen(true)}
               disabled={!canEdit('students')}
-              style={{ padding: '0.5rem 1rem', background: 'var(--color-surface)', color: 'var(--color-text)', border: '1px solid var(--color-border)', borderRadius: 6, fontWeight: 500 }}
+              style={adminBtnPrimaryDisabled(!canEdit('students'))}
             >
               Add Student Directly
             </button>
           )}
           <button
+            type="button"
             onClick={() => { setInviteOpen(true); setInviteError(''); }}
             disabled={!canEdit('students')}
-            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
+            style={adminBtnPrimaryDisabled(!canEdit('students'))}
           >
             Invite Student
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setBulkInviteOpen(true);
+              setBulkInviteError('');
+              setBulkInviteFile(null);
+              setBulkInviteTestId('');
+              setBulkInviteVariantId('');
+            }}
+            disabled={!canEdit('students')}
+            style={adminBtnPrimaryDisabled(!canEdit('students'))}
+          >
+            Bulk Invite
           </button>
         </div>
       </div>
@@ -410,9 +507,9 @@ export default function Students() {
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Edit</button>
-                      <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Archive</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
+                      <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
+                      <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>
@@ -447,9 +544,9 @@ export default function Students() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => handleRevoke(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 6, color: '#4ade80', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Revoke</button>
-                      <button type="button" onClick={() => handleDeletePermanently(s)} disabled={!canEdit('students')} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', cursor: canEdit('students') ? 'pointer' : 'not-allowed', opacity: canEdit('students') ? 1 : 0.6 }}>Delete</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={{ padding: '0.35rem 0.65rem', fontSize: '0.8rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)', cursor: 'pointer' }}>Revision History</button>
+                      <button type="button" onClick={() => handleRevoke(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Revoke</button>
+                      <button type="button" onClick={() => handleDeletePermanently(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Delete</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>
@@ -458,6 +555,56 @@ export default function Students() {
           </table>
         )}
       </div>
+
+      {bulkInviteOpen && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 10, width: 440, padding: '1.5rem', maxHeight: '90vh', overflow: 'auto' }}>
+            <h3 style={{ margin: '0 0 1rem' }}>Bulk invite students</h3>
+            <p style={{ margin: '0 0 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              Upload a spreadsheet (.xlsx, .xls, or .csv) with a column header named <strong>Email</strong>. Each row sends the same kind of invite as &quot;Invite Student&quot; (one email per student).
+            </p>
+            {bulkInviteError && <div style={{ padding: '0.5rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.9rem' }}>{bulkInviteError}</div>}
+            {bulkInviteProgress && <div style={{ marginBottom: '0.75rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{bulkInviteProgress}</div>}
+            <form onSubmit={handleBulkInviteSubmit}>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Spreadsheet *</label>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                  onChange={(e) => setBulkInviteFile(e.target.files?.[0] ?? null)}
+                  style={{ ...inputStyle, padding: '0.35rem' }}
+                />
+              </div>
+              <div style={{ marginBottom: '1rem' }}>
+                <label style={labelStyle}>Add to test (optional)</label>
+                <select value={bulkInviteTestId} onChange={(e) => { setBulkInviteTestId(e.target.value); setBulkInviteVariantId(''); }} style={inputStyle}>
+                  <option value="">-- No test --</option>
+                  {tests.map((t) => (
+                    <option key={t.id} value={t.id}>{t.title}</option>
+                  ))}
+                </select>
+              </div>
+              {bulkInviteTestId && bulkVariants.length > 0 ? (
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={labelStyle}>Difficulty variant (optional)</label>
+                  <select value={bulkInviteVariantId} onChange={(e) => setBulkInviteVariantId(e.target.value)} style={inputStyle}>
+                    <option value="">-- Default --</option>
+                    {bulkVariants.map((v: { id: string; name: string; difficulty: string }) => (
+                      <option key={v.id} value={v.id}>{v.name} ({v.difficulty})</option>
+                    ))}
+                  </select>
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
+                <button type="button" onClick={() => setBulkInviteOpen(false)} style={adminBtnCancel}>Cancel</button>
+                <button type="submit" disabled={bulkInviteRunning || !bulkInviteFile} style={adminBtnPrimaryDisabled(bulkInviteRunning || !bulkInviteFile)}>
+                  {bulkInviteRunning ? 'Sending…' : 'Send Invites'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {inviteOpen && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.6)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 100 }}>
@@ -493,8 +640,8 @@ export default function Students() {
                 </div>
               ) : null}
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                <button type="button" onClick={() => setInviteOpen(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-                <button type="submit" disabled={!canInvite} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canInvite ? 1 : 0.65, cursor: canInvite ? 'pointer' : 'not-allowed' }}>{inviteSending ? 'Sending...' : 'Send invite'}</button>
+                <button type="button" onClick={() => setInviteOpen(false)} style={adminBtnCancel}>Cancel</button>
+                <button type="submit" disabled={!canInvite} style={adminBtnPrimaryDisabled(!canInvite)}>{inviteSending ? 'Sending…' : 'Send Invite'}</button>
               </div>
             </form>
           </div>
@@ -530,8 +677,8 @@ export default function Students() {
                 <input value={directForm.address} onChange={(e) => setDirectForm((f) => ({ ...f, address: e.target.value }))} style={inputStyle} />
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
-                <button type="button" onClick={() => setDirectOpen(false)} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-                <button type="submit" style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}>Create Student</button>
+                <button type="button" onClick={() => setDirectOpen(false)} style={adminBtnCancel}>Cancel</button>
+                <button type="submit" style={adminBtnPrimary}>Create Student</button>
               </div>
             </form>
           </div>
@@ -565,8 +712,8 @@ export default function Students() {
                 <label htmlFor="edit-isActive" style={labelStyle}>Active (can sign in)</label>
               </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
-                <button type="button" onClick={() => { setEditOpen(false); setEditingStudent(null); }} style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}>Cancel</button>
-                <button type="submit" disabled={!canSaveEdit} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: canSaveEdit ? 1 : 0.65, cursor: canSaveEdit ? 'pointer' : 'not-allowed' }}>{editSaving ? 'Saving...' : 'Save'}</button>
+                <button type="button" onClick={() => { setEditOpen(false); setEditingStudent(null); }} style={adminBtnCancel}>Cancel</button>
+                <button type="submit" disabled={!canSaveEdit} style={adminBtnPrimaryDisabled(!canSaveEdit)}>{editSaving ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
             {isSuperAdmin && (
@@ -586,9 +733,9 @@ export default function Students() {
                     type="button"
                     onClick={handleResetStudentPassword}
                     disabled={resetPwLoading || resetPw.length < 8}
-                    style={{ padding: '0.5rem 1rem', background: '#dc2626', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, cursor: resetPw.length >= 8 ? 'pointer' : 'not-allowed', opacity: resetPw.length >= 8 ? 1 : 0.65, whiteSpace: 'nowrap' }}
+                    style={{ ...adminBtnDestructiveMdDisabled(resetPwLoading || resetPw.length < 8), whiteSpace: 'nowrap' }}
                   >
-                    {resetPwLoading ? 'Resetting...' : 'Reset'}
+                    {resetPwLoading ? 'Resetting…' : 'Reset Password'}
                   </button>
                 </div>
               </div>

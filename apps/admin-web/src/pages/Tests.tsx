@@ -6,6 +6,14 @@ import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 import CreateTestFromFileModal from '../components/CreateTestFromFileModal';
 import CreateCodingTestFromFileModal from '../components/CreateCodingTestFromFileModal';
+import {
+  adminBtnCancel,
+  adminBtnCancelSm,
+  adminBtnDestructiveMdDisabled,
+  adminBtnDestructiveTable,
+  adminBtnPrimary,
+  adminBtnPrimarySm,
+} from '../lib/adminButtonStyles';
 
 interface Test {
   id: string;
@@ -117,17 +125,17 @@ export default function Tests() {
             <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{t.config.durationMinutes} min</td>
             <td style={{ padding: '0.75rem 1rem' }}>
               <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button onClick={() => navigate(`/tests/${t.id}`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
+                <button type="button" onClick={() => navigate(`/tests/${t.id}`)} style={adminBtnPrimarySm}>Edit</button>
                 {t.status !== 'archived' && (
-                  <button onClick={() => handleArchive(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Archive</button>
+                  <button type="button" onClick={() => handleArchive(t.id, t.title)} style={adminBtnDestructiveTable}>Archive</button>
                 )}
                 {t.status === 'archived' && (
                   <>
-                    <button onClick={() => handleRevoke(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
-                    <button onClick={() => openDeleteModal(t.id, t.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
+                    <button type="button" onClick={() => handleRevoke(t.id, t.title)} style={adminBtnPrimarySm}>Revoke</button>
+                    <button type="button" onClick={() => openDeleteModal(t.id, t.title)} style={adminBtnDestructiveTable}>Delete</button>
                   </>
                 )}
-                <button onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                <button type="button" onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={adminBtnCancelSm}>Revision History</button>
               </div>
             </td>
           </tr>
@@ -141,22 +149,13 @@ export default function Tests() {
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Tests</h1>
         <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button
-            onClick={() => setCreateFromFileOpen(true)}
-            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-          >
+          <button type="button" onClick={() => setCreateFromFileOpen(true)} style={adminBtnPrimary}>
             Create MCQ Test From File
           </button>
-          <button
-            onClick={() => setCreateCodingFromFileOpen(true)}
-            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-          >
+          <button type="button" onClick={() => setCreateCodingFromFileOpen(true)} style={adminBtnPrimary}>
             Create Coding Test From File
           </button>
-          <button
-            onClick={() => navigate('/tests/new')}
-            style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-          >
+          <button type="button" onClick={() => navigate('/tests/new')} style={adminBtnPrimary}>
             + Create Test
           </button>
         </div>
@@ -224,18 +223,10 @@ export default function Tests() {
               </span>
             </label>
             <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-              <button
-                onClick={() => setDeleteTarget(null)}
-                disabled={deleting}
-                style={{ padding: '0.5rem 1rem', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text-muted)' }}
-              >
+              <button type="button" onClick={() => setDeleteTarget(null)} disabled={deleting} style={adminBtnCancel}>
                 Cancel
               </button>
-              <button
-                onClick={confirmDelete}
-                disabled={deleting}
-                style={{ padding: '0.5rem 1rem', background: '#ef4444', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500, opacity: deleting ? 0.6 : 1 }}
-              >
+              <button type="button" onClick={confirmDelete} disabled={deleting} style={adminBtnDestructiveMdDisabled(deleting)}>
                 {deleting ? 'Deleting…' : deleteQuestions ? 'Delete Test & Questions' : 'Delete Test'}
               </button>
             </div>

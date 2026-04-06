@@ -2,6 +2,12 @@ import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
+import {
+  adminBtnCancelSm,
+  adminBtnDestructiveTable,
+  adminBtnPrimary,
+  adminBtnPrimarySm,
+} from '../lib/adminButtonStyles';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
 
 interface Course {
@@ -71,10 +77,7 @@ export default function Courses() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Courses</h1>
-        <button
-          onClick={() => navigate('/courses/new')}
-          style={{ padding: '0.5rem 1.25rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 500 }}
-        >
+        <button type="button" onClick={() => navigate('/courses/new')} style={adminBtnPrimary}>
           + Create Course
         </button>
       </div>
@@ -105,9 +108,9 @@ export default function Courses() {
                   </td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => navigate(`/courses/${c.id}/edit`)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Edit</button>
-                      <button onClick={() => handleArchive(c.id, c.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Archive</button>
-                      <button onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                      <button type="button" onClick={() => navigate(`/courses/${c.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
+                      <button type="button" onClick={() => handleArchive(c.id, c.title)} style={adminBtnDestructiveTable}>Archive</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>
@@ -134,9 +137,9 @@ export default function Courses() {
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{c.title}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button onClick={() => handleRevoke(c.id, c.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #22c55e55', borderRadius: 4, color: '#4ade80', fontSize: '0.8rem' }}>Revoke</button>
-                      <button onClick={() => handleDelete(c.id, c.title)} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid #ef444444', borderRadius: 4, color: '#f87171', fontSize: '0.8rem' }}>Delete</button>
-                      <button onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={{ padding: '4px 10px', background: 'transparent', border: '1px solid var(--color-border)', borderRadius: 4, color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Revision History</button>
+                      <button type="button" onClick={() => handleRevoke(c.id, c.title)} style={adminBtnPrimarySm}>Revoke</button>
+                      <button type="button" onClick={() => handleDelete(c.id, c.title)} style={adminBtnDestructiveTable}>Delete</button>
+                      <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
                     </div>
                   </td>
                 </tr>

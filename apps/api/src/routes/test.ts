@@ -365,7 +365,7 @@ export async function testRoutes(app: FastifyInstance) {
             variantId: body.variantId ?? undefined,
           },
         });
-        await sendInviteEmail(body.email, token, test.title);
+        await sendInviteEmail(body.email, token, { testTitle: test.title });
         return reply.status(201).send({ inviteSent: true, email: body.email, message: 'Student not registered. Invite sent to email.' });
       }
     }

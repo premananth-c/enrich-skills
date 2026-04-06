@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
 import { formatAttemptFraction, formatReportResult } from '../lib/reportDisplay';
@@ -8,6 +8,8 @@ import {
   reportAttemptsToFlatRows,
   sanitizeReportFilename,
 } from '../lib/reportExport';
+import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import { SearchablePickerCombobox } from '../components/SearchablePickerCombobox';
 
 type ReportView = 'batch' | 'test' | 'student';
 
@@ -51,21 +53,29 @@ export default function Reports() {
   const [selectedTestId, setSelectedTestId] = useState('');
   const [testFilterBatchId, setTestFilterBatchId] = useState('');
   const [testFilterUserId, setTestFilterUserId] = useState('');
-  const [studentSearch, setStudentSearch] = useState('');
   const [studentUserId, setStudentUserId] = useState('');
+  const [students, setStudents] = useState<{ id: string; name: string; email: string }[]>([]);
   const [batchAttempts, setBatchAttempts] = useState<ReportAttemptRow[]>([]);
   const [testAttempts, setTestAttempts] = useState<ReportAttemptRow[]>([]);
   const [testBatches, setTestBatches] = useState<BatchOption[]>([]);
   const [studentReport, setStudentReport] = useState<StudentReport | null>(null);
-  const [studentSearchResults, setStudentSearchResults] = useState<{ id: string; name: string; email: string }[]>([]);
   const [loading, setLoading] = useState(false);
+  const studentReportLoadId = useRef(0);
 
   useEffect(() => {
     api<{ id: string; name: string }[]>('/batches').then((b) => setBatches(b.map((x) => ({ id: x.id, name: x.name })))).catch(() => setBatches([]));
     api<{ id: string; title: string; status: string }[]>('/tests')
       .then((t) => setTests(t.filter((x) => x.status === 'published').map((x) => ({ id: x.id, title: x.title }))))
       .catch(() => setTests([]));
+    api<{ id: string; name: string; email: string | null }[]>('/users?role=student')
+      .then((u) => setStudents(u.map((x) => ({ id: x.id, name: x.name, email: x.email ?? '' }))))
+      .catch(() => setStudents([]));
   }, []);
+
+  useEffect(() => {
+    setTestFilterBatchId('');
+    setTestFilterUserId('');
+  }, [selectedTestId]);
 
   useEffect(() => {
     if (view !== 'batch' || !selectedBatchId) {
@@ -98,37 +108,33 @@ export default function Reports() {
       .finally(() => setLoading(false));
   }, [view, selectedTestId, testFilterBatchId, testFilterUserId]);
 
-  const searchStudent = () => {
-    if (!studentSearch.trim()) return;
-    setLoading(true);
-    api<{ search?: boolean; users?: { id: string; name: string; email: string }[]; user?: unknown; batches?: unknown[]; courseAssignments?: unknown[]; attempts?: unknown[] }>(`/reports?type=student&q=${encodeURIComponent(studentSearch.trim())}`)
-      .then((r) => {
-        if (r.search && r.users) {
-          setStudentSearchResults(r.users);
-          setStudentReport(null);
-          if (r.users.length === 1) {
-            setStudentUserId(r.users[0].id);
-            return api<StudentReport>(`/reports?type=student&userId=${r.users[0].id}`).then((report) => {
-              setStudentReport(report);
-              setStudentSearchResults([]);
-            });
-          }
-        } else {
-          setStudentSearchResults([]);
-          setStudentReport(r as unknown as StudentReport);
-        }
-      })
-      .catch(() => { setStudentSearchResults([]); setStudentReport(null); })
-      .finally(() => setLoading(false));
-  };
-
   const loadStudentReport = (userId: string) => {
-    setStudentUserId(userId);
+    const loadId = ++studentReportLoadId.current;
     setLoading(true);
     api<StudentReport>(`/reports?type=student&userId=${userId}`)
-      .then(setStudentReport)
-      .catch(() => setStudentReport(null))
-      .finally(() => setLoading(false));
+      .then((report) => {
+        if (loadId !== studentReportLoadId.current) return;
+        setStudentReport(report);
+      })
+      .catch(() => {
+        if (loadId !== studentReportLoadId.current) return;
+        setStudentReport(null);
+      })
+      .finally(() => {
+        if (loadId !== studentReportLoadId.current) return;
+        setLoading(false);
+      });
+  };
+
+  const onStudentReportPick = (userId: string) => {
+    setStudentUserId(userId);
+    if (!userId) {
+      studentReportLoadId.current += 1;
+      setStudentReport(null);
+      setLoading(false);
+      return;
+    }
+    loadStudentReport(userId);
   };
 
   const exportBatchXlsx = () => {
@@ -209,14 +215,17 @@ export default function Reports() {
 
       {view === 'batch' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <label style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Select batch:</label>
-            <select value={selectedBatchId} onChange={(e) => setSelectedBatchId(e.target.value)} style={{ padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, minWidth: 260 }}>
-              <option value="">-- Choose batch --</option>
-              {batches.map((b) => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
-            </select>
+          <div style={{ marginBottom: '1rem', maxWidth: 360 }}>
+            <label htmlFor="reports-batch-picker" style={{ display: 'block', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Select batch</label>
+            <SearchablePickerCombobox
+              id="reports-batch-picker"
+              options={batches.map((b) => ({ id: b.id, label: b.name }))}
+              value={selectedBatchId}
+              onChange={setSelectedBatchId}
+              placeholder="Search batches by name…"
+              emptyMessage={batches.length === 0 ? 'No batches' : 'No batches match'}
+              maxWidth={360}
+            />
           </div>
           {loading && <div style={{ padding: '1rem' }}>Loading...</div>}
           {!loading && selectedBatchId && (
@@ -272,26 +281,44 @@ export default function Reports() {
 
       {view === 'test' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1rem', alignItems: 'center' }}>
-            <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-              <label style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Test:</label>
-              <select value={selectedTestId} onChange={(e) => setSelectedTestId(e.target.value)} style={{ padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, minWidth: 240 }}>
-                <option value="">-- Choose test --</option>
-                {tests.map((t) => (
-                  <option key={t.id} value={t.id}>{t.title}</option>
-                ))}
-              </select>
+          <div style={{ marginBottom: '1rem', display: 'flex', flexWrap: 'wrap', gap: '1.25rem', alignItems: 'flex-end' }}>
+            <div style={{ flex: '1 1 220px', minWidth: 200, maxWidth: 360 }}>
+              <label htmlFor="reports-test-picker" style={{ display: 'block', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Select test</label>
+              <SearchablePickerCombobox
+                id="reports-test-picker"
+                options={tests.map((t) => ({ id: t.id, label: t.title }))}
+                value={selectedTestId}
+                onChange={setSelectedTestId}
+                placeholder="Search tests by title…"
+                emptyMessage={tests.length === 0 ? 'No published tests' : 'No tests match'}
+                maxWidth={360}
+              />
             </div>
             {selectedTestId && (
               <>
-                <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
-                  <label style={{ fontWeight: 500, color: 'var(--color-text-muted)' }}>Filter by batch:</label>
-                  <select value={testFilterBatchId} onChange={(e) => setTestFilterBatchId(e.target.value)} style={{ padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, minWidth: 200 }}>
-                    <option value="">All batches</option>
-                    {testBatches.map((b) => (
-                      <option key={b.id} value={b.id}>{b.name}</option>
-                    ))}
-                  </select>
+                <div style={{ flex: '1 1 200px', minWidth: 180, maxWidth: 320 }}>
+                  <label htmlFor="reports-test-filter-batch" style={{ display: 'block', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Filter by batch</label>
+                  <SearchablePickerCombobox
+                    id="reports-test-filter-batch"
+                    options={[{ id: '', label: 'All batches' }, ...testBatches.map((b) => ({ id: b.id, label: b.name }))]}
+                    value={testFilterBatchId}
+                    onChange={setTestFilterBatchId}
+                    placeholder="All batches"
+                    emptyMessage="No batches"
+                    maxWidth={320}
+                  />
+                </div>
+                <div style={{ flex: '1 1 220px', minWidth: 200, maxWidth: 360 }}>
+                  <label htmlFor="reports-test-filter-student" style={{ display: 'block', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Filter by student</label>
+                  <StudentSearchCombobox
+                    id="reports-test-filter-student"
+                    options={students}
+                    value={testFilterUserId}
+                    onChange={setTestFilterUserId}
+                    placeholder="Search students…"
+                    emptyMessage={students.length === 0 ? 'No students (need Students access)' : 'No students match'}
+                    maxWidth={360}
+                  />
                 </div>
               </>
             )}
@@ -350,29 +377,18 @@ export default function Reports() {
 
       {view === 'student' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
-            <input
-              type="text"
-              value={studentSearch}
-              onChange={(e) => setStudentSearch(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && searchStudent()}
-              placeholder="Search by name or email"
-              style={{ padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, minWidth: 260 }}
+          <div style={{ marginBottom: '1rem', maxWidth: 400 }}>
+            <label htmlFor="reports-student-picker" style={{ display: 'block', fontWeight: 500, color: 'var(--color-text-muted)', marginBottom: '0.35rem' }}>Select student</label>
+            <StudentSearchCombobox
+              id="reports-student-picker"
+              options={students}
+              value={studentUserId}
+              onChange={onStudentReportPick}
+              placeholder="Search by name or email…"
+              emptyMessage={students.length === 0 ? 'No students (need Students access)' : 'No students match'}
+              maxWidth={400}
             />
-            <button onClick={searchStudent} style={{ padding: '0.5rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6 }}>Search</button>
           </div>
-          {studentSearchResults.length > 1 && (
-            <div style={{ marginBottom: '1rem' }}>
-              <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>Multiple matches – select a student:</p>
-              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-                {studentSearchResults.map((u) => (
-                  <li key={u.id}>
-                    <button type="button" onClick={() => loadStudentReport(u.id)} style={{ padding: '0.5rem', background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-primary)', textAlign: 'left', width: '100%' }}>{u.name} ({u.email})</button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
           {loading && <div style={{ padding: '1rem' }}>Loading...</div>}
           {!loading && studentReport && (
             <>
@@ -435,7 +451,12 @@ export default function Reports() {
               </section>
             </>
           )}
-          {!studentReport && !loading && studentSearchResults.length <= 1 && <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Search for a student by name or email to view their complete report.</div>}
+          {!studentReport && !loading && !studentUserId && (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Select a student above to view their complete report.</div>
+          )}
+          {!studentReport && !loading && studentUserId && (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Could not load report for this student.</div>
+          )}
         </div>
       )}
     </div>
