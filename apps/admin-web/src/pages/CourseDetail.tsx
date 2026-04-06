@@ -8,6 +8,7 @@ import { emitToast } from '../lib/toast';
 import { startVideoUpload } from '../lib/uploadManager';
 import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
 import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import { SearchablePickerCombobox } from '../components/SearchablePickerCombobox';
 import {
   adminBtnCancel,
   adminBtnCancelSm,
@@ -553,6 +554,7 @@ export default function CourseDetail() {
   if (loading || !course) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   const courseStudentsAvailable = students.filter((s) => !assignments.some((a) => a.user?.id === s.id));
+  const courseBatchesAvailable = batches.filter((b) => !assignments.some((a) => a.batch?.id === b.id));
 
   return (
     <div>
@@ -956,16 +958,22 @@ export default function CourseDetail() {
             </div>
             {assignType === 'batch' ? (
               <div style={{ marginBottom: '0.5rem' }}>
-                <label style={labelStyle}>Batch</label>
-                <select value={assignBatchId} onChange={(e) => setAssignBatchId(e.target.value)} style={{ ...inputStyle, maxWidth: 320 }}>
-                  <option value="">Select a batch</option>
-                  {batches.filter((b) => !assignments.some((a) => a.batch?.id === b.id)).map((b) => (
-                    <option key={b.id} value={b.id}>{b.name}</option>
-                  ))}
-                  {batches.length > 0 && batches.every((b) => assignments.some((a) => a.batch?.id === b.id)) && (
-                    <option value="" disabled>All batches already assigned</option>
-                  )}
-                </select>
+                <label htmlFor="course-assign-batch-combobox" style={labelStyle}>Batch</label>
+                {courseBatchesAvailable.length === 0 ? (
+                  <div style={{ ...inputStyle, maxWidth: 320, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                    {batches.length === 0 ? 'No batches' : 'All batches already assigned'}
+                  </div>
+                ) : (
+                  <SearchablePickerCombobox
+                    id="course-assign-batch-combobox"
+                    options={courseBatchesAvailable.map((b) => ({ id: b.id, label: b.name }))}
+                    value={assignBatchId}
+                    onChange={setAssignBatchId}
+                    placeholder="Search batches by name…"
+                    emptyMessage="No batches match"
+                    maxWidth={320}
+                  />
+                )}
               </div>
             ) : assignType === 'student' ? (
               <div style={{ marginBottom: '0.5rem' }}>
