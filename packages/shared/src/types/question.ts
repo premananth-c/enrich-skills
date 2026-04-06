@@ -22,6 +22,8 @@ export interface QuestionContent {
   memoryLimitMb?: number;
   supportedLanguages?: string[];
   codingLanguage?: string;
+  /** Pre-filled code shown in the editor when the student starts the question. */
+  starterCode?: string;
   // MCQ specific
   options?: { id: string; text: string; isCorrect: boolean }[];
   explanation?: string;

@@ -27,6 +27,7 @@ interface Question {
     examples?: { input: string; output: string }[];
     options?: { id: string; text: string; isCorrect?: boolean }[];
     explanation?: string;
+    starterCode?: string;
   };
   testCases?: { input: string; expectedOutput: string; isPublic: boolean }[];
 }
@@ -131,7 +132,7 @@ export default function TestAttempt() {
         const q = qById.get(sub.questionId);
         const lang =
           q?.type === 'coding' && locked ? locked : (sub.language || 'python');
-        codes[sub.questionId] = sub.code || defaultCodeForLang(lang);
+        codes[sub.questionId] = sub.code || q?.content?.starterCode || defaultCodeForLang(lang);
         langs[sub.questionId] = lang;
         if (sub.selectedOptionId) selections[sub.questionId] = sub.selectedOptionId;
       });
@@ -288,11 +289,12 @@ export default function TestAttempt() {
   const lockedLang = attempt.test.config?.codingLanguage;
   const effectiveLangForQ =
     isCoding && lockedLang ? lockedLang : (langMap[qId] || 'python');
-  const currentCode = codeMap[qId] || defaultCodeForLang(effectiveLangForQ);
+  const questionStarterCode = content?.starterCode;
+  const currentCode = codeMap[qId] || questionStarterCode || defaultCodeForLang(effectiveLangForQ);
   const currentLang = effectiveLangForQ;
   const savedLang =
     isCoding && lockedLang ? lockedLang : (submission?.language || 'python');
-  const savedCode = submission?.code || defaultCodeForLang(savedLang);
+  const savedCode = submission?.code || questionStarterCode || defaultCodeForLang(savedLang);
   const isReview = reviewMode || attempt.status !== 'in_progress';
   const hasAnyResponse = attempt.submissions.some((sub) => {
     if (sub.selectedOptionId) return true;

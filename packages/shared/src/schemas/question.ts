@@ -29,6 +29,8 @@ export const createCodingQuestionSchema = z.object({
   timeLimitMs: z.number().min(1000).max(30000).optional(),
   memoryLimitMb: z.number().min(32).max(1024).optional(),
   supportedLanguages: z.array(z.string()).optional(),
+  /** Pre-filled code shown in the editor when the student starts the question. */
+  starterCode: z.string().optional(),
 });
 
 export const createMcqQuestionSchema = z.object({

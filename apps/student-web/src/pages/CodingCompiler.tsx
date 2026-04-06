@@ -25,6 +25,7 @@ interface Question {
     description: string;
     examples?: { input: string; output: string }[];
     constraints?: string[];
+    starterCode?: string;
   };
   testCases?: { input: string; expectedOutput: string; isPublic: boolean }[];
 }
@@ -109,7 +110,7 @@ export default function CodingCompiler() {
         const sub = data.submissions.find((s) => s.questionId === q.question.id);
         const locked = data.test.config?.codingLanguage;
         const lang = locked || sub?.language || 'python';
-        setCode(sub?.code || defaultCodeForLang(lang));
+        setCode(sub?.code || q.question.content?.starterCode || defaultCodeForLang(lang));
         setLanguage(lang);
       }
     });
@@ -128,7 +129,7 @@ export default function CodingCompiler() {
     const sub = attempt.submissions.find((s) => s.questionId === current.question.id);
     const locked = attempt.test.config?.codingLanguage;
     const lang = locked || sub?.language || language;
-    setCode(sub?.code || defaultCodeForLang(lang));
+    setCode(sub?.code || current.question.content?.starterCode || defaultCodeForLang(lang));
     setLanguage(lang);
     setRunResults(null);
     setOutput('');
