@@ -182,6 +182,7 @@ export async function userRoutes(app: FastifyInstance) {
       students: 'none',
       reports: 'none',
       manage_users: 'none',
+      meetings: 'none',
     };
     for (const key of MODULE_KEYS) {
       const val = body.permissions?.[key];
@@ -225,6 +226,7 @@ export async function userRoutes(app: FastifyInstance) {
       students: 'none',
       reports: 'none',
       manage_users: 'none',
+      meetings: 'none',
     };
     for (const key of MODULE_KEYS) {
       const current = permissions[key];

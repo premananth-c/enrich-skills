@@ -92,3 +92,42 @@ export async function sendInviteEmail(to: string, token: string, context?: Invit
     throw new Error(`Failed to send email: ${error.message}`);
   }
 }
+
+export async function sendMeetingInviteEmail(
+  to: string,
+  meetingName: string,
+  joinUrl: string,
+  meetingType: 'interactive_meeting' | 'webinar',
+  scheduledAt?: Date | null,
+): Promise<void> {
+  const typeLabel = meetingType === 'webinar' ? 'Webinar' : 'Live Meeting';
+  const subject = `You're invited to a ${typeLabel}: ${meetingName}`;
+  const dateStr = scheduledAt
+    ? `<p><strong>Scheduled:</strong> ${scheduledAt.toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })}</p>`
+    : '';
+
+  const html = `
+    <p>You have been invited to join a <strong>${typeLabel}</strong> on RankerShip.</p>
+    <p><strong>${meetingName}</strong></p>
+    ${dateStr}
+    <p>Click the button below to join when the meeting starts:</p>
+    <p>
+      <a href="${joinUrl}" style="display:inline-block;padding:10px 20px;background:#4338ca;color:#fff;text-decoration:none;border-radius:6px;">
+        Join ${typeLabel}
+      </a>
+    </p>
+    <p>Or copy this link: ${joinUrl}</p>
+    <p>If you didn't expect this email, you can ignore it.</p>
+  `;
+
+  if (!resend) {
+    console.log('[email] RESEND_API_KEY not set — meeting invite for', to, ':', joinUrl);
+    return;
+  }
+
+  const { error: emailError } = await resend.emails.send({ from: EMAIL_FROM, to, subject, html });
+  if (emailError) {
+    console.error('[email] Resend error:', emailError);
+    throw new Error(`Failed to send email: ${emailError.message}`);
+  }
+}

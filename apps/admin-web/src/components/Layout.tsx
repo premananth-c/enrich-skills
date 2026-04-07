@@ -60,6 +60,7 @@ export default function Layout() {
           {canView('questions') && <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>}
           {canView('students') && <NavLink to="/students" style={navLinkStyle}>Students</NavLink>}
           {canView('reports') && <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>}
+          {canView('meetings') && <NavLink to="/meetings" style={navLinkStyle}>Live Meetings</NavLink>}
           {isSuperAdmin && <NavLink to="/enquiries" style={navLinkStyle}>Enquiries</NavLink>}
           {isSuperAdmin && <NavLink to="/manage-users" style={navLinkStyle}>Manage Users</NavLink>}
         </nav>

@@ -15,6 +15,7 @@ import CourseDetail from './pages/CourseDetail';
 import PdfViewer from './pages/PdfViewer';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
+import JoinMeeting from './pages/JoinMeeting';
 import ToastViewport from './components/ToastViewport';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -48,6 +49,7 @@ function AppRoutes() {
         <Route path="pdf/:materialId" element={<PdfViewer />} />
         <Route path="calendar" element={<Calendar />} />
         <Route path="notifications" element={<Notifications />} />
+        <Route path="meeting/:meetingId" element={<JoinMeeting />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>

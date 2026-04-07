@@ -21,6 +21,9 @@ import ToastViewport from './components/ToastViewport';
 import UploadProgressToast from './components/UploadProgressToast';
 import ManageUsers from './pages/ManageUsers';
 import Enquiries from './pages/Enquiries';
+import Meetings from './pages/Meetings';
+import MeetingForm from './pages/MeetingForm';
+import MeetingDetail from './pages/MeetingDetail';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuth();
@@ -72,6 +75,9 @@ export default function App() {
             <Route path="courses/:id/edit" element={<ModuleRoute moduleKey="courses" access="edit"><CourseForm /></ModuleRoute>} />
             <Route path="pdf/:materialId" element={<ModuleRoute moduleKey="courses"><PdfViewer /></ModuleRoute>} />
             <Route path="reports" element={<ModuleRoute moduleKey="reports"><Reports /></ModuleRoute>} />
+            <Route path="meetings" element={<ModuleRoute moduleKey="meetings"><Meetings /></ModuleRoute>} />
+            <Route path="meetings/new" element={<ModuleRoute moduleKey="meetings" access="edit"><MeetingForm /></ModuleRoute>} />
+            <Route path="meetings/:id" element={<ModuleRoute moduleKey="meetings"><MeetingDetail /></ModuleRoute>} />
             <Route path="manage-users" element={<SuperAdminRoute><ManageUsers /></SuperAdminRoute>} />
             <Route path="enquiries" element={<SuperAdminRoute><Enquiries /></SuperAdminRoute>} />
           </Route>
