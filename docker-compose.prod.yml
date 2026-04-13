@@ -37,6 +37,9 @@ services:
       - ALLOWED_STREAMING_DOMAINS=${ALLOWED_STREAMING_DOMAINS:-rankership.com,www.rankership.com,student.rankership.com,admin.rankership.com}
       - JUDGE_URL=http://judge-worker:4000
       - SENTRY_DSN=${SENTRY_DSN:-}
+      - DAILY_API_KEY=${DAILY_API_KEY:-}
+      - DAILY_BASE_URL=${DAILY_BASE_URL:-https://api.daily.co/v1}
+      - DAILY_WEBHOOK_SECRET=${DAILY_WEBHOOK_SECRET:-}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
