@@ -8,6 +8,7 @@ interface DailyRoomProperties {
   start_audio_off?: boolean;
   owner_only_broadcast?: boolean;
   enable_screenshare?: boolean;
+  enable_recording?: string;
   exp?: number;
 }
 
@@ -59,6 +60,7 @@ export async function createRoom(opts: CreateRoomOptions): Promise<DailyRoom> {
     start_audio_off: opts.startAudioOff,
     owner_only_broadcast: opts.isWebinar,
     enable_screenshare: opts.enableScreenShare,
+    enable_recording: 'cloud',
   };
   if (opts.expiresAt) {
     properties.exp = Math.floor(opts.expiresAt.getTime() / 1000);
@@ -102,32 +104,19 @@ export async function createMeetingToken(opts: CreateTokenOptions): Promise<stri
   return result.token;
 }
 
-export interface DailyRecording {
-  id: string;
-  room_name: string;
-  start_ts: number;
-  status: string;
-  max_participants: number;
-  duration: number;
-  share_token: string;
-  tracks: { type: string }[];
-}
-
 export interface DailyRecordingAccess {
   download_link: string;
 }
 
-export async function startRecording(roomName: string): Promise<DailyRecording> {
-  return dailyFetch<DailyRecording>(`/recordings`, {
+export async function startRecording(roomName: string): Promise<void> {
+  await dailyFetch(`/rooms/${roomName}/recordings/start`, {
     method: 'POST',
-    body: JSON.stringify({
-      room_name: roomName,
-    }),
+    body: JSON.stringify({ type: 'cloud' }),
   });
 }
 
-export async function stopRecording(recordingId: string): Promise<void> {
-  await dailyFetch(`/recordings/${recordingId}/stop`, { method: 'POST' });
+export async function stopRecording(roomName: string): Promise<void> {
+  await dailyFetch(`/rooms/${roomName}/recordings/stop`, { method: 'POST' });
 }
 
 export async function getRecordingAccessLink(recordingId: string): Promise<string> {
