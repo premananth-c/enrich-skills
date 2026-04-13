@@ -4,6 +4,15 @@ import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
 import { adminBtnPrimary, adminBtnPrimarySm, adminBtnCancel, adminBtnDestructiveTable } from '../lib/adminButtonStyles';
 
+interface Recording {
+  id: string;
+  providerRecordingId: string | null;
+  storageKey: string | null;
+  playbackUrl: string | null;
+  durationSeconds: number | null;
+  createdAt: string;
+}
+
 interface Meeting {
   id: string;
   name: string;
@@ -20,7 +29,7 @@ interface Meeting {
   createdAt: string;
   host?: { id: string; name: string; email: string | null };
   batch?: { id: string; name: string } | null;
-  recordings?: { id: string; playbackUrl: string | null; durationSeconds: number | null; createdAt: string }[];
+  recordings?: Recording[];
 }
 
 const statusColors: Record<string, string> = { scheduled: '#2563eb', live: '#16a34a', ended: '#6b7280' };
@@ -35,6 +44,8 @@ export default function MeetingDetail() {
   const [inviteEmails, setInviteEmails] = useState('');
   const [sending, setSending] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [recording, setRecording] = useState(false);
+  const [recordingLoading, setRecordingLoading] = useState(false);
 
   const loadMeeting = () => {
     if (!id) return;
@@ -109,6 +120,36 @@ export default function MeetingDetail() {
     }
   };
 
+  const hasActiveRecording = meeting?.recordings?.some((r) => !r.storageKey && !r.playbackUrl) ?? false;
+
+  const handleStartRecording = async () => {
+    if (!id) return;
+    setRecordingLoading(true);
+    try {
+      await api(`/meetings/${id}/recording/start`, { method: 'POST' });
+      setRecording(true);
+      loadMeeting();
+    } catch {
+      // handled by api()
+    } finally {
+      setRecordingLoading(false);
+    }
+  };
+
+  const handleStopRecording = async () => {
+    if (!id) return;
+    setRecordingLoading(true);
+    try {
+      await api(`/meetings/${id}/recording/stop`, { method: 'POST' });
+      setRecording(false);
+      loadMeeting();
+    } catch {
+      // handled by api()
+    } finally {
+      setRecordingLoading(false);
+    }
+  };
+
   const handleDelete = async () => {
     if (!meeting || !confirm(`Delete meeting "${meeting.name}"?`)) return;
     try {
@@ -177,6 +218,15 @@ export default function MeetingDetail() {
             <button type="button" onClick={handleJoin} disabled={joining} style={adminBtnPrimary}>
               {joining ? 'Opening...' : 'Join as Host'}
             </button>
+            {!recording && !hasActiveRecording ? (
+              <button type="button" onClick={handleStartRecording} disabled={recordingLoading} style={{ ...adminBtnPrimary, background: '#dc2626' }}>
+                {recordingLoading ? 'Starting...' : 'Start Recording'}
+              </button>
+            ) : (
+              <button type="button" onClick={handleStopRecording} disabled={recordingLoading} style={{ ...adminBtnPrimarySm, background: '#dc2626', padding: '0.5rem 1.25rem', fontSize: '0.9rem' }}>
+                {recordingLoading ? 'Stopping...' : 'Stop Recording'}
+              </button>
+            )}
             <button type="button" onClick={() => handleStatusChange('ended')} style={{ ...adminBtnPrimary, background: '#6b7280' }}>
               End Meeting
             </button>
@@ -231,15 +281,29 @@ export default function MeetingDetail() {
       {meeting.recordings && meeting.recordings.length > 0 && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
           <h3 style={{ margin: '0 0 0.5rem', fontSize: '0.95rem' }}>Recordings</h3>
-          {meeting.recordings.map((r) => (
-            <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid var(--color-border)', fontSize: '0.85rem' }}>
-              <span>{new Date(r.createdAt).toLocaleString()}</span>
-              {r.durationSeconds != null && <span style={{ color: 'var(--color-text-muted)' }}>{Math.round(r.durationSeconds / 60)} min</span>}
-              {r.playbackUrl && (
-                <a href={r.playbackUrl} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>Play</a>
-              )}
-            </div>
-          ))}
+          {meeting.recordings.map((r) => {
+            const isReady = Boolean(r.storageKey || r.playbackUrl);
+            const isProcessing = !isReady;
+            const playbackHref = r.storageKey
+              ? `${(import.meta.env.VITE_API_URL ?? '')}/api/v1/meetings/${meeting.id}/recordings/${r.id}/playback`
+              : r.playbackUrl;
+
+            return (
+              <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid var(--color-border)', fontSize: '0.85rem' }}>
+                <span>{new Date(r.createdAt).toLocaleString()}</span>
+                {r.durationSeconds != null && <span style={{ color: 'var(--color-text-muted)' }}>{Math.round(r.durationSeconds / 60)} min</span>}
+                {isProcessing && (
+                  <span style={{ color: '#d97706', fontStyle: 'italic' }}>Processing...</span>
+                )}
+                {isReady && playbackHref && (
+                  <a href={playbackHref} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>Play</a>
+                )}
+                {isReady && playbackHref && (
+                  <a href={playbackHref} download style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.8rem' }}>Download</a>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>

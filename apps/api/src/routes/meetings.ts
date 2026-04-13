@@ -2,11 +2,86 @@ import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createMeetingSchema, updateMeetingSchema, sendMeetingInviteSchema } from '@enrich-skills/shared';
 import { authenticate, requireTenant, requireAdmin } from '../lib/tenant.js';
-import { createRoom, createMeetingToken, deleteRoom, isDailyConfigured } from '../lib/daily.js';
+import {
+  createRoom, createMeetingToken, deleteRoom, isDailyConfigured,
+  startRecording, stopRecording, getRecordingAccessLink, downloadRecordingBuffer,
+  verifyDailyWebhook,
+} from '../lib/daily.js';
 import { sendMeetingInviteEmail } from '../lib/email.js';
+import { saveFile, getFileUrl, STORAGE_KEYS } from '../lib/storage.js';
 
 function sanitizeRoomName(name: string, id: string): string {
   return (name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0, 30) + '-' + id.slice(0, 8));
+}
+
+export async function meetingWebhookRoutes(app: FastifyInstance) {
+  // Daily webhook: recording ready — no auth required (verified by signature)
+  app.post('/webhooks/daily', async (request: FastifyRequest, reply: FastifyReply) => {
+    const signature = request.headers['x-webhook-signature'] as string || '';
+    const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
+
+    if (!verifyDailyWebhook(rawBody, signature)) {
+      return reply.status(401).send({ error: 'Invalid webhook signature' });
+    }
+
+    const event = request.body as {
+      type: string;
+      payload: {
+        recording_id: string;
+        room_name: string;
+        duration: number;
+        max_participants: number;
+        share_token: string;
+        tracks: { type: string }[];
+      };
+    };
+
+    if (event.type !== 'recording.ready-to-download') {
+      return reply.status(200).send({ ok: true });
+    }
+
+    const { recording_id, room_name, duration } = event.payload;
+
+    const rec = await prisma.liveMeetingRecording.findFirst({
+      where: { providerRecordingId: recording_id },
+      include: { meeting: { select: { id: true, tenantId: true } } },
+    });
+
+    if (!rec) {
+      app.log.warn(`Webhook: no LiveMeetingRecording found for provider recording ${recording_id}`);
+      return reply.status(200).send({ ok: true });
+    }
+
+    try {
+      const downloadUrl = await getRecordingAccessLink(recording_id);
+      const { buffer, contentType } = await downloadRecordingBuffer(downloadUrl);
+
+      const storageKey = await saveFile(
+        STORAGE_KEYS.RECORDINGS,
+        `${room_name}-${recording_id}.mp4`,
+        buffer,
+        contentType,
+        { tenantId: rec.meeting.tenantId }
+      );
+
+      const playbackUrl = await getFileUrl(storageKey, 86400);
+
+      await prisma.liveMeetingRecording.update({
+        where: { id: rec.id },
+        data: {
+          storageKey,
+          playbackUrl,
+          durationSeconds: Math.round(duration),
+        },
+      });
+
+      app.log.info(`Recording ${recording_id} saved to R2: ${storageKey}`);
+    } catch (err) {
+      app.log.error(`Failed to process recording ${recording_id}: ${err}`);
+    }
+
+    return reply.status(200).send({ ok: true });
+  });
 }
 
 export async function meetingRoutes(app: FastifyInstance) {
@@ -222,4 +297,81 @@ export async function meetingRoutes(app: FastifyInstance) {
     const link = `${studentBaseUrl}/meeting/${meeting.id}`;
     return reply.send({ link });
   });
+
+  // --- Recording: start ---
+  app.post('/:id/recording/start', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = requireAdmin(request);
+    const payload = request.user as { sub: string };
+    const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
+    if (meeting.status !== 'live') return reply.status(400).send({ error: 'Meeting must be live to start recording' });
+
+    const isHost = meeting.hostUserId === payload.sub;
+    const isCoHost = meeting.coHostUserIds.includes(payload.sub);
+    if (!isHost && !isCoHost) return reply.status(403).send({ error: 'Only host or co-host can record' });
+
+    if (!isDailyConfigured() || !meeting.providerRoomUrl) {
+      return reply.status(400).send({ error: 'Daily API key not configured' });
+    }
+
+    const roomName = meeting.providerRoomUrl.split('/').pop()!;
+    const recording = await startRecording(roomName);
+
+    const rec = await prisma.liveMeetingRecording.create({
+      data: {
+        liveMeetingId: meeting.id,
+        providerRecordingId: recording.id,
+      },
+    });
+
+    return reply.status(201).send(rec);
+  });
+
+  // --- Recording: stop ---
+  app.post('/:id/recording/stop', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const tenantId = requireAdmin(request);
+    const payload = request.user as { sub: string };
+    const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
+
+    const isHost = meeting.hostUserId === payload.sub;
+    const isCoHost = meeting.coHostUserIds.includes(payload.sub);
+    if (!isHost && !isCoHost) return reply.status(403).send({ error: 'Only host or co-host can stop recording' });
+
+    const activeRecording = await prisma.liveMeetingRecording.findFirst({
+      where: { liveMeetingId: meeting.id, storageKey: null },
+      orderBy: { createdAt: 'desc' },
+    });
+    if (!activeRecording?.providerRecordingId) {
+      return reply.status(400).send({ error: 'No active recording found' });
+    }
+
+    await stopRecording(activeRecording.providerRecordingId);
+    return reply.send({ message: 'Recording stopped. It will be available shortly after processing.' });
+  });
+
+  // --- Recording: playback (presigned R2 URL) ---
+  app.get('/:id/recordings/:recordingId/playback', async (request: FastifyRequest<{ Params: { id: string; recordingId: string } }>, reply: FastifyReply) => {
+    const tenantId = requireTenant(request);
+    const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
+    if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
+
+    const recording = await prisma.liveMeetingRecording.findFirst({
+      where: { id: request.params.recordingId, liveMeetingId: meeting.id },
+    });
+    if (!recording) return reply.status(404).send({ error: 'Recording not found' });
+
+    if (recording.storageKey) {
+      const url = await getFileUrl(recording.storageKey, 3600);
+      if (!url) return reply.status(404).send({ error: 'Recording file not found in storage' });
+      return reply.redirect(302, url);
+    }
+
+    if (recording.playbackUrl) {
+      return reply.redirect(302, recording.playbackUrl);
+    }
+
+    return reply.status(404).send({ error: 'Recording not yet available' });
+  });
+
 }

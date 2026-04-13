@@ -102,6 +102,58 @@ export async function createMeetingToken(opts: CreateTokenOptions): Promise<stri
   return result.token;
 }
 
+export interface DailyRecording {
+  id: string;
+  room_name: string;
+  start_ts: number;
+  status: string;
+  max_participants: number;
+  duration: number;
+  share_token: string;
+  tracks: { type: string }[];
+}
+
+export interface DailyRecordingAccess {
+  download_link: string;
+}
+
+export async function startRecording(roomName: string): Promise<DailyRecording> {
+  return dailyFetch<DailyRecording>(`/recordings`, {
+    method: 'POST',
+    body: JSON.stringify({
+      room_name: roomName,
+    }),
+  });
+}
+
+export async function stopRecording(recordingId: string): Promise<void> {
+  await dailyFetch(`/recordings/${recordingId}/stop`, { method: 'POST' });
+}
+
+export async function getRecordingAccessLink(recordingId: string): Promise<string> {
+  const result = await dailyFetch<DailyRecordingAccess>(`/recordings/${recordingId}/access-link`);
+  return result.download_link;
+}
+
+export async function downloadRecordingBuffer(downloadUrl: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const res = await fetch(downloadUrl);
+  if (!res.ok) throw new Error(`Failed to download recording: ${res.status}`);
+  const arrayBuffer = await res.arrayBuffer();
+  const contentType = res.headers.get('content-type') || 'video/mp4';
+  return { buffer: Buffer.from(arrayBuffer), contentType };
+}
+
 export function isDailyConfigured(): boolean {
   return Boolean(DAILY_API_KEY);
+}
+
+export function verifyDailyWebhook(payload: string, signature: string): boolean {
+  const secret = process.env.DAILY_WEBHOOK_SECRET || '';
+  if (!secret) return true;
+  const { createHmac } = require('crypto');
+  const secretBuffer = Buffer.from(secret, 'base64');
+  const hmac = createHmac('sha256', secretBuffer);
+  hmac.update(payload);
+  const expected = hmac.digest('base64');
+  return expected === signature;
 }

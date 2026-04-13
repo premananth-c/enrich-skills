@@ -22,7 +22,7 @@ import { reportsRoutes } from './routes/reports.js';
 import { revisionRoutes } from './routes/revisions.js';
 import { enquiryRoutes } from './routes/enquiries.js';
 import { streamRoutes } from './routes/stream.js';
-import { meetingRoutes } from './routes/meetings.js';
+import { meetingRoutes, meetingWebhookRoutes } from './routes/meetings.js';
 import { prisma } from './lib/prisma.js';
 import { getAllAllowedOrigins } from './lib/domainCheck.js';
 
@@ -83,6 +83,7 @@ async function main() {
   app.register(enquiryRoutes, { prefix: '/api/v1/enquiries' });
   app.register(streamRoutes, { prefix: '/api/v1/stream' });
   app.register(meetingRoutes, { prefix: '/api/v1/meetings' });
+  app.register(meetingWebhookRoutes, { prefix: '/api/v1/meetings' });
 
   Sentry.setupFastifyErrorHandler(app);
 
