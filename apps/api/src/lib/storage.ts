@@ -313,4 +313,5 @@ export const STORAGE_KEYS = {
   MATERIALS: 'materials',
   VIDEOS: 'videos',
   SUBMISSIONS: 'submissions',
+  RECORDINGS: 'recordings',
 } as const;

@@ -9,7 +9,7 @@ interface User {
   permissions?: Record<string, 'none' | 'view' | 'edit'>;
 }
 
-const MODULE_KEYS = ['courses', 'batches', 'tests', 'questions', 'students', 'reports', 'manage_users'] as const;
+const MODULE_KEYS = ['courses', 'batches', 'tests', 'questions', 'students', 'reports', 'manage_users', 'meetings'] as const;
 
 interface AuthContextType {
   user: User | null;

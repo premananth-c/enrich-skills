@@ -16,6 +16,7 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
       students: 'edit',
       reports: 'edit',
       manage_users: 'edit',
+      meetings: 'edit',
     };
   }
   if (role === 'admin') {
@@ -27,6 +28,7 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
       students: 'edit',
       reports: 'edit',
       manage_users: 'none',
+      meetings: 'edit',
     };
   }
   if (role === 'invited') {
@@ -38,6 +40,7 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
       students: 'none',
       reports: 'none',
       manage_users: 'none',
+      meetings: 'none',
     };
   }
   const base = {
@@ -48,6 +51,7 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
     students: 'none',
     reports: 'none',
     manage_users: 'none',
+    meetings: 'none',
   } as Record<ModuleKey, PermissionLevel>;
   const roleDef = await prisma.roleDefinition.findFirst({
     where: { tenantId, roleKey: role, isActive: true },

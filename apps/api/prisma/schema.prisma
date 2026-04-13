@@ -28,6 +28,7 @@ model Tenant {
   batches           Batch[]
   courseAssignments  CourseAssignment[]
   notifications     Notification[]
+  liveMeetings      LiveMeeting[]
 }
 
 model User {
@@ -53,6 +54,7 @@ model User {
   batchVideos          BatchVideo[]
   notifications        Notification[]
   activitySubmissions  ActivitySubmission[]
+  hostedMeetings       LiveMeeting[]        @relation("MeetingHost")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -323,6 +325,7 @@ model Batch {
   courseAssignments  CourseAssignment[]
   batchTests        BatchTestAssignment[]
   invitesFromBatch  Invite[]             @relation("InviteBatch")
+  liveMeetings      LiveMeeting[]
 
   @@index([tenantId])
 }
@@ -518,6 +521,50 @@ model BatchVideo {
   uploader User  @relation(fields: [uploadedBy], references: [id], onDelete: Cascade)
 
   @@index([batchId])
+}
+
+// ----- Live Meetings -----
+model LiveMeeting {
+  id               String    @id @default(uuid())
+  tenantId         String
+  batchId          String?
+  name             String
+  type             String    // interactive_meeting, webinar
+  maxParticipants  Int
+  provider         String    @default("daily")
+  providerRoomId   String?
+  providerRoomUrl  String?
+  config           Json      @default("{}")
+  hostUserId       String
+  coHostUserIds    String[]  @default([])
+  status           String    @default("scheduled") // scheduled, live, ended
+  scheduledAt      DateTime?
+  endedAt          DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  tenant     Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  batch      Batch?              @relation(fields: [batchId], references: [id], onDelete: SetNull)
+  host       User                @relation("MeetingHost", fields: [hostUserId], references: [id], onDelete: Cascade)
+  recordings LiveMeetingRecording[]
+
+  @@index([tenantId])
+  @@index([batchId])
+  @@index([status])
+}
+
+model LiveMeetingRecording {
+  id                  String   @id @default(uuid())
+  liveMeetingId       String
+  providerRecordingId String?
+  storageKey          String?
+  playbackUrl         String?
+  durationSeconds     Int?
+  createdAt           DateTime @default(now())
+
+  meeting LiveMeeting @relation(fields: [liveMeetingId], references: [id], onDelete: Cascade)
+
+  @@index([liveMeetingId])
 }
 
 // ----- Notifications -----

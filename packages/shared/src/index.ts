@@ -8,6 +8,7 @@ export * from './types/course.js';
 export * from './types/notification.js';
 export * from './types/batch.js';
 export * from './types/schedule.js';
+export * from './types/meeting.js';
 
 // Validation schemas
 export * from './schemas/auth.js';
@@ -19,6 +20,7 @@ export * from './schemas/batch.js';
 export * from './schemas/course.js';
 export * from './schemas/schedule.js';
 export * from './schemas/enquiry.js';
+export * from './schemas/meeting.js';
 export * from './lib/sanitize.js';
 export * from './lib/codingLanguages.js';
 export * from './lib/outputCompare.js';
