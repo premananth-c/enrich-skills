@@ -42,14 +42,25 @@ export async function meetingWebhookRoutes(app: FastifyInstance) {
 
     const { recording_id, room_name, duration } = event.payload;
 
-    const rec = await prisma.liveMeetingRecording.findFirst({
-      where: { providerRecordingId: recording_id },
-      include: { meeting: { select: { id: true, tenantId: true } } },
+    const meeting = await prisma.liveMeeting.findFirst({
+      where: { providerRoomUrl: { endsWith: `/${room_name}` } },
+      select: { id: true, tenantId: true },
+    });
+
+    if (!meeting) {
+      app.log.warn(`Webhook: no LiveMeeting found for room ${room_name}`);
+      return reply.status(200).send({ ok: true });
+    }
+
+    let rec = await prisma.liveMeetingRecording.findFirst({
+      where: { liveMeetingId: meeting.id, storageKey: null },
+      orderBy: { createdAt: 'desc' },
     });
 
     if (!rec) {
-      app.log.warn(`Webhook: no LiveMeetingRecording found for provider recording ${recording_id}`);
-      return reply.status(200).send({ ok: true });
+      rec = await prisma.liveMeetingRecording.create({
+        data: { liveMeetingId: meeting.id, providerRecordingId: recording_id },
+      });
     }
 
     try {
@@ -61,7 +72,7 @@ export async function meetingWebhookRoutes(app: FastifyInstance) {
         `${room_name}-${recording_id}.mp4`,
         buffer,
         contentType,
-        { tenantId: rec.meeting.tenantId }
+        { tenantId: meeting.tenantId }
       );
 
       const playbackUrl = await getFileUrl(storageKey, 86400);
@@ -315,12 +326,11 @@ export async function meetingRoutes(app: FastifyInstance) {
     }
 
     const roomName = meeting.providerRoomUrl.split('/').pop()!;
-    const recording = await startRecording(roomName);
+    await startRecording(roomName);
 
     const rec = await prisma.liveMeetingRecording.create({
       data: {
         liveMeetingId: meeting.id,
-        providerRecordingId: recording.id,
       },
     });
 
@@ -342,11 +352,13 @@ export async function meetingRoutes(app: FastifyInstance) {
       where: { liveMeetingId: meeting.id, storageKey: null },
       orderBy: { createdAt: 'desc' },
     });
-    if (!activeRecording?.providerRecordingId) {
+    if (!activeRecording) {
       return reply.status(400).send({ error: 'No active recording found' });
     }
 
-    await stopRecording(activeRecording.providerRecordingId);
+    if (!meeting.providerRoomUrl) return reply.status(400).send({ error: 'Meeting room not provisioned' });
+    const roomName = meeting.providerRoomUrl.split('/').pop()!;
+    await stopRecording(roomName);
     return reply.send({ message: 'Recording stopped. It will be available shortly after processing.' });
   });
 
