@@ -217,7 +217,7 @@ export async function userRoutes(app: FastifyInstance) {
       where: { id: request.params.id, tenantId },
     });
     if (!existing) return reply.status(404).send({ error: 'Role not found' });
-    const permissions = (existing.permissions as Record<string, unknown>) || {};
+    const existingPermissions = (existing.permissions as Record<string, unknown>) || {};
     const nextPermissions: Record<ModuleKey, PermissionLevel> = {
       courses: 'none',
       batches: 'none',
@@ -228,11 +228,17 @@ export async function userRoutes(app: FastifyInstance) {
       manage_users: 'none',
       meetings: 'none',
     };
+    const permissionsProvided = body.permissions !== undefined;
     for (const key of MODULE_KEYS) {
-      const current = permissions[key];
-      if (current === 'view' || current === 'edit') nextPermissions[key] = current;
-      const incoming = body.permissions?.[key];
-      if (incoming === 'view' || incoming === 'edit') nextPermissions[key] = incoming;
+      if (permissionsProvided) {
+        const incoming = body.permissions?.[key];
+        if (incoming === 'view' || incoming === 'edit' || incoming === 'none') {
+          nextPermissions[key] = incoming;
+        }
+      } else {
+        const current = existingPermissions[key];
+        if (current === 'view' || current === 'edit') nextPermissions[key] = current;
+      }
     }
     const updated = await prisma.roleDefinition.update({
       where: { id: request.params.id },
@@ -249,6 +255,89 @@ export async function userRoutes(app: FastifyInstance) {
       action: 'updated',
       userId: actor.sub,
       details: { roleKey: updated.roleKey, displayName: updated.displayName },
+    });
+    return reply.send(updated);
+  });
+
+  app.delete('/roles/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: "You dont have permission to view this page." });
+    }
+    const tenantId = requireTenant(request);
+    const actor = request.user as { sub: string };
+    const existing = await prisma.roleDefinition.findFirst({
+      where: { id: request.params.id, tenantId },
+    });
+    if (!existing) return reply.status(404).send({ error: 'Role not found' });
+
+    await prisma.$transaction([
+      prisma.user.updateMany({
+        where: { tenantId, role: existing.roleKey },
+        data: { role: 'invited' },
+      }),
+      prisma.roleDefinition.update({
+        where: { id: existing.id },
+        data: { isActive: false },
+      }),
+    ]);
+
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: existing.id,
+      action: 'deleted',
+      userId: actor.sub,
+      details: { roleKey: existing.roleKey, displayName: existing.displayName },
+    });
+    return reply.send({ message: `Role "${existing.displayName}" has been deleted` });
+  });
+
+  app.patch('/admins/:id/status', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    if (!isSuperAdmin(request)) {
+      return reply.status(403).send({ error: 'Only super admins can change user status' });
+    }
+    const tenantId = requireTenant(request);
+    const actor = request.user as { sub: string };
+    const body = request.body as { isActive?: boolean };
+    if (typeof body.isActive !== 'boolean') {
+      return reply.status(400).send({ error: 'isActive (boolean) is required' });
+    }
+    const user = await prisma.user.findFirst({
+      where: { id: request.params.id, tenantId },
+      select: { id: true, name: true, role: true },
+    });
+    if (!user) return reply.status(404).send({ error: 'User not found' });
+    if (user.role === 'super_admin') {
+      return reply.status(403).send({ error: 'Cannot change status of a super admin user' });
+    }
+    if (user.role === 'student') {
+      return reply.status(400).send({ error: 'Use the student archive endpoint instead' });
+    }
+    if (user.id === actor.sub) {
+      return reply.status(400).send({ error: 'Cannot change status of your own account' });
+    }
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { isActive: body.isActive },
+      select: {
+        id: true,
+        email: true,
+        name: true,
+        role: true,
+        isActive: true,
+        phoneNumber: true,
+        address: true,
+        createdAt: true,
+        updatedAt: true,
+      },
+    });
+    await logRevision({
+      tenantId,
+      module: 'students',
+      entityId: updated.id,
+      action: 'updated',
+      userId: actor.sub,
+      details: { name: updated.name, isActive: updated.isActive, action: body.isActive ? 'enabled' : 'disabled' },
     });
     return reply.send(updated);
   });

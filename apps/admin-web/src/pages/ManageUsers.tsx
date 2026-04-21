@@ -144,6 +144,35 @@ export default function ManageUsers() {
     setPermissions(defaultPermissions);
   };
 
+  const handleDeleteRole = async () => {
+    if (!selectedRoleId) return;
+    const role = roles.find((x) => x.id === selectedRoleId);
+    if (!role) return;
+    if (!confirm(`Delete role "${role.displayName}"? Users with this role will be moved to "Invited" (no access). This cannot be undone.`)) return;
+    setRoleSaveLoading(true);
+    try {
+      await api(`/users/roles/${selectedRoleId}`, { method: 'DELETE' });
+      setSelectedRoleId('');
+      setRoleName('');
+      setPermissions(defaultPermissions);
+      await load();
+    } finally {
+      setRoleSaveLoading(false);
+    }
+  };
+
+  const handleStatusChange = async (userId: string, isActive: boolean) => {
+    try {
+      await api(`/users/admins/${userId}/status`, {
+        method: 'PATCH',
+        body: JSON.stringify({ isActive }),
+      });
+      await load();
+    } catch {
+      // toast is already emitted by the api() wrapper
+    }
+  };
+
   const handleCreateAdmin = async (e: React.FormEvent) => {
     e.preventDefault();
     await api('/users/admins', {
@@ -314,13 +343,22 @@ export default function ManageUsers() {
               </div>
             ))}
           </div>
-          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-            <button type="button" onClick={handleCancelRole} style={{ padding: '0.55rem 1rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 500, cursor: 'pointer' }}>
-              Cancel
-            </button>
-            <button type="submit" disabled={roleSaveLoading} style={{ padding: '0.55rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: roleSaveLoading ? 0.65 : 1 }}>
-              {roleSaveLoading ? 'Saving...' : 'Save'}
-            </button>
+          <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div>
+              {selectedRoleId && (
+                <button type="button" onClick={handleDeleteRole} disabled={roleSaveLoading} style={{ padding: '0.55rem 1rem', borderRadius: 6, border: '1px solid #ef444444', background: '#ef444422', color: '#f87171', fontWeight: 600, cursor: 'pointer', opacity: roleSaveLoading ? 0.65 : 1 }}>
+                  Delete Role
+                </button>
+              )}
+            </div>
+            <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <button type="button" onClick={handleCancelRole} style={{ padding: '0.55rem 1rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'transparent', color: 'var(--color-text-muted)', fontWeight: 500, cursor: 'pointer' }}>
+                Cancel
+              </button>
+              <button type="submit" disabled={roleSaveLoading} style={{ padding: '0.55rem 1rem', background: 'var(--color-primary)', color: '#fff', border: 'none', borderRadius: 6, fontWeight: 600, cursor: 'pointer', opacity: roleSaveLoading ? 0.65 : 1 }}>
+                {roleSaveLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -350,7 +388,20 @@ export default function ManageUsers() {
                     <option value="student">Student</option>
                   </select>
                 </td>
-                <td style={{ padding: '0.75rem 1rem' }}>{u.isActive ? 'Active' : 'Inactive'}</td>
+                <td style={{ padding: '0.75rem 1rem' }}>
+                  {u.role === 'super_admin' ? (
+                    <span style={{ color: 'var(--color-text-muted)' }}>{u.isActive ? 'Active' : 'Disabled'}</span>
+                  ) : (
+                    <select
+                      value={u.isActive ? 'active' : 'disabled'}
+                      onChange={(e) => void handleStatusChange(u.id, e.target.value === 'active')}
+                      style={{ padding: '0.35rem 0.5rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-bg)' }}
+                    >
+                      <option value="active">Active</option>
+                      <option value="disabled">Disabled</option>
+                    </select>
+                  )}
+                </td>
                 <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(u.createdAt).toLocaleDateString()}</td>
                 <td style={{ padding: '0.75rem 1rem' }}>
                   <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -389,16 +440,16 @@ export default function ManageUsers() {
                       </div>
                       {!isSA && (
                         <div>
-                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Reset Password</label>
+                          <label style={{ display: 'block', fontSize: '0.8rem', color: 'var(--color-text-muted)', marginBottom: '0.25rem' }}>Change Password</label>
                           <div style={{ display: 'flex', gap: '0.4rem' }}>
                             <input type="password" value={editPassword} onChange={(e) => setEditPassword(e.target.value)} placeholder="New password (min 8)" minLength={8} style={{ padding: '0.45rem 0.6rem', borderRadius: 6, border: '1px solid var(--color-border)', background: 'var(--color-surface)', fontSize: '0.9rem', width: 220 }} />
-                            <button onClick={() => handlePasswordReset(editUserId)} style={{ padding: '0.45rem 0.8rem', borderRadius: 6, border: 'none', background: '#dc2626', color: '#fff', fontSize: '0.85rem', cursor: 'pointer' }}>Reset</button>
+                            <button onClick={() => handlePasswordReset(editUserId)} style={{ padding: '0.45rem 0.8rem', borderRadius: 6, border: 'none', background: 'var(--color-primary)', color: '#fff', fontSize: '0.85rem', cursor: 'pointer' }}>Change Password</button>
                           </div>
                         </div>
                       )}
                       {isSA && (
                         <div style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)', padding: '0.5rem 0' }}>
-                          Password reset is not available for super admin users.
+                          Password change is not available for super admin users.
                         </div>
                       )}
                     </div>
