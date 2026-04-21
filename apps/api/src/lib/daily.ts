@@ -136,12 +136,12 @@ export function isDailyConfigured(): boolean {
   return Boolean(DAILY_API_KEY);
 }
 
-export function verifyDailyWebhook(payload: string, signature: string): boolean {
+export async function verifyDailyWebhook(payload: string, signature: string): Promise<boolean> {
   const secret = process.env.DAILY_WEBHOOK_SECRET || '';
   if (!secret) return true;
-  const { createHmac } = require('crypto');
+  const crypto = await import('node:crypto');
   const secretBuffer = Buffer.from(secret, 'base64');
-  const hmac = createHmac('sha256', secretBuffer);
+  const hmac = crypto.createHmac('sha256', secretBuffer);
   hmac.update(payload);
   const expected = hmac.digest('base64');
   return expected === signature;

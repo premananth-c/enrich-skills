@@ -20,7 +20,7 @@ export async function meetingWebhookRoutes(app: FastifyInstance) {
     const signature = request.headers['x-webhook-signature'] as string || '';
     const rawBody = typeof request.body === 'string' ? request.body : JSON.stringify(request.body);
 
-    if (!verifyDailyWebhook(rawBody, signature)) {
+    if (!(await verifyDailyWebhook(rawBody, signature))) {
       return reply.status(401).send({ error: 'Invalid webhook signature' });
     }
 
