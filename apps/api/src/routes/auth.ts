@@ -145,13 +145,17 @@ export async function authRoutes(app: FastifyInstance) {
           })
         : await prisma.user.findFirst({ where: { email: emailLower } });
 
-      if (!user || !user.isActive) {
+      if (!user) {
         return reply.status(401).send({ error: 'Invalid credentials' });
       }
 
       const valid = await bcrypt.compare(password, user.passwordHash);
       if (!valid) {
         return reply.status(401).send({ error: 'Invalid credentials' });
+      }
+
+      if (!user.isActive) {
+        return reply.status(403).send({ error: 'Your account has been disabled. Please contact your administrator.' });
       }
 
       const accessToken = app.jwt.sign(
