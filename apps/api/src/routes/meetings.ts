@@ -376,11 +376,11 @@ export async function meetingRoutes(app: FastifyInstance) {
     if (recording.storageKey) {
       const url = await getFileUrl(recording.storageKey, 3600);
       if (!url) return reply.status(404).send({ error: 'Recording file not found in storage' });
-      return reply.redirect(302, url);
+      return reply.send({ url });
     }
 
     if (recording.playbackUrl) {
-      return reply.redirect(302, recording.playbackUrl);
+      return reply.send({ url: recording.playbackUrl });
     }
 
     return reply.status(404).send({ error: 'Recording not yet available' });

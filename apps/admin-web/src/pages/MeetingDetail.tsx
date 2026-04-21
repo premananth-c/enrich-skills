@@ -284,9 +284,15 @@ export default function MeetingDetail() {
           {meeting.recordings.map((r) => {
             const isReady = Boolean(r.storageKey || r.playbackUrl);
             const isProcessing = !isReady;
-            const playbackHref = r.storageKey
-              ? `${(import.meta.env.VITE_API_URL ?? '')}/api/v1/meetings/${meeting.id}/recordings/${r.id}/playback`
-              : r.playbackUrl;
+
+            const handlePlayback = async () => {
+              try {
+                const res = await api(`/meetings/${meeting.id}/recordings/${r.id}/playback`) as { url?: string };
+                if (res.url) window.open(res.url, '_blank');
+              } catch {
+                emitToast('error', 'Failed to load recording');
+              }
+            };
 
             return (
               <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', padding: '0.5rem 0', borderBottom: '1px solid var(--color-border)', fontSize: '0.85rem' }}>
@@ -295,11 +301,11 @@ export default function MeetingDetail() {
                 {isProcessing && (
                   <span style={{ color: '#d97706', fontStyle: 'italic' }}>Processing...</span>
                 )}
-                {isReady && playbackHref && (
-                  <a href={playbackHref} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>Play</a>
+                {isReady && (
+                  <button type="button" onClick={handlePlayback} style={{ color: 'var(--color-primary)', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 500, fontSize: '0.85rem', padding: 0 }}>Play</button>
                 )}
-                {isReady && playbackHref && (
-                  <a href={playbackHref} download style={{ color: 'var(--color-text-muted)', textDecoration: 'none', fontSize: '0.8rem' }}>Download</a>
+                {isReady && (
+                  <button type="button" onClick={handlePlayback} style={{ color: 'var(--color-text-muted)', background: 'none', border: 'none', cursor: 'pointer', fontSize: '0.8rem', padding: 0 }}>Download</button>
                 )}
               </div>
             );
