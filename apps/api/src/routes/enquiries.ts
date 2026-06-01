@@ -1,23 +1,21 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
+import { controlPrisma } from '../lib/controlPrisma.js';
 import { createEnquirySchema, updateEnquiryStatusSchema } from '@enrich-skills/shared';
 import { authenticate, isSuperAdmin } from '../lib/tenant.js';
 
 export async function enquiryRoutes(app: FastifyInstance) {
-  // Public: submit enquiry (no auth required)
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const parsed = createEnquirySchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
     const { name, email, phone, category, message } = parsed.data;
-    const enquiry = await prisma.enquiry.create({
+    const enquiry = await controlPrisma.enquiry.create({
       data: { name, email, phone, category, message },
     });
     return reply.status(201).send({ id: enquiry.id, message: 'Thank you. We will get in touch soon.' });
   });
 
-  // Super Admin only: list enquiries
   app.get(
     '/',
     {
@@ -32,19 +30,18 @@ export async function enquiryRoutes(app: FastifyInstance) {
       const skip = Math.max(0, parseInt(offset, 10) || 0);
       const where = status && ['new', 'contacted', 'closed'].includes(status) ? { status } : {};
       const [enquiries, total] = await Promise.all([
-        prisma.enquiry.findMany({
+        controlPrisma.enquiry.findMany({
           where,
           orderBy: { createdAt: 'desc' },
           take,
           skip,
         }),
-        prisma.enquiry.count({ where }),
+        controlPrisma.enquiry.count({ where }),
       ]);
       return reply.send({ enquiries, total });
     }
   );
 
-  // Super Admin only: update enquiry status
   app.patch(
     '/:id/status',
     {
@@ -61,7 +58,7 @@ export async function enquiryRoutes(app: FastifyInstance) {
       try {
         const id = (request.params as { id?: string }).id;
         if (!id) return reply.status(400).send({ error: 'Enquiry ID required' });
-        const enquiry = await prisma.enquiry.update({
+        const enquiry = await controlPrisma.enquiry.update({
           where: { id },
           data: { status: parsed.data.status },
         });

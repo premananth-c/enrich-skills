@@ -1,4 +1,4 @@
-# Tenant Whitelisting / White-Label Plan
+# Tenant White-Labeling Plan
 
 Status: Draft v1.0 — approved for execution
 Owner: Rankership platform team
@@ -14,7 +14,7 @@ This document is the single source of truth for converting the current single-da
 2. **Per-tenant UI** — every tenant gets their own admin URL and student URL, with their own logo, colors, favicon, product name and (optionally) custom CSS.
 3. **Per-tenant payment gateway** — every tenant connects their own Razorpay and/or Stripe account; Rankership never holds their funds.
 4. **One shared API server** — a single Fastify deployment serves all tenants; no per-tenant code forks.
-5. **Self-serve whitelisting** — Rankership super admins can whitelist a new tenant from a UI in minutes (provision DB, set branding, attach domain, attach payment keys).
+5. **Self-serve onboarding** — Rankership super admins can onboard a new white-label tenant from a UI in minutes (provision DB, set branding, attach domain, attach payment keys).
 6. **Rankership super-admin oversight** — Rankership staff can read/manage any tenant's data on demand for support.
 
 ## 2. Non-goals (this phase)
@@ -105,7 +105,7 @@ Super-admin requests use the control-plane prisma directly and may pass `?tenant
 | `TenantPaymentCredential` | tenantId, provider (`razorpay` \| `stripe`), mode (`live` \| `test`), publicKey, secretKeyEncrypted, webhookSecretEncrypted, currency, isActive. One row per provider per tenant. |
 | `SuperAdmin` | Rankership staff (separate from tenant `User`). Email, passwordHash, mfaSecret, isActive. |
 | `Enquiry` | Moved from current schema (landing page, cross-tenant). |
-| `ProvisionLog` | Append-only log for whitelisting actions (DB created, migration run, hostname verified, etc.). |
+| `ProvisionLog` | Append-only log for tenant-onboarding actions (DB created, migration run, hostname verified, etc.). |
 | `AuditLog` | Append-only log for super-admin cross-tenant accesses and impersonation. |
 
 Generator config: emits client to `node_modules/@prisma-control/client` (separate from the tenant client) so both clients can coexist in the API process.
@@ -144,7 +144,7 @@ Generator config: emits client to `node_modules/@prisma-control/client` (separat
 Decision: **Cloudflare for SaaS Custom Hostnames** (chosen by user from option C).
 
 - DNS: Tenant points a CNAME at `admin.rankership.com` (admin) and `lms.rankership.com` (student). Cloudflare for SaaS automatically issues TLS for `admin.acme.com`, `learn.acme.com`, etc.
-- The super-admin "Whitelist Tenant" wizard automates Cloudflare hostname registration via the Cloudflare API, then polls for verification status.
+- The super-admin "Onboard Tenant" wizard automates Cloudflare hostname registration via the Cloudflare API, then polls for verification status.
 - One Vite bundle per app. The bundle reads its host at runtime, calls `GET /api/v1/branding` before rendering, then:
   - Injects branding values as CSS vars on `:root` (already used by [apps/admin-web/src/index.css](../apps/admin-web/src/index.css)).
   - Sets `<title>` and `<link rel="icon">`.
@@ -182,7 +182,7 @@ Decision: **Razorpay + Stripe** (chosen by user from option C). Tenants pick whi
 
 Provisioning is idempotent and resumable: each step checks for prior completion in `ProvisionLog`.
 
-## 11. Super-admin "Whitelist a Tenant" UI
+## 11. Super-admin "Onboard a Tenant" UI
 
 New app `apps/superadmin-web/`, hosted at `super.rankership.com`. Auth against `SuperAdmin` table with mandatory MFA. Pages:
 
@@ -265,7 +265,7 @@ Each milestone is independently deployable; production isn't cut over until M7.
 - Run migration script in production.
 - Switch DNS for any current tenant subdomain.
 - Decommission `tenantId` columns in the legacy DB (or shut it down after 30 days).
-- Document the whitelisting runbook in `docs/RUNBOOK-WHITELIST-TENANT.md`.
+- Document the onboarding runbook in `docs/RUNBOOK-ONBOARD-TENANT.md`.
 
 ## 16. Open follow-ups (not blocking the plan)
 
@@ -274,7 +274,7 @@ These were skipped during planning; reasonable defaults are in place. Revisit if
 - **Storage isolation**: defaulting to shared R2 bucket with `tenants/<tenantId>/` prefix. Switch to bucket-per-tenant if a regulated customer requires it.
 - **Subscription billing**: deferred. When needed, add Razorpay Subscriptions / Stripe Subscriptions and an `Subscription` model in the tenant DB.
 - **Per-region Postgres**: all tenant DBs currently sit in the same cluster. If we onboard customers with strict data-residency needs, we'll add a `region` column to `TenantDbConfig` and host regional clusters.
-- **Self-serve signup**: today only Rankership super admins can whitelist. A future iteration may let prospects self-serve from the landing page (Stripe checkout → auto-provision).
+- **Self-serve signup**: today only Rankership super admins can onboard tenants. A future iteration may let prospects self-serve from the landing page (Stripe checkout → auto-provision).
 
 ## 17. Risks and mitigations
 
@@ -288,7 +288,7 @@ These were skipped during planning; reasonable defaults are in place. Revisit if
 
 ## 18. Acceptance criteria
 
-- A super admin can whitelist a brand-new tenant from `super.rankership.com` in under 10 minutes, including custom domain + branding + Razorpay test keys.
+- A super admin can onboard a brand-new white-label tenant from `super.rankership.com` in under 10 minutes, including custom domain + branding + Razorpay test keys.
 - A tenant admin logging into `admin.<their-domain>` sees their own logo, colors, and product name; only their own data; cannot reach another tenant's data even by tampering with `X-Tenant-Id`.
 - A second tenant on the same API instance is fully isolated at the database role level; Postgres `pg_hba` + `GRANT` settings refuse cross-tenant access.
 - A student on `lms.<their-domain>` can buy a course via the tenant's own Razorpay/Stripe account; the funds land in the tenant's account, not Rankership's.

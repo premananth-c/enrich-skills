@@ -14,6 +14,7 @@ import {
 import { logRevision } from '../lib/revision.js';
 import { randomUUID } from 'crypto';
 import { sendAdminInviteEmail } from '../lib/email.js';
+import { getTenantWebUrls } from '../lib/tenantUrls.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -40,6 +41,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only super admins can change passwords for other users' });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const body = request.body as { newPassword?: string };
     const newPassword = (body.newPassword || '').trim();
     if (newPassword.length < 8) {
@@ -53,7 +55,7 @@ export async function userRoutes(app: FastifyInstance) {
     const passwordHash = await bcrypt.hash(newPassword, 12);
     await prisma.user.update({ where: { id: request.params.id }, data: { passwordHash } });
     const actor = request.user as { sub: string };
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: user.id,
@@ -69,6 +71,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only super admins can change emails for other users' });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const body = request.body as { email?: string };
     const email = (body.email || '').trim().toLowerCase();
     if (!email) return reply.status(400).send({ error: 'Email is required' });
@@ -84,7 +87,7 @@ export async function userRoutes(app: FastifyInstance) {
       select: { id: true, email: true, name: true, role: true },
     });
     const actor = request.user as { sub: string };
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: updated.id,
@@ -97,6 +100,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.get('/me/permissions', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const permissions = await getResolvedPermissions(request);
     const payload = request.user as { role?: string } | undefined;
     return reply.send({ tenantId, role: payload?.role ?? 'student', permissions, isSuperAdmin: isSuperAdmin(request) });
@@ -104,6 +108,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'view');
+    const prisma = await request.getTenantPrisma();
     const role = (request.query as { role?: string }).role;
     const users = await prisma.user.findMany({
       where: { tenantId, ...(role && { role }) },
@@ -125,6 +130,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.get('/stats', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'reports', 'view');
+    const prisma = await request.getTenantPrisma();
     const [students, tests, questions] = await Promise.all([
       prisma.user.count({ where: { tenantId, role: 'student' } }),
       prisma.test.count({ where: { tenantId } }),
@@ -138,6 +144,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const roles = await prisma.roleDefinition.findMany({
       where: { tenantId, isActive: true },
       orderBy: { createdAt: 'desc' },
@@ -150,6 +157,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as {
       roleKey?: string;
@@ -191,7 +199,7 @@ export async function userRoutes(app: FastifyInstance) {
     const created = await prisma.roleDefinition.create({
       data: { tenantId, roleKey, displayName, permissions },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: created.id,
@@ -207,6 +215,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as {
       displayName?: string;
@@ -248,7 +257,7 @@ export async function userRoutes(app: FastifyInstance) {
         permissions: nextPermissions,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: updated.id,
@@ -264,6 +273,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const existing = await prisma.roleDefinition.findFirst({
       where: { id: request.params.id, tenantId },
@@ -281,7 +291,7 @@ export async function userRoutes(app: FastifyInstance) {
       }),
     ]);
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: existing.id,
@@ -297,6 +307,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only super admins can change user status' });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as { isActive?: boolean };
     if (typeof body.isActive !== 'boolean') {
@@ -331,7 +342,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: updated.id,
@@ -347,6 +358,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as { name?: string; email?: string; password?: string; role?: string; roleKey?: string };
     const name = (body.name || '').trim();
@@ -379,7 +391,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: user.id,
@@ -395,6 +407,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only super admins can invite admin users' });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as { email?: string };
     const email = (body.email || '').trim().toLowerCase();
@@ -409,7 +422,7 @@ export async function userRoutes(app: FastifyInstance) {
       data: { tenantId, name: email.split('@')[0], email, passwordHash, role: 'invited', isActive: true },
       select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true, updatedAt: true },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: user.id,
@@ -418,7 +431,8 @@ export async function userRoutes(app: FastifyInstance) {
       details: { name: user.name, role: user.role, method: 'invite' },
     });
     try {
-      await sendAdminInviteEmail(email, tempPassword);
+      const { adminUrl } = await getTenantWebUrls(tenantId);
+      await sendAdminInviteEmail(email, tempPassword, adminUrl);
     } catch (err) {
       console.error('[invite-admin] Email send failed:', err);
     }
@@ -430,6 +444,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as {
       name?: string;
@@ -479,7 +494,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: student.id,
@@ -495,6 +510,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: "You dont have permission to view this page." });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const body = request.body as { role?: string; roleKey?: string };
     const nextRole = (body.roleKey || body.role || '').trim().toLowerCase();
@@ -522,7 +538,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: updated.id,
@@ -535,6 +551,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'view');
+    const prisma = await request.getTenantPrisma();
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
       select: {
@@ -559,6 +576,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const body = request.body as { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean };
     const user = await prisma.user.findFirst({
@@ -597,7 +615,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: updated.id,
@@ -610,6 +628,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
@@ -632,7 +651,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: archived.id,
@@ -645,6 +664,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
@@ -667,7 +687,7 @@ export async function userRoutes(app: FastifyInstance) {
         updatedAt: true,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: restored.id,
@@ -683,6 +703,7 @@ export async function userRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Only super admins can delete admin users' });
     }
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
@@ -704,7 +725,7 @@ export async function userRoutes(app: FastifyInstance) {
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: user.id,
@@ -717,6 +738,7 @@ export async function userRoutes(app: FastifyInstance) {
 
   app.delete('/:id/permanent', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
@@ -735,7 +757,7 @@ export async function userRoutes(app: FastifyInstance) {
       prisma.user.delete({ where: { id: user.id } }),
     ]);
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'students',
       entityId: user.id,

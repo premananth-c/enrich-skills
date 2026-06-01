@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
 export async function revisionRoutes(app: FastifyInstance) {
@@ -13,6 +12,7 @@ export async function revisionRoutes(app: FastifyInstance) {
     ) => {
       const tenantId = await requireModuleAccess(request, 'reports', 'view');
       const { module, entityId } = request.query;
+      const prisma = await request.getTenantPrisma();
       const logs = await prisma.revisionLog.findMany({
         where: {
           tenantId,

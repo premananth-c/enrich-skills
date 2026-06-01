@@ -29,6 +29,7 @@ async function refreshAccessToken(): Promise<string | null> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${refreshToken}`,
+        ...(typeof window !== 'undefined' && { 'X-Tenant-Host': window.location.hostname }),
       },
     });
 
@@ -58,6 +59,10 @@ function buildHeaders(token: string | null, options: RequestInit): HeadersInit {
   };
   const tenantId = localStorage.getItem(TENANT_KEY);
   if (tenantId) headers['X-Tenant-Id'] = tenantId;
+  // Tell the API which white-label host the user is on so it can resolve the
+  // tenant by domain (the API never sees this host otherwise, since requests
+  // go to the shared API origin).
+  if (typeof window !== 'undefined') headers['X-Tenant-Host'] = window.location.hostname;
   if (options.headers) Object.assign(headers, options.headers);
   return headers;
 }

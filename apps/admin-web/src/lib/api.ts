@@ -17,6 +17,7 @@ async function refreshAccessToken(): Promise<string | null> {
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${refreshToken}`,
+        ...(tenantHost && { 'X-Tenant-Host': tenantHost }),
       },
     });
 
@@ -39,12 +40,18 @@ function getRefreshedToken(): Promise<string | null> {
   return refreshPromise;
 }
 
+// Tell the API which white-label host the admin is on so it can resolve the
+// tenant by domain (the API never sees this host otherwise, since requests go
+// to the shared API origin).
+const tenantHost = typeof window !== 'undefined' ? window.location.hostname : '';
+
 function getHeaders(body?: BodyInit | null): Record<string, string> {
   const token = localStorage.getItem(TOKEN_KEY);
   const tenantId = localStorage.getItem(TENANT_KEY);
   const headers: Record<string, string> = {
     ...(token && { Authorization: `Bearer ${token}` }),
     ...(tenantId && { 'X-Tenant-Id': tenantId }),
+    ...(tenantHost && { 'X-Tenant-Host': tenantHost }),
   };
   if (body && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
   return headers;
@@ -55,6 +62,7 @@ function buildHeaders(token: string, body?: BodyInit | null): Record<string, str
   const headers: Record<string, string> = {
     Authorization: `Bearer ${token}`,
     ...(tenantId && { 'X-Tenant-Id': tenantId }),
+    ...(tenantHost && { 'X-Tenant-Host': tenantHost }),
   };
   if (body && !(body instanceof FormData)) headers['Content-Type'] = 'application/json';
   return headers;

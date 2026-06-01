@@ -1,5 +1,4 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from './prisma.js';
 
 export const MODULE_KEYS = [
   'courses',
@@ -87,6 +86,7 @@ export async function getResolvedPermissions(request: FastifyRequest): Promise<R
     return { ...DEFAULT_ADMIN_PERMISSIONS };
   }
 
+  const prisma = await request.getTenantPrisma();
   const roleDefinition = await prisma.roleDefinition.findFirst({
     where: { tenantId, roleKey: role, isActive: true },
     select: { permissions: true },
@@ -127,12 +127,17 @@ export async function authenticate(request: FastifyRequest, reply: FastifyReply)
 
   const payload = request.user as UserTokenPayload | undefined;
   if (payload?.sub) {
-    const user = await prisma.user.findUnique({
-      where: { id: payload.sub },
-      select: { isActive: true },
-    });
-    if (!user || !user.isActive) {
-      return reply.status(401).send({ error: 'Your account has been deactivated' });
+    try {
+      const prisma = await request.getTenantPrisma();
+      const user = await prisma.user.findUnique({
+        where: { id: payload.sub },
+        select: { isActive: true },
+      });
+      if (!user || !user.isActive) {
+        return reply.status(401).send({ error: 'Your account has been deactivated' });
+      }
+    } catch {
+      // No tenant context available (e.g. /health, /ready); skip user check.
     }
   }
 }

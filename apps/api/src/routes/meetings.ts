@@ -8,6 +8,7 @@ import {
   verifyDailyWebhook,
 } from '../lib/daily.js';
 import { sendMeetingInviteEmail } from '../lib/email.js';
+import { getTenantWebUrls } from '../lib/tenantUrls.js';
 import { saveFile, getFileUrl, STORAGE_KEYS } from '../lib/storage.js';
 
 function sanitizeRoomName(name: string, id: string): string {
@@ -101,6 +102,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // List meetings for tenant (optionally filter by batchId)
   app.get('/', async (request: FastifyRequest<{ Querystring: { batchId?: string; status?: string } }>, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const { batchId, status } = request.query;
     const where: Record<string, unknown> = { tenantId };
     if (batchId) where.batchId = batchId;
@@ -120,6 +122,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Get single meeting
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const meeting = await prisma.liveMeeting.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -135,6 +138,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Create meeting
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const payload = request.user as { sub: string };
     const parsed = createMeetingSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
@@ -197,6 +201,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Update meeting
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const parsed = updateMeetingSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
@@ -226,6 +231,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Delete meeting
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
 
@@ -243,6 +249,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Get join token for the current user
   app.post('/:id/join-token', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const payload = request.user as { sub: string; role?: string };
 
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
@@ -276,13 +283,14 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Send invite emails
   app.post('/:id/send-invite', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const parsed = sendMeetingInviteSchema.safeParse(request.body);
     if (!parsed.success) return reply.status(400).send({ error: parsed.error.flatten() });
 
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
 
-    const studentBaseUrl = process.env.INVITE_BASE_URL || 'http://localhost:5173';
+    const { studentUrl: studentBaseUrl } = await getTenantWebUrls(tenantId);
     const joinUrl = `${studentBaseUrl}/meeting/${meeting.id}`;
 
     const results: { email: string; status: string }[] = [];
@@ -301,10 +309,11 @@ export async function meetingRoutes(app: FastifyInstance) {
   // Get shareable link (public, no token needed for viewing)
   app.get('/:id/share-link', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
 
-    const studentBaseUrl = process.env.INVITE_BASE_URL || 'http://localhost:5173';
+    const { studentUrl: studentBaseUrl } = await getTenantWebUrls(tenantId);
     const link = `${studentBaseUrl}/meeting/${meeting.id}`;
     return reply.send({ link });
   });
@@ -312,6 +321,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // --- Recording: start ---
   app.post('/:id/recording/start', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const payload = request.user as { sub: string };
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
@@ -340,6 +350,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // --- Recording: stop ---
   app.post('/:id/recording/stop', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = requireAdmin(request);
+    const prisma = await request.getTenantPrisma();
     const payload = request.user as { sub: string };
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
@@ -365,6 +376,7 @@ export async function meetingRoutes(app: FastifyInstance) {
   // --- Recording: playback (presigned R2 URL) ---
   app.get('/:id/recordings/:recordingId/playback', async (request: FastifyRequest<{ Params: { id: string; recordingId: string } }>, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const meeting = await prisma.liveMeeting.findFirst({ where: { id: request.params.id, tenantId } });
     if (!meeting) return reply.status(404).send({ error: 'Meeting not found' });
 

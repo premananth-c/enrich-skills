@@ -1,14 +1,16 @@
-import { Prisma } from '@prisma/client';
-import { prisma } from './prisma.js';
+import { Prisma, type PrismaClient } from '@prisma/client';
 
-export async function createNotification(params: {
-  userId: string;
-  tenantId: string;
-  type: string;
-  title: string;
-  message: string;
-  metadata?: Prisma.InputJsonValue;
-}) {
+export async function createNotification(
+  prisma: PrismaClient,
+  params: {
+    userId: string;
+    tenantId: string;
+    type: string;
+    title: string;
+    message: string;
+    metadata?: Prisma.InputJsonValue;
+  }
+) {
   return prisma.notification.create({
     data: {
       userId: params.userId,
@@ -21,14 +23,17 @@ export async function createNotification(params: {
   });
 }
 
-export async function createBulkNotifications(params: {
-  userIds: string[];
-  tenantId: string;
-  type: string;
-  title: string;
-  message: string;
-  metadata?: Prisma.InputJsonValue;
-}) {
+export async function createBulkNotifications(
+  prisma: PrismaClient,
+  params: {
+    userIds: string[];
+    tenantId: string;
+    type: string;
+    title: string;
+    message: string;
+    metadata?: Prisma.InputJsonValue;
+  }
+) {
   return prisma.notification.createMany({
     data: params.userIds.map((userId) => ({
       userId,
