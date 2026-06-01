@@ -1,4 +1,4 @@
-import { prisma } from './prisma.js';
+import { controlPrisma } from './controlPrisma.js';
 
 const ENV_DOMAINS = (process.env.ALLOWED_STREAMING_DOMAINS ?? '')
   .split(',')
@@ -12,16 +12,18 @@ const CACHE_TTL_MS = 5 * 60 * 1000;
 async function getTenantDomains(): Promise<string[]> {
   if (Date.now() < cacheExpiry) return tenantDomainCache;
   try {
-    const tenants = await prisma.tenant.findMany({
-      where: { domain: { not: null }, status: 'active' },
-      select: { domain: true },
+    const domains = await controlPrisma.tenantDomain.findMany({
+      select: { host: true },
+      where: { tenant: { status: 'active' } },
     });
-    tenantDomainCache = tenants
-      .map((t) => t.domain?.toLowerCase() ?? '')
+    tenantDomainCache = domains
+      .map((d) => d.host?.toLowerCase() ?? '')
       .filter(Boolean);
     cacheExpiry = Date.now() + CACHE_TTL_MS;
   } catch {
-    // On error keep stale cache
+    // Control plane may be unreachable during the early milestones (no
+    // CONTROL_DATABASE_URL configured yet). Keep stale cache and let
+    // ENV_DOMAINS continue to gate streaming.
   }
   return tenantDomainCache;
 }

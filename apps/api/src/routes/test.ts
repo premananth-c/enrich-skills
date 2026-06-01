@@ -9,6 +9,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
+    const prisma = await request.getTenantPrisma();
     const tests = await prisma.test.findMany({
       where: { tenantId },
       include: {
@@ -21,6 +22,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -34,6 +36,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = createTestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -58,7 +61,7 @@ export async function testRoutes(app: FastifyInstance) {
       include: { testQuestions: true },
     });
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'tests',
       entityId: test.id,
@@ -72,6 +75,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = updateTestSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -101,7 +105,7 @@ export async function testRoutes(app: FastifyInstance) {
       include: { testQuestions: true },
     });
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'tests',
       entityId: test.id,
@@ -115,6 +119,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const existing = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Test not found' });
@@ -125,7 +130,7 @@ export async function testRoutes(app: FastifyInstance) {
       include: { testQuestions: true },
     });
 
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'tests',
       entityId: test.id,
@@ -139,6 +144,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const { deleteQuestions } = request.query as { deleteQuestions?: string };
     const existing = await prisma.test.findFirst({
       where: { id: request.params.id, tenantId },
@@ -170,6 +176,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.get('/:id/attempts', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -225,6 +232,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.get('/:id/variants', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
     const variants = await prisma.testVariant.findMany({
@@ -239,6 +247,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.post('/:id/variants', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -270,6 +279,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.patch('/:id/variants/:variantId', async (request: FastifyRequest<{ Params: { id: string; variantId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -304,6 +314,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.delete('/:id/variants/:variantId', async (request: FastifyRequest<{ Params: { id: string; variantId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -319,6 +330,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.get('/:id/allocations', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
 
@@ -332,6 +344,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.post('/:id/allocations', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
@@ -350,6 +363,7 @@ export async function testRoutes(app: FastifyInstance) {
         userId = user.id;
       } else {
         const { sendInviteEmail } = await import('../lib/email.js');
+        const { getTenantWebUrls } = await import('../lib/tenantUrls.js');
         const { randomUUID } = await import('crypto');
         const expiresAt = new Date();
         expiresAt.setDate(expiresAt.getDate() + 2);
@@ -365,7 +379,8 @@ export async function testRoutes(app: FastifyInstance) {
             variantId: body.variantId ?? undefined,
           },
         });
-        await sendInviteEmail(body.email, token, { testTitle: test.title });
+        const { studentUrl } = await getTenantWebUrls(tenantId);
+        await sendInviteEmail(body.email, token, { testTitle: test.title }, studentUrl);
         return reply.status(201).send({ inviteSent: true, email: body.email, message: 'Student not registered. Invite sent to email.' });
       }
     }
@@ -395,6 +410,7 @@ export async function testRoutes(app: FastifyInstance) {
 
   app.delete('/:id/allocations/:userId', async (request: FastifyRequest<{ Params: { id: string; userId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'edit');
+    const prisma = await request.getTenantPrisma();
     const test = await prisma.test.findFirst({ where: { id: request.params.id, tenantId } });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
     await prisma.testAllocation.deleteMany({

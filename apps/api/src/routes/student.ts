@@ -29,6 +29,7 @@ export async function studentRoutes(app: FastifyInstance) {
   // GET /dashboard
   app.get('/dashboard', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const userId = getUserId(request);
     const batchIds = await getMyBatchIds(userId);
 
@@ -187,6 +188,7 @@ export async function studentRoutes(app: FastifyInstance) {
   // GET /courses — courses assigned to student
   app.get('/courses', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const userId = getUserId(request);
     const batchIds = await getMyBatchIds(userId);
 
@@ -256,6 +258,7 @@ export async function studentRoutes(app: FastifyInstance) {
     '/courses/:courseId',
     async (request: FastifyRequest<{ Params: { courseId: string } }>, reply: FastifyReply) => {
       const tenantId = requireTenant(request);
+      const prisma = await request.getTenantPrisma();
       const userId = getUserId(request);
       const batchIds = await getMyBatchIds(userId);
 
@@ -419,6 +422,7 @@ export async function studentRoutes(app: FastifyInstance) {
   // GET /notifications?unread=true
   app.get('/notifications', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = requireTenant(request);
+    const prisma = await request.getTenantPrisma();
     const userId = getUserId(request);
     const query = request.query as { unread?: string };
 
@@ -458,6 +462,7 @@ export async function studentRoutes(app: FastifyInstance) {
     '/activities/:activityId/submit',
     async (request: FastifyRequest<{ Params: { activityId: string } }>, reply: FastifyReply) => {
       const tenantId = requireTenant(request);
+      const prisma = await request.getTenantPrisma();
       const userId = getUserId(request);
       const { activityId } = request.params;
 

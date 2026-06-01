@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrandingProvider } from './context/BrandingContext';
 import { SidebarProvider } from './context/SidebarContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
@@ -16,6 +17,7 @@ import PdfViewer from './pages/PdfViewer';
 import Calendar from './pages/Calendar';
 import Notifications from './pages/Notifications';
 import JoinMeeting from './pages/JoinMeeting';
+import Checkout from './pages/Checkout';
 import ToastViewport from './components/ToastViewport';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -50,6 +52,7 @@ function AppRoutes() {
         <Route path="calendar" element={<Calendar />} />
         <Route path="notifications" element={<Notifications />} />
         <Route path="meeting/:meetingId" element={<JoinMeeting />} />
+        <Route path="checkout" element={<Checkout />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
@@ -58,11 +61,13 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <SidebarProvider>
-        <AppRoutes />
-        <ToastViewport />
-      </SidebarProvider>
-    </AuthProvider>
+    <BrandingProvider>
+      <AuthProvider>
+        <SidebarProvider>
+          <AppRoutes />
+          <ToastViewport />
+        </SidebarProvider>
+      </AuthProvider>
+    </BrandingProvider>
   );
 }

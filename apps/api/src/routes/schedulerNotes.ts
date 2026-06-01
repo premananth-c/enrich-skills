@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
 import { createSchedulerNoteSchema, updateSchedulerNoteSchema } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
@@ -8,6 +7,7 @@ export async function schedulerNotesRoutes(app: FastifyInstance) {
 
   app.get('/batches/:batchId/notes', async (request: FastifyRequest<{ Params: { batchId: string }; Querystring: { date: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const { date } = request.query;
@@ -23,6 +23,7 @@ export async function schedulerNotesRoutes(app: FastifyInstance) {
 
   app.put('/batches/:batchId/notes', async (request: FastifyRequest<{ Params: { batchId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const payload = request.user as { sub: string };
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
@@ -49,6 +50,7 @@ export async function schedulerNotesRoutes(app: FastifyInstance) {
 
   app.patch('/batches/:batchId/notes/:date', async (request: FastifyRequest<{ Params: { batchId: string; date: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const parsed = updateSchedulerNoteSchema.safeParse(request.body);
@@ -66,6 +68,7 @@ export async function schedulerNotesRoutes(app: FastifyInstance) {
 
   app.delete('/batches/:batchId/notes/:date', async (request: FastifyRequest<{ Params: { batchId: string; date: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const date = new Date(request.params.date + 'T00:00:00.000Z');

@@ -180,6 +180,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const attempts = await prisma.attempt.findMany({
       where: { userId: user.sub },
       include: { test: { select: { title: true, config: true } } },
@@ -191,6 +192,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.post('/start', async (request: FastifyRequest, reply: FastifyReply) => {
     const user = request.user as { sub: string; tenantId: string };
+    const prisma = await request.getTenantPrisma();
     const body = request.body as { testId: string };
     if (!body.testId) {
       return reply.status(400).send({ error: 'testId required' });
@@ -348,6 +350,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub },
       include: {
@@ -369,6 +372,7 @@ export async function attemptRoutes(app: FastifyInstance) {
   // GET /:id/review — full attempt with correct answers for post-submit review
   app.get('/:id/review', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub },
       include: {
@@ -395,6 +399,7 @@ export async function attemptRoutes(app: FastifyInstance) {
   // GET /:id/result — returns full attempt result when available
   app.get('/:id/result', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub },
       include: {
@@ -445,6 +450,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.post('/:id/run-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const parsed = runCodeSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -531,6 +537,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.post('/:id/submit-code', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const parsed = submitCodeSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -574,6 +581,7 @@ export async function attemptRoutes(app: FastifyInstance) {
     reply: FastifyReply
   ) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const submission = await prisma.submission.findFirst({
       where: {
         attemptId: request.params.id,
@@ -610,6 +618,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.post('/:id/submit-mcq', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const parsed = submitMcqSchema.safeParse(request.body);
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
@@ -660,6 +669,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
   app.post('/:id/finish', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
       include: { submissions: true, test: { select: { config: true } } },

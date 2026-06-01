@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
 import { getFileStreamWithRange, getFileStream } from '../lib/storage.js';
 import { authenticate } from '../lib/tenant.js';
 import { isAllowedDomain } from '../lib/domainCheck.js';
@@ -20,6 +19,7 @@ export async function streamRoutes(app: FastifyInstance) {
     '/materials/:materialId/token',
     { preHandler: [authenticate] },
     async (request, reply) => {
+      const prisma = await request.getTenantPrisma();
       const material = await prisma.courseMaterial.findFirst({
         where: { id: request.params.materialId, type: 'video', storageKey: { not: null } },
       });
@@ -42,6 +42,7 @@ export async function streamRoutes(app: FastifyInstance) {
     '/materials/:materialId/pdf-token',
     { preHandler: [authenticate] },
     async (request, reply) => {
+      const prisma = await request.getTenantPrisma();
       const material = await prisma.courseMaterial.findFirst({
         where: { id: request.params.materialId, type: 'pdf', storageKey: { not: null } },
       });

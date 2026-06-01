@@ -619,6 +619,61 @@ model RevisionLog {
   @@index([createdAt])
 }
 
+// ----- Payments (M6) -----
+model Order {
+  id              String   @id @default(uuid())
+  tenantId        String
+  userId          String
+  itemType        String   // 'course' | 'batch' | 'test'
+  itemId          String
+  description     String?
+  amountMinor     Int
+  currency        String   @default("INR")
+  status          String   @default("created") // created | pending | paid | failed | cancelled
+  provider        String?  // 'razorpay' | 'stripe'
+  providerOrderId String?
+  metadata        Json     @default("{}")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  paidAt          DateTime?
+
+  payments Payment[]
+
+  @@index([tenantId, userId])
+  @@index([tenantId, status])
+}
+
+model Payment {
+  id                String   @id @default(uuid())
+  tenantId          String
+  orderId           String
+  provider          String
+  providerPaymentId String
+  amountMinor       Int
+  currency          String   @default("INR")
+  status            String   // captured | failed | refunded
+  rawPayload        Json
+  createdAt         DateTime @default(now())
+
+  order Order @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerPaymentId])
+  @@index([tenantId, orderId])
+}
+
+model PaymentEvent {
+  id        String   @id @default(uuid())
+  tenantId  String
+  provider  String
+  eventId   String
+  type      String
+  payload   Json
+  createdAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+  @@index([tenantId, createdAt])
+}
+
 // ----- Business Enquiries (from landing page) -----
 model Enquiry {
   id        String   @id @default(uuid())

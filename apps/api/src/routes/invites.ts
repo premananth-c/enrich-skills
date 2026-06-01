@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { randomUUID } from 'crypto';
-import { prisma } from '../lib/prisma.js';
 import { createInviteSchema } from '@enrich-skills/shared';
 import { requireModuleAccess } from '../lib/tenant.js';
 import { sendInviteEmail } from '../lib/email.js';
+import { getTenantWebUrls } from '../lib/tenantUrls.js';
 
 const INVITE_EXPIRY_DAYS = 2;
 
@@ -31,6 +31,7 @@ export async function inviteRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'Token is required' });
     }
 
+    const prisma = await request.getTenantPrisma();
     const invite = await prisma.invite.findUnique({
       where: { token },
       include: { test: { select: { title: true } } },
@@ -56,6 +57,7 @@ export async function inviteRoutes(app: FastifyInstance) {
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
 
     const parsed = createInviteSchema.safeParse(request.body);
@@ -121,7 +123,8 @@ export async function inviteRoutes(app: FastifyInstance) {
       },
     });
 
-    await sendInviteEmail(invite.email, invite.token, { testTitle, batchName, courseName });
+    const { studentUrl } = await getTenantWebUrls(tenantId);
+    await sendInviteEmail(invite.email, invite.token, { testTitle, batchName, courseName }, studentUrl);
 
     return reply.status(201).send({
       id: invite.id,
@@ -137,6 +140,7 @@ export async function inviteRoutes(app: FastifyInstance) {
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'view');
+    const prisma = await request.getTenantPrisma();
     const invites = await prisma.invite.findMany({
       where: { tenantId },
       include: {
@@ -151,6 +155,7 @@ export async function inviteRoutes(app: FastifyInstance) {
   // Resend an invite — resets the expiry to +2 days and re-sends the email
   app.post('/:id/resend', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
 
     const invite = await prisma.invite.findFirst({
       where: { id: request.params.id, tenantId },
@@ -178,11 +183,12 @@ export async function inviteRoutes(app: FastifyInstance) {
       },
     });
 
+    const { studentUrl } = await getTenantWebUrls(tenantId);
     await sendInviteEmail(updated.email, updated.token, {
       testTitle: invite.test?.title,
       batchName: invite.batch?.name,
       courseName: invite.course?.title,
-    });
+    }, studentUrl);
 
     return reply.send(updated);
   });
@@ -190,6 +196,7 @@ export async function inviteRoutes(app: FastifyInstance) {
   // Revoke (delete) a pending invite
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
 
     const invite = await prisma.invite.findFirst({
       where: { id: request.params.id, tenantId },

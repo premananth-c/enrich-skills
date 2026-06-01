@@ -1,12 +1,39 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import bcrypt from 'bcryptjs';
-import { prisma } from '../lib/prisma.js';
+import type { PrismaClient } from '@prisma/client';
+import { prisma as legacyPrisma } from '../lib/prisma.js';
 import { loginSchema, registerSchema, registerWithInviteSchema } from '@enrich-skills/shared';
 import { randomUUID } from 'crypto';
 import { logRevision } from '../lib/revision.js';
 import { MODULE_KEYS, type ModuleKey, type PermissionLevel } from '../lib/tenant.js';
 
-async function resolvePermissionsForUser(tenantId: string, role: string): Promise<Record<ModuleKey, PermissionLevel>> {
+/**
+ * Resolve the DB + tenant id to use for an auth request. Auth routes run
+ * before there is a JWT, so the tenant is resolved from the forwarded
+ * hostname (X-Tenant-Host) / X-Tenant-Id via the tenant-context plugin.
+ *
+ * - Hosted request (white-label domain): returns the tenant's DB (its own DB,
+ *   or the legacy shared DB when the tenant has no dedicated DB provisioned —
+ *   e.g. Rankership, whose control-plane tenant id equals the legacy tenant id).
+ * - Un-hosted request (no tenant context): falls back to the legacy shared DB
+ *   so older clients keep working.
+ */
+async function resolveAuthContext(
+  request: FastifyRequest
+): Promise<{ db: PrismaClient; tenantId: string | null }> {
+  try {
+    const tenant = await request.getTenant();
+    if (tenant) {
+      const db = await request.getTenantPrisma();
+      return { db, tenantId: tenant.id };
+    }
+  } catch (err) {
+    request.log.warn({ err }, 'auth: tenant context resolution failed, using legacy DB');
+  }
+  return { db: legacyPrisma, tenantId: null };
+}
+
+async function resolvePermissionsForUser(db: PrismaClient, tenantId: string, role: string): Promise<Record<ModuleKey, PermissionLevel>> {
   if (role === 'super_admin') {
     return {
       courses: 'edit',
@@ -53,7 +80,7 @@ async function resolvePermissionsForUser(tenantId: string, role: string): Promis
     manage_users: 'none',
     meetings: 'none',
   } as Record<ModuleKey, PermissionLevel>;
-  const roleDef = await prisma.roleDefinition.findFirst({
+  const roleDef = await db.roleDefinition.findFirst({
     where: { tenantId, roleKey: role, isActive: true },
     select: { permissions: true },
   });
@@ -77,16 +104,18 @@ export async function authRoutes(app: FastifyInstance) {
     const { email, password, name, tenantId } = parsed.data;
     const emailLower = email.trim().toLowerCase();
 
-    let resolvedTenantId: string | undefined = tenantId;
+    const { db, tenantId: hostTenantId } = await resolveAuthContext(request);
+
+    let resolvedTenantId: string | undefined = tenantId ?? hostTenantId ?? undefined;
     if (!resolvedTenantId) {
-      const defaultTenant = await prisma.tenant.findFirst({ where: { status: 'active' } });
+      const defaultTenant = await db.tenant.findFirst({ where: { status: 'active' } });
       resolvedTenantId = defaultTenant?.id;
     }
     if (!resolvedTenantId) {
       return reply.status(400).send({ error: 'No tenant available for registration' });
     }
 
-    const existing = await prisma.user.findUnique({
+    const existing = await db.user.findUnique({
       where: { tenantId_email: { tenantId: resolvedTenantId, email: emailLower } },
     });
     if (existing) {
@@ -94,7 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         tenantId: resolvedTenantId,
         email: emailLower,
@@ -103,7 +132,7 @@ export async function authRoutes(app: FastifyInstance) {
         role: 'student',
       },
     });
-    await logRevision({
+    await logRevision(db, {
       tenantId: user.tenantId,
       module: 'students',
       entityId: user.id,
@@ -120,7 +149,7 @@ export async function authRoutes(app: FastifyInstance) {
       { expiresIn: '30d' }
     );
 
-    const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
+    const permissions = await resolvePermissionsForUser(db, user.tenantId, user.role);
     return reply.send({
       user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, permissions },
       accessToken,
@@ -138,12 +167,12 @@ export async function authRoutes(app: FastifyInstance) {
       const { email, password } = parsed.data;
       const emailLower = email.trim().toLowerCase();
 
-      const tenantId = (request.headers['x-tenant-id'] as string)?.trim() || undefined;
+      const { db, tenantId } = await resolveAuthContext(request);
       const user = tenantId
-        ? await prisma.user.findUnique({
+        ? await db.user.findUnique({
             where: { tenantId_email: { tenantId, email: emailLower } },
           })
-        : await prisma.user.findFirst({ where: { email: emailLower } });
+        : await db.user.findFirst({ where: { email: emailLower } });
 
       if (!user) {
         return reply.status(401).send({ error: 'Invalid credentials' });
@@ -167,7 +196,7 @@ export async function authRoutes(app: FastifyInstance) {
         { expiresIn: '30d' }
       );
 
-      const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
+      const permissions = await resolvePermissionsForUser(db, user.tenantId, user.role);
       return reply.send({
         user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, permissions },
         accessToken,
@@ -190,7 +219,9 @@ export async function authRoutes(app: FastifyInstance) {
     }
     const { token, password, name, phoneNumber, address } = parsed.data;
 
-    const invite = await prisma.invite.findUnique({ where: { token } });
+    const { db } = await resolveAuthContext(request);
+
+    const invite = await db.invite.findUnique({ where: { token } });
     if (!invite) {
       return reply.status(400).send({ error: 'Invalid or expired invite link' });
     }
@@ -201,7 +232,7 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(400).send({ error: 'This invite has expired' });
     }
 
-    const existing = await prisma.user.findUnique({
+    const existing = await db.user.findUnique({
       where: { tenantId_email: { tenantId: invite.tenantId, email: invite.email } },
     });
     if (existing) {
@@ -209,7 +240,7 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     const passwordHash = await bcrypt.hash(password, 12);
-    const user = await prisma.user.create({
+    const user = await db.user.create({
       data: {
         tenantId: invite.tenantId,
         email: invite.email,
@@ -220,7 +251,7 @@ export async function authRoutes(app: FastifyInstance) {
         role: 'student',
       },
     });
-    await logRevision({
+    await logRevision(db, {
       tenantId: invite.tenantId,
       module: 'students',
       entityId: user.id,
@@ -229,13 +260,13 @@ export async function authRoutes(app: FastifyInstance) {
       details: { name: user.name, email: user.email },
     });
 
-    await prisma.invite.update({
+    await db.invite.update({
       where: { id: invite.id },
       data: { usedAt: new Date() },
     });
 
     if (invite.testId) {
-      await prisma.testAllocation.upsert({
+      await db.testAllocation.upsert({
         where: { userId_testId: { userId: user.id, testId: invite.testId } },
         update: { variantId: invite.variantId ?? null },
         create: {
@@ -248,21 +279,21 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     if (invite.batchId) {
-      const batch = await prisma.batch.findFirst({
+      const batch = await db.batch.findFirst({
         where: { id: invite.batchId, tenantId: invite.tenantId },
       });
       if (batch) {
-        await prisma.batchMember.upsert({
+        await db.batchMember.upsert({
           where: { batchId_userId: { batchId: invite.batchId, userId: user.id } },
           update: {},
           create: { batchId: invite.batchId, userId: user.id },
         });
-        const batchTests = await prisma.batchTestAssignment.findMany({
+        const batchTests = await db.batchTestAssignment.findMany({
           where: { batchId: invite.batchId },
           select: { testId: true },
         });
         for (const bt of batchTests) {
-          await prisma.testAllocation.upsert({
+          await db.testAllocation.upsert({
             where: { userId_testId: { userId: user.id, testId: bt.testId } },
             update: {},
             create: { userId: user.id, testId: bt.testId, assignedBy: invite.invitedBy },
@@ -272,15 +303,15 @@ export async function authRoutes(app: FastifyInstance) {
     }
 
     if (invite.courseId) {
-      const course = await prisma.course.findFirst({
+      const course = await db.course.findFirst({
         where: { id: invite.courseId, tenantId: invite.tenantId },
       });
       if (course) {
-        const existingAssign = await prisma.courseAssignment.findFirst({
+        const existingAssign = await db.courseAssignment.findFirst({
           where: { tenantId: invite.tenantId, courseId: invite.courseId, userId: user.id, batchId: null },
         });
         if (!existingAssign) {
-          await prisma.courseAssignment.create({
+          await db.courseAssignment.create({
             data: {
               tenantId: invite.tenantId,
               courseId: invite.courseId,
@@ -303,7 +334,7 @@ export async function authRoutes(app: FastifyInstance) {
       { expiresIn: '30d' }
     );
 
-    const permissions = await resolvePermissionsForUser(user.tenantId, user.role);
+    const permissions = await resolvePermissionsForUser(db, user.tenantId, user.role);
     return reply.status(201).send({
       user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, phoneNumber: user.phoneNumber, address: user.address, permissions },
       accessToken,
@@ -315,7 +346,8 @@ export async function authRoutes(app: FastifyInstance) {
   app.post('/refresh', async (request: FastifyRequest, reply: FastifyReply) => {
     try {
       const decoded = await request.jwtVerify<{ sub: string }>();
-      const user = await prisma.user.findUnique({ where: { id: decoded.sub } });
+      const { db } = await resolveAuthContext(request);
+      const user = await db.user.findUnique({ where: { id: decoded.sub } });
       if (!user || !user.isActive) {
         return reply.status(401).send({ error: 'User not found' });
       }

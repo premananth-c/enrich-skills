@@ -23,8 +23,14 @@ import { revisionRoutes } from './routes/revisions.js';
 import { enquiryRoutes } from './routes/enquiries.js';
 import { streamRoutes } from './routes/stream.js';
 import { meetingRoutes, meetingWebhookRoutes } from './routes/meetings.js';
+import { superAdminAuthRoutes, superAdminTenantRoutes } from './routes/superadmin.js';
+import { brandingRoutes } from './routes/branding.js';
+import { paymentRoutes, paymentWebhookRoutes } from './routes/payments.js';
 import { prisma } from './lib/prisma.js';
+import { controlPrisma } from './lib/controlPrisma.js';
+import { disconnectAllTenantClients } from './lib/tenantPrisma.js';
 import { getAllAllowedOrigins } from './lib/domainCheck.js';
+import tenantContextPlugin from './plugins/tenantContext.js';
 
 const app = Fastify({ logger: true });
 
@@ -51,6 +57,7 @@ async function main() {
     secret: process.env.JWT_SECRET || 'dev-secret-change-in-production',
   });
   await app.register(multipart, { limits: { fileSize: 50 * 1024 * 1024 } });
+  await app.register(tenantContextPlugin);
 
   app.get('/health', async () => ({ status: 'ok' }));
 
@@ -84,6 +91,11 @@ async function main() {
   app.register(streamRoutes, { prefix: '/api/v1/stream' });
   app.register(meetingRoutes, { prefix: '/api/v1/meetings' });
   app.register(meetingWebhookRoutes, { prefix: '/api/v1/meetings' });
+  app.register(superAdminAuthRoutes, { prefix: '/api/v1/superadmin/auth' });
+  app.register(superAdminTenantRoutes, { prefix: '/api/v1/superadmin/tenants' });
+  app.register(brandingRoutes, { prefix: '/api/v1/branding' });
+  app.register(paymentRoutes, { prefix: '/api/v1/payments' });
+  app.register(paymentWebhookRoutes, { prefix: '/api/v1/payments/webhook' });
 
   Sentry.setupFastifyErrorHandler(app);
 
@@ -91,10 +103,18 @@ async function main() {
   await app.listen({ port, host: '0.0.0.0' });
 }
 
+async function disconnectAll(): Promise<void> {
+  await Promise.all([
+    prisma.$disconnect().catch(() => undefined),
+    controlPrisma.$disconnect().catch(() => undefined),
+    disconnectAllTenantClients(),
+  ]);
+}
+
 main()
-  .then(() => prisma.$disconnect())
+  .then(() => disconnectAll())
   .catch(async (e) => {
     console.error(e);
-    await prisma.$disconnect();
+    await disconnectAll();
     process.exit(1);
   });

@@ -6,8 +6,8 @@ const INVITE_BASE_URL = process.env.INVITE_BASE_URL || 'http://localhost:5173';
 
 const resend = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
-export async function sendAdminInviteEmail(to: string, tempPassword: string): Promise<void> {
-  const adminUrl = process.env.ADMIN_WEB_URL || 'http://localhost:5174';
+export async function sendAdminInviteEmail(to: string, tempPassword: string, adminBaseUrl?: string): Promise<void> {
+  const adminUrl = adminBaseUrl || process.env.ADMIN_WEB_URL || 'http://localhost:5174';
   const loginUrl = `${adminUrl}/login`;
   const subject = "You've been invited as an admin on RankerShip";
 
@@ -46,8 +46,9 @@ export type InviteEmailContext = {
   courseName?: string;
 };
 
-export async function sendInviteEmail(to: string, token: string, context?: InviteEmailContext): Promise<void> {
-  const inviteUrl = `${INVITE_BASE_URL}/invite?token=${encodeURIComponent(token)}`;
+export async function sendInviteEmail(to: string, token: string, context?: InviteEmailContext, studentBaseUrl?: string): Promise<void> {
+  const baseUrl = studentBaseUrl || INVITE_BASE_URL;
+  const inviteUrl = `${baseUrl}/invite?token=${encodeURIComponent(token)}`;
   const { testTitle, batchName, courseName } = context || {};
   const subjectBits = [
     testTitle && `Test: ${testTitle}`,

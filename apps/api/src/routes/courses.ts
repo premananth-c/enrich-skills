@@ -28,6 +28,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Course CRUD ---
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const { includeArchived } = request.query as { includeArchived?: string };
     const courses = await prisma.course.findMany({
       where: { tenantId, ...(includeArchived === 'true' ? {} : { isArchived: false }) },
@@ -38,6 +39,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -50,6 +52,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = createCourseSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -62,7 +65,7 @@ export async function courseRoutes(app: FastifyInstance) {
         description: parsed.data.description ?? null,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'courses',
       entityId: course.id,
@@ -75,6 +78,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = updateCourseSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -89,7 +93,7 @@ export async function courseRoutes(app: FastifyInstance) {
         ...(parsed.data.description !== undefined && { description: parsed.data.description ?? null }),
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'courses',
       entityId: course.id,
@@ -102,6 +106,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const existing = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Course not found' });
@@ -109,7 +114,7 @@ export async function courseRoutes(app: FastifyInstance) {
       where: { id: request.params.id },
       data: { isArchived: true },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'courses',
       entityId: course.id,
@@ -122,6 +127,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const existing = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Course not found' });
@@ -129,7 +135,7 @@ export async function courseRoutes(app: FastifyInstance) {
       where: { id: request.params.id },
       data: { isArchived: false },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'courses',
       entityId: course.id,
@@ -142,6 +148,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const existing = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Course not found' });
     if (!existing.isArchived) {
@@ -154,6 +161,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Chapters ---
   app.get('/:id/chapters', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const chapters = await prisma.courseChapter.findMany({
@@ -166,6 +174,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/:id/chapters', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = createChapterSchema.safeParse(request.body);
@@ -185,6 +194,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/chapters/:chapterId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = updateChapterSchema.safeParse(request.body);
@@ -203,6 +213,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id/chapters/:chapterId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     await prisma.courseChapter.delete({ where: { id: request.params.chapterId } });
@@ -212,6 +223,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Topics ---
   app.post('/:id/chapters/:chapterId/topics', async (request: FastifyRequest<{ Params: { id: string; chapterId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const chapter = await prisma.courseChapter.findFirst({
@@ -236,6 +248,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/chapters/:chapterId/topics/:topicId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = updateTopicSchema.safeParse(request.body);
@@ -255,6 +268,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id/chapters/:chapterId/topics/:topicId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     await prisma.courseTopic.delete({ where: { id: request.params.topicId } });
@@ -264,6 +278,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Materials (per topic) ---
   app.get('/:id/chapters/:chapterId/topics/:topicId/materials', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const materials = await prisma.courseMaterial.findMany({
@@ -275,6 +290,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/:id/chapters/:chapterId/topics/:topicId/materials', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = createMaterialSchema.safeParse(request.body);
@@ -296,6 +312,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/chapters/:chapterId/topics/:topicId/materials/:materialId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; materialId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = updateMaterialSchema.safeParse(request.body);
@@ -316,6 +333,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id/chapters/:chapterId/topics/:topicId/materials/:materialId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; materialId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const mat = await prisma.courseMaterial.findFirst({ where: { id: request.params.materialId, topicId: request.params.topicId } });
@@ -327,6 +345,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Activities ---
   app.get('/:id/chapters/:chapterId/topics/:topicId/activities', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const activities = await prisma.courseActivity.findMany({
@@ -338,6 +357,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/:id/chapters/:chapterId/topics/:topicId/activities', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = createActivitySchema.safeParse(request.body);
@@ -359,6 +379,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/chapters/:chapterId/topics/:topicId/activities/:activityId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; activityId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = updateActivitySchema.safeParse(request.body);
@@ -379,6 +400,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id/chapters/:chapterId/topics/:topicId/activities/:activityId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; activityId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     await prisma.courseActivity.delete({ where: { id: request.params.activityId } });
@@ -388,6 +410,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Evaluations ---
   app.get('/:id/chapters/:chapterId/topics/:topicId/evaluations', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const evaluations = await prisma.courseEvaluation.findMany({
@@ -400,6 +423,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.post('/:id/chapters/:chapterId/topics/:topicId/evaluations', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = createEvaluationSchema.safeParse(request.body);
@@ -428,6 +452,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.patch('/:id/chapters/:chapterId/topics/:topicId/evaluations/:evaluationId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; evaluationId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const parsed = updateEvaluationSchema.safeParse(request.body);
@@ -455,6 +480,7 @@ export async function courseRoutes(app: FastifyInstance) {
 
   app.delete('/:id/chapters/:chapterId/topics/:topicId/evaluations/:evaluationId', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; evaluationId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     await prisma.courseEvaluation.delete({ where: { id: request.params.evaluationId } });
@@ -464,6 +490,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Material download — redirects to a short-lived R2 presigned URL ---
   app.get('/:id/chapters/:chapterId/topics/:topicId/materials/:materialId/download', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string; materialId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const material = await prisma.courseMaterial.findFirst({
@@ -478,6 +505,7 @@ export async function courseRoutes(app: FastifyInstance) {
   // --- Material file upload (multipart) — PDFs, images, docs stored in R2 ---
   app.post('/:id/chapters/:chapterId/topics/:topicId/materials/upload', async (request: FastifyRequest<{ Params: { id: string; chapterId: string; topicId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
     const data = await (request as unknown as { file: () => Promise<{ toBuffer: () => Promise<Buffer>; filename: string; mimetype: string } | undefined> }).file();
@@ -513,6 +541,7 @@ export async function courseRoutes(app: FastifyInstance) {
   ) => {
     try {
       const tenantId = await requireModuleAccess(request, 'courses', 'edit');
+      const prisma = await request.getTenantPrisma();
       const course = await prisma.course.findFirst({ where: { id: request.params.id, tenantId } });
       if (!course) return reply.status(404).send({ error: 'Course not found' });
 
@@ -566,6 +595,7 @@ export async function courseRoutes(app: FastifyInstance) {
     reply: FastifyReply
   ) => {
     await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const { uploadId, key, partNumber } = request.body as { uploadId: string; key: string; partNumber: number };
     if (!uploadId || !key || !partNumber) {
       return reply.status(400).send({ error: 'uploadId, key, and partNumber are required' });
@@ -579,6 +609,7 @@ export async function courseRoutes(app: FastifyInstance) {
     reply: FastifyReply
   ) => {
     await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const { materialId, uploadId, key, parts } = request.body as {
       materialId: string; uploadId: string; key: string;
       parts: { partNumber: number; etag: string }[];
@@ -606,6 +637,7 @@ export async function courseRoutes(app: FastifyInstance) {
     reply: FastifyReply
   ) => {
     await requireModuleAccess(request, 'courses', 'edit');
+    const prisma = await request.getTenantPrisma();
     const { materialId, uploadId, key } = request.body as { materialId: string; uploadId: string; key: string };
     if (!uploadId || !key) return reply.status(400).send({ error: 'uploadId and key are required' });
 

@@ -1,5 +1,4 @@
-import { prisma } from './prisma.js';
-import type { Prisma } from '@prisma/client';
+import type { Prisma, PrismaClient } from '@prisma/client';
 
 type RevisionModule = 'tests' | 'students' | 'courses' | 'questions' | 'batches';
 type RevisionAction = 'created' | 'updated' | 'archived' | 'deleted';
@@ -13,7 +12,7 @@ interface LogRevisionInput {
   details?: Record<string, unknown>;
 }
 
-export async function logRevision(input: LogRevisionInput) {
+export async function logRevision(prisma: PrismaClient, input: LogRevisionInput) {
   let userName: string | null = null;
   if (input.userId) {
     const user = await prisma.user.findUnique({

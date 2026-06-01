@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
 import { createScheduleEventSchema, updateScheduleEventSchema } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 
@@ -8,6 +7,7 @@ export async function scheduleRoutes(app: FastifyInstance) {
 
   app.get('/batches/:batchId/events', async (request: FastifyRequest<{ Params: { batchId: string }; Querystring: { from?: string; to?: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const { from, to } = request.query;
@@ -24,6 +24,7 @@ export async function scheduleRoutes(app: FastifyInstance) {
 
   app.post('/batches/:batchId/events', async (request: FastifyRequest<{ Params: { batchId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const parsed = createScheduleEventSchema.safeParse(request.body);
@@ -48,6 +49,7 @@ export async function scheduleRoutes(app: FastifyInstance) {
 
   app.patch('/batches/:batchId/events/:eventId', async (request: FastifyRequest<{ Params: { batchId: string; eventId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const parsed = updateScheduleEventSchema.safeParse(request.body);
@@ -72,6 +74,7 @@ export async function scheduleRoutes(app: FastifyInstance) {
 
   app.delete('/batches/:batchId/events/:eventId', async (request: FastifyRequest<{ Params: { batchId: string; eventId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.batchId, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     await prisma.batchScheduleEvent.deleteMany({

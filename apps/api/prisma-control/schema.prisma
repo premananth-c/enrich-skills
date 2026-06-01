@@ -1,0 +1,178 @@
+// Control-plane Prisma schema.
+//
+// This schema is for the Rankership control-plane DB. It holds tenant
+// metadata (registry, custom domains, encrypted DB connection strings,
+// branding, payment credentials), super-admin users, audit/provision logs,
+// and cross-tenant landing-page enquiries.
+//
+// All tenant business data (users, tests, courses, attempts, etc.) lives in
+// per-tenant databases described by apps/api/prisma/schema.prisma.
+
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "debian-openssl-3.0.x"]
+  output        = "../src/generated/prisma-control"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("CONTROL_DATABASE_URL")
+}
+
+// ----- Tenant registry -----
+model Tenant {
+  id        String   @id @default(uuid())
+  slug      String   @unique
+  name      String
+  status    String   @default("active") // active | suspended | trial | cancelled
+  plan      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  domains          TenantDomain[]
+  dbConfig         TenantDbConfig?
+  branding         TenantBranding?
+  paymentCreds     TenantPaymentCredential[]
+  provisionLogs    ProvisionLog[]
+  auditLogs        AuditLog[]
+}
+
+// Custom hostnames mapped to a tenant. Primary lookup table for
+// resolving a request's tenant from the Host header.
+model TenantDomain {
+  id                   String    @id @default(uuid())
+  tenantId             String
+  host                 String    @unique
+  /// admin | student
+  kind                 String
+  verifiedAt           DateTime?
+  cloudflareHostnameId String?
+  createdAt            DateTime  @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([kind])
+}
+
+// Encrypted Postgres connection string for the tenant's dedicated DB.
+// secretValue is AES-256-GCM ciphertext using TENANT_SECRETS_KEY.
+model TenantDbConfig {
+  id               String   @id @default(uuid())
+  tenantId         String   @unique
+  dbName           String   @unique
+  dbRole           String   @unique
+  connectionUrlEnc String   @db.Text
+  migrationVersion String?
+  provisionedAt    DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Per-tenant branding consumed by GET /api/v1/branding (no auth).
+model TenantBranding {
+  id            String   @id @default(uuid())
+  tenantId      String   @unique
+  productName   String?
+  logoUrl       String?
+  faviconUrl    String?
+  primaryColor  String?
+  accentColor   String?
+  supportEmail  String?
+  customCss     String?  @db.Text
+  featureFlags  Json     @default("{}")
+  updatedAt     DateTime @updatedAt
+  createdAt     DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+}
+
+// Payment gateway credentials, encrypted with TENANT_SECRETS_KEY.
+// One row per (tenant, provider).
+model TenantPaymentCredential {
+  id                     String   @id @default(uuid())
+  tenantId               String
+  /// razorpay | stripe
+  provider               String
+  /// live | test
+  mode                   String   @default("test")
+  publicKey              String
+  secretKeyEnc           String   @db.Text
+  webhookSecretEnc       String   @db.Text
+  currency               String   @default("INR")
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, provider])
+  @@index([tenantId])
+}
+
+// ----- Rankership staff (separate from tenant Users) -----
+model SuperAdmin {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  name         String
+  passwordHash String
+  mfaSecret    String?
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+}
+
+// ----- Cross-tenant landing-page enquiries (moved from tenant DB) -----
+model Enquiry {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  phone     String
+  /// student | college | corporate | academic
+  category  String
+  message   String   @db.Text
+  /// new | contacted | closed
+  status    String   @default("new")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, createdAt])
+}
+
+// Append-only log of provisioning actions for tenant onboarding.
+model ProvisionLog {
+  id        String   @id @default(uuid())
+  tenantId  String
+  /// create_role | create_database | run_migrations | seed_admin | add_domain | add_payment_credential | etc.
+  step      String
+  /// pending | succeeded | failed
+  status    String
+  message   String?  @db.Text
+  metadata  Json?
+  createdAt DateTime @default(now())
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, createdAt])
+}
+
+// Append-only log for super-admin cross-tenant access (impersonation,
+// data lookups, suspends, etc.).
+model AuditLog {
+  id           String   @id @default(uuid())
+  superAdminId String?
+  tenantId     String?
+  action       String
+  metadata     Json?
+  ipAddress    String?
+  userAgent    String?
+  createdAt    DateTime @default(now())
+
+  tenant Tenant? @relation(fields: [tenantId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([superAdminId, createdAt])
+}

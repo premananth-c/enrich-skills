@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './context/AuthContext';
+import { BrandingProvider } from './context/BrandingContext';
 import Layout from './components/Layout';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
@@ -51,6 +52,7 @@ function SuperAdminRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   return (
+    <BrandingProvider>
     <AuthProvider>
       <>
         <Routes>
@@ -87,5 +89,6 @@ export default function App() {
         <UploadProgressToast />
       </>
     </AuthProvider>
+    </BrandingProvider>
   );
 }

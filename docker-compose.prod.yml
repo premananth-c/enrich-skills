@@ -21,6 +21,14 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       - DATABASE_URL=postgresql://enrich:${DB_PASSWORD}@host.docker.internal:5432/enrich_skills
+      # White-label control plane (see docs/NIVEXA-LAUNCH-RUNBOOK.md)
+      - CONTROL_DATABASE_URL=postgresql://enrich:${DB_PASSWORD}@host.docker.internal:5432/enrich_control
+      - TENANT_DB_ADMIN_URL=postgresql://postgres:${PG_SUPERUSER_PASSWORD:-}@host.docker.internal:5432/postgres
+      - TENANT_SECRETS_KEY=${TENANT_SECRETS_KEY:-}
+      - WHITELABEL_LEGACY_FALLBACK=${WHITELABEL_LEGACY_FALLBACK:-}
+      - CF_API_TOKEN=${CF_API_TOKEN:-}
+      - CF_ZONE_ID=${CF_ZONE_ID:-}
+      - CF_FALLBACK_ORIGIN=${CF_FALLBACK_ORIGIN:-}
       - REDIS_URL=redis://redis:6379
       - JWT_SECRET=${JWT_SECRET}
       - R2_ACCOUNT_ID=${R2_ACCOUNT_ID}

@@ -1,5 +1,4 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
-import { prisma } from '../lib/prisma.js';
 import { createBatchSchema, updateBatchSchema, addBatchMemberSchema } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
@@ -9,6 +8,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const { includeArchived } = request.query as { includeArchived?: string };
     const batches = await prisma.batch.findMany({
       where: { tenantId, ...(includeArchived === 'true' ? {} : { isArchived: false }) },
@@ -22,6 +22,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -34,6 +35,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.post('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = createBatchSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -46,7 +48,7 @@ export async function batchRoutes(app: FastifyInstance) {
         description: parsed.data.description ?? null,
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'batches',
       entityId: batch.id,
@@ -59,6 +61,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.patch('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const parsed = updateBatchSchema.safeParse(request.body);
     if (!parsed.success) {
@@ -73,7 +76,7 @@ export async function batchRoutes(app: FastifyInstance) {
         ...(parsed.data.description !== undefined && { description: parsed.data.description ?? null }),
       },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'batches',
       entityId: batch.id,
@@ -86,6 +89,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.patch('/:id/archive', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const existing = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Batch not found' });
@@ -93,7 +97,7 @@ export async function batchRoutes(app: FastifyInstance) {
       where: { id: request.params.id },
       data: { isArchived: true },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'batches',
       entityId: archived.id,
@@ -106,6 +110,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.patch('/:id/revoke', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const user = request.user as { sub: string };
     const existing = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Batch not found' });
@@ -113,7 +118,7 @@ export async function batchRoutes(app: FastifyInstance) {
       where: { id: request.params.id },
       data: { isArchived: false },
     });
-    await logRevision({
+    await logRevision(prisma, {
       tenantId,
       module: 'batches',
       entityId: restored.id,
@@ -126,6 +131,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const existing = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!existing) return reply.status(404).send({ error: 'Batch not found' });
     if (!existing.isArchived) {
@@ -135,9 +141,9 @@ export async function batchRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  // --- Members ---
   app.get('/:id/members', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const members = await prisma.batchMember.findMany({
@@ -149,6 +155,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.post('/:id/members', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const batch = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
@@ -179,6 +186,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.delete('/:id/members/:userId', async (request: FastifyRequest<{ Params: { id: string; userId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     await prisma.batchMember.deleteMany({
@@ -187,9 +195,9 @@ export async function batchRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  // --- Batch tests (assign tests from test bank to batch) ---
   app.get('/:id/tests', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'view');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({ where: { id: request.params.id, tenantId } });
     if (!batch) return reply.status(404).send({ error: 'Batch not found' });
     const assignments = await prisma.batchTestAssignment.findMany({
@@ -202,6 +210,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.post('/:id/tests', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
     const batch = await prisma.batch.findFirst({
       where: { id: request.params.id, tenantId },
@@ -239,6 +248,7 @@ export async function batchRoutes(app: FastifyInstance) {
 
   app.delete('/:id/tests/:testId', async (request: FastifyRequest<{ Params: { id: string; testId: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'batches', 'edit');
+    const prisma = await request.getTenantPrisma();
     const batch = await prisma.batch.findFirst({
       where: { id: request.params.id, tenantId },
       include: { members: { select: { userId: true } } },
