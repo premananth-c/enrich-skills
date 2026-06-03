@@ -26,7 +26,7 @@ echo ""
 
 pnpm --filter @enrich-skills/shared build
 
-for app in student-web admin-web landing-web; do
+for app in student-web admin-web landing-web superadmin-web; do
   echo "Building and deploying $app..."
   pnpm --filter "@enrich-skills/$app" build
   (cd "apps/$app" && npx wrangler deploy)

@@ -92,10 +92,12 @@ The control-plane scaffolding and these changes are in your feature branch.
    triggers `.github/workflows/deploy.yml`, which:
    - rebuilds & restarts the **API** + judge worker on the VPS, and
    - redeploys **student-web**, **admin-web**, **landing-web** to Cloudflare.
-2. The super-admin app (`superadmin-web`) is **not** in the deploy workflow.
-   You don't need it for this runbook — every super-admin action below has a
-   `curl` equivalent. (To deploy it later, add a `wrangler.toml` and a matrix
-   entry, or run it locally with `pnpm --filter @enrich-skills/superadmin-web dev`.)
+2. `superadmin-web` is now part of the deploy workflow. After CI completes,
+   open the new Worker in Cloudflare → **Workers & Pages → `rankership-superadmin`
+   → Settings → Domains & Routes → Add Custom Domain** → e.g.
+   `superadmin.rankership.com`. Cloudflare auto-provisions SSL and DNS.
+   From then on you can use the UI for every step below; `curl` examples are
+   kept as an alternative.
 
 > **ORDERING MATTERS — read this before merging.** Once the new API code serves
 > traffic, **authenticated** routes call `request.getTenantPrisma()`, which
