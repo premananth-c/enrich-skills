@@ -14,9 +14,16 @@
 import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import { randomBytes } from 'node:crypto';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { Client as PgClient } from 'pg';
 import { controlPrisma } from './controlPrisma.js';
 import { encryptSecret } from './crypto.js';
+
+// Resolve the API package root regardless of how the code is invoked:
+//   - dev (tsx): apps/api/src/lib/provisionTenant.ts  → ../../ = apps/api/
+//   - prod:    apps/api/dist/lib/provisionTenant.js → ../../ = apps/api/
+const API_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 
 const execP = promisify(exec);
 
@@ -129,10 +136,14 @@ export async function provisionTenant(input: ProvisionTenantInput): Promise<Prov
     const adminParts = parseAdminUrl(process.env.TENANT_DB_ADMIN_URL!);
     const tenantUrl = `postgresql://${dbRole}:${encodeURIComponent(dbPassword)}@${adminParts.host}:${adminParts.port}/${dbName}?schema=public`;
 
-    // 4) Apply tenant schema migrations
+    // 4) Apply tenant schema migrations.
+    //    `npx --no-install` runs the locally-installed prisma (no network fetch,
+    //    no pnpm needed in the runtime image). `cwd: API_DIR` and an explicit
+    //    --schema make this work regardless of the process's working directory.
     await logProvisionStep(tenant.id, 'run_migrations', 'pending');
     try {
-      await execP(`pnpm prisma migrate deploy`, {
+      await execP(`npx --no-install prisma migrate deploy --schema ./prisma/schema.prisma`, {
+        cwd: API_DIR,
         env: { ...process.env, DATABASE_URL: tenantUrl },
       });
       await logProvisionStep(tenant.id, 'run_migrations', 'succeeded');
