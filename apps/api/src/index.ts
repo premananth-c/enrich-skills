@@ -39,9 +39,11 @@ const STATIC_CORS_ORIGINS = [
   'https://www.rankership.com',
   'https://student.rankership.com',
   'https://admin.rankership.com',
+  'https://superadmin.rankership.com',
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
+  'http://localhost:5176',
 ];
 
 async function main() {
