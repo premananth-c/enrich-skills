@@ -45,8 +45,6 @@ jobs:
             filter: "@enrich-skills/landing-web"
           - app: superadmin-web
             filter: "@enrich-skills/superadmin-web"
-          - app: superadmin-web
-            filter: "@enrich-skills/superadmin-web"
     steps:
       - uses: actions/checkout@v4
 
