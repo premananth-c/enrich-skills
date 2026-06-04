@@ -55,55 +55,78 @@ function parseArgs(): CliArgs {
 
 /**
  * Tables are listed in topological order so foreign keys resolve.
- * Each entry names a Prisma model and (for joins) tells us how to
- * filter rows for the target tenant.
  *
- * Models that don't carry `tenantId` are filtered indirectly by joining
- * on a parent that does.
+ * - `tenant-scoped`: row has its own `tenantId` column, filter on that.
+ * - `fk-scoped`: row has no `tenantId`; filter rows whose `fk` is the id of a
+ *   row we already copied from the parent model.
+ *
+ * Model identifiers must match Prisma client accessors (lowerCamelCase).
  */
 type Step =
   | { kind: 'tenant-scoped'; model: string }
-  | { kind: 'batch-scoped'; model: string; parentModel: 'batch' }
-  | { kind: 'test-scoped'; model: string; parentModel: 'test' }
-  | { kind: 'course-scoped'; model: string; parentModel: 'course' | 'chapter' | 'topic' }
-  | { kind: 'attempt-scoped'; model: string; parentModel: 'attempt' };
+  | { kind: 'fk-scoped'; model: string; fk: string; parent: string };
 
 const STEPS: Step[] = [
+  // 1. Top-level tenant tables
   { kind: 'tenant-scoped', model: 'roleDefinition' },
   { kind: 'tenant-scoped', model: 'user' },
 
+  // 2. Course hierarchy
   { kind: 'tenant-scoped', model: 'course' },
-  { kind: 'course-scoped', model: 'chapter', parentModel: 'course' },
-  { kind: 'course-scoped', model: 'topic', parentModel: 'chapter' },
-  { kind: 'course-scoped', model: 'courseEvaluation', parentModel: 'topic' },
-  { kind: 'course-scoped', model: 'courseMaterial', parentModel: 'topic' },
+  { kind: 'fk-scoped', model: 'courseChapter', fk: 'courseId', parent: 'course' },
+  { kind: 'fk-scoped', model: 'courseTopic', fk: 'chapterId', parent: 'courseChapter' },
+  { kind: 'fk-scoped', model: 'courseMaterial', fk: 'topicId', parent: 'courseTopic' },
+  { kind: 'fk-scoped', model: 'courseActivity', fk: 'topicId', parent: 'courseTopic' },
 
+  // 3. Question bank
   { kind: 'tenant-scoped', model: 'question' },
-  { kind: 'tenant-scoped', model: 'testCase' },
+  { kind: 'fk-scoped', model: 'testCase', fk: 'questionId', parent: 'question' },
 
+  // 4. Tests (depend on questions; variants/questions depend on tests)
   { kind: 'tenant-scoped', model: 'test' },
-  { kind: 'test-scoped', model: 'testVariant', parentModel: 'test' },
-  { kind: 'test-scoped', model: 'testQuestion', parentModel: 'test' },
-  { kind: 'tenant-scoped', model: 'testAllocation' },
+  { kind: 'fk-scoped', model: 'testVariant', fk: 'testId', parent: 'test' },
+  { kind: 'fk-scoped', model: 'testQuestion', fk: 'testId', parent: 'test' },
 
+  // 5. Course evaluations (need topics + tests)
+  { kind: 'fk-scoped', model: 'courseEvaluation', fk: 'topicId', parent: 'courseTopic' },
+
+  // 6. Assignments (need courses + tests)
+  { kind: 'fk-scoped', model: 'assignment', fk: 'courseId', parent: 'course' },
+  { kind: 'fk-scoped', model: 'assignmentTest', fk: 'assignmentId', parent: 'assignment' },
+
+  // 7. Test allocations (need tests + users)
+  { kind: 'fk-scoped', model: 'testAllocation', fk: 'testId', parent: 'test' },
+
+  // 8. Batches & related
   { kind: 'tenant-scoped', model: 'batch' },
-  { kind: 'batch-scoped', model: 'batchMember', parentModel: 'batch' },
-  { kind: 'batch-scoped', model: 'batchTestAssignment', parentModel: 'batch' },
-  { kind: 'batch-scoped', model: 'batchScheduleEvent', parentModel: 'batch' },
-  { kind: 'batch-scoped', model: 'schedulerNote', parentModel: 'batch' },
-  { kind: 'batch-scoped', model: 'batchVideo', parentModel: 'batch' },
+  { kind: 'fk-scoped', model: 'batchMember', fk: 'batchId', parent: 'batch' },
+  { kind: 'fk-scoped', model: 'batchTestAssignment', fk: 'batchId', parent: 'batch' },
+  { kind: 'fk-scoped', model: 'batchScheduleEvent', fk: 'batchId', parent: 'batch' },
+  { kind: 'fk-scoped', model: 'schedulerNote', fk: 'batchId', parent: 'batch' },
+  { kind: 'fk-scoped', model: 'batchVideo', fk: 'batchId', parent: 'batch' },
 
+  // 9. Course assignments to batches/users
   { kind: 'tenant-scoped', model: 'courseAssignment' },
 
-  { kind: 'tenant-scoped', model: 'attempt' },
-  { kind: 'attempt-scoped', model: 'submission', parentModel: 'attempt' },
+  // 10. Live meetings + recordings
+  { kind: 'tenant-scoped', model: 'liveMeeting' },
+  { kind: 'fk-scoped', model: 'liveMeetingRecording', fk: 'liveMeetingId', parent: 'liveMeeting' },
 
+  // 11. Attempts → submissions → test-case results
+  { kind: 'fk-scoped', model: 'attempt', fk: 'testId', parent: 'test' },
+  { kind: 'fk-scoped', model: 'submission', fk: 'attemptId', parent: 'attempt' },
+  { kind: 'fk-scoped', model: 'testCaseResult', fk: 'submissionId', parent: 'submission' },
+
+  // 12. Communication & audit
   { kind: 'tenant-scoped', model: 'invite' },
   { kind: 'tenant-scoped', model: 'notification' },
+  { kind: 'fk-scoped', model: 'activitySubmission', fk: 'activityId', parent: 'courseActivity' },
   { kind: 'tenant-scoped', model: 'revisionLog' },
 
-  { kind: 'tenant-scoped', model: 'meeting' },
-  { kind: 'tenant-scoped', model: 'meetingParticipant' },
+  // 13. Payments (M6)
+  { kind: 'tenant-scoped', model: 'order' },
+  { kind: 'fk-scoped', model: 'payment', fk: 'orderId', parent: 'order' },
+  { kind: 'tenant-scoped', model: 'paymentEvent' },
 ];
 
 async function copyTable(
@@ -111,7 +134,7 @@ async function copyTable(
   target: TenantPrisma,
   step: Step,
   tenantId: string,
-  ctx: { batchIds: Set<string>; courseIds: Set<string>; chapterIds: Set<string>; topicIds: Set<string>; testIds: Set<string>; attemptIds: Set<string> },
+  ids: Record<string, Set<string>>,
   args: CliArgs
 ): Promise<{ model: string; copied: number }> {
   const model = step.model;
@@ -121,36 +144,30 @@ async function copyTable(
     throw new Error(`Unknown Prisma model: ${model}`);
   }
 
-  let where: Record<string, unknown> = {};
+  let where: Record<string, unknown>;
   if (step.kind === 'tenant-scoped') {
     where = { tenantId };
-  } else if (step.kind === 'batch-scoped') {
-    where = { batchId: { in: [...ctx.batchIds] } };
-  } else if (step.kind === 'test-scoped') {
-    where = { testId: { in: [...ctx.testIds] } };
-  } else if (step.kind === 'attempt-scoped') {
-    where = { attemptId: { in: [...ctx.attemptIds] } };
-  } else if (step.kind === 'course-scoped') {
-    if (step.parentModel === 'course') where = { courseId: { in: [...ctx.courseIds] } };
-    else if (step.parentModel === 'chapter') where = { chapterId: { in: [...ctx.chapterIds] } };
-    else if (step.parentModel === 'topic') where = { topicId: { in: [...ctx.topicIds] } };
+  } else {
+    const parentIds = ids[step.parent];
+    if (!parentIds || parentIds.size === 0) {
+      console.log(`  [skip] ${model} (no parent ${step.parent} rows copied)`);
+      ids[model] = new Set();
+      return { model, copied: 0 };
+    }
+    where = { [step.fk]: { in: [...parentIds] } };
   }
 
   const rows = (await sourceRepo.findMany({ where })) as Array<Record<string, unknown>>;
 
-  // Rewrite tenantId on every copied row to the TARGET tenant id, so the rows
-  // belong to the new tenant and satisfy the tenant DB's FK to its own Tenant
-  // row. No-op when source and target ids are equal.
+  // Track this model's IDs so any downstream fk-scoped step can filter on them.
+  ids[model] = new Set(rows.map((r) => r.id as string));
+
+  // Rewrite tenantId on every copied row to the TARGET tenant id, so rows
+  // belong to the new tenant and satisfy the tenant DB's FK to its own
+  // Tenant row. No-op when source and target ids are equal.
   for (const row of rows) {
     if ('tenantId' in row) row.tenantId = args.tenantId;
   }
-
-  if (model === 'batch') ctx.batchIds = new Set(rows.map((r) => r.id as string));
-  if (model === 'course') ctx.courseIds = new Set(rows.map((r) => r.id as string));
-  if (model === 'chapter') ctx.chapterIds = new Set(rows.map((r) => r.id as string));
-  if (model === 'topic') ctx.topicIds = new Set(rows.map((r) => r.id as string));
-  if (model === 'test') ctx.testIds = new Set(rows.map((r) => r.id as string));
-  if (model === 'attempt') ctx.attemptIds = new Set(rows.map((r) => r.id as string));
 
   if (rows.length === 0) {
     console.log(`  [skip] ${model} (0 rows)`);
@@ -193,20 +210,17 @@ async function main() {
     const target = new TenantPrisma({ datasources: { db: { url: targetUrl } } });
 
     try {
-      const ctx = {
-        batchIds: new Set<string>(),
-        courseIds: new Set<string>(),
-        chapterIds: new Set<string>(),
-        topicIds: new Set<string>(),
-        testIds: new Set<string>(),
-        attemptIds: new Set<string>(),
-      };
+      // For each model we copy, we record the ids of the rows we read from
+      // the source. Subsequent `fk-scoped` steps filter their parent FK to
+      // this set, so we only carry across children of rows we actually
+      // copied (e.g. only attempts whose test belongs to the source tenant).
+      const ids: Record<string, Set<string>> = {};
 
       const results: Array<{ model: string; copied: number }> = [];
       for (const step of STEPS) {
         // Read with the SOURCE (legacy) tenant id; copyTable rewrites each
         // row's tenantId to the TARGET tenant id (args.tenantId) on insert.
-        const result = await copyTable(source, target, step, args.sourceTenantId, ctx, args);
+        const result = await copyTable(source, target, step, args.sourceTenantId, ids, args);
         results.push(result);
       }
 
