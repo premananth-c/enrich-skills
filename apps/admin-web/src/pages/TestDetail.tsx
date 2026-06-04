@@ -956,9 +956,19 @@ export default function TestDetail() {
                 </tr>
               </thead>
               <tbody>
-                {studentAttempts.map((s) => (
+                {studentAttempts.map((s) => {
+                  const latestAttemptId = s.attempts[0]?.id;
+                  return (
                   <tr key={s.userId} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                    <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{s.user?.name ?? 'Unknown'}</td>
+                    <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>
+                      {latestAttemptId && id ? (
+                        <Link to={`/tests/${id}/attempts/${latestAttemptId}`} style={{ color: 'inherit', textDecoration: 'underline' }}>
+                          {s.user?.name ?? 'Unknown'}
+                        </Link>
+                      ) : (
+                        s.user?.name ?? 'Unknown'
+                      )}
+                    </td>
                     <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.user?.email ?? '--'}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       {new Date(s.assignedAt).toLocaleString()}
@@ -981,6 +991,19 @@ export default function TestDetail() {
                     </td>
                     {canEdit('tests') && (
                       <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                          {latestAttemptId && id && (
+                            <Link
+                              to={`/tests/${id}/attempts/${latestAttemptId}`}
+                              style={{
+                                ...adminBtnCancelSm,
+                                textDecoration: 'none',
+                                display: 'inline-block',
+                              }}
+                            >
+                              View attempt
+                            </Link>
+                          )}
                         <button
                           type="button"
                           onClick={() => removeStudentFromTest(s.userId)}
@@ -992,10 +1015,12 @@ export default function TestDetail() {
                         >
                           {removingUserId === s.userId ? 'Removing…' : 'Remove From Test'}
                         </button>
+                        </div>
                       </td>
                     )}
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           )}

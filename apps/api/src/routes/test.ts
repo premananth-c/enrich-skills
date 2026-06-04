@@ -228,6 +228,44 @@ export async function testRoutes(app: FastifyInstance) {
     return reply.send({ students, attempts });
   });
 
+  app.get(
+    '/:id/attempts/:attemptId/detail',
+    async (
+      request: FastifyRequest<{ Params: { id: string; attemptId: string } }>,
+      reply: FastifyReply
+    ) => {
+      const tenantId = await requireModuleAccess(request, 'tests', 'view');
+      const prisma = await request.getTenantPrisma();
+      const test = await prisma.test.findFirst({
+        where: { id: request.params.id, tenantId },
+        select: { id: true, title: true, type: true, config: true },
+      });
+      if (!test) return reply.status(404).send({ error: 'Test not found' });
+
+      const attempt = await prisma.attempt.findFirst({
+        where: { id: request.params.attemptId, testId: request.params.id },
+        include: {
+          user: { select: { id: true, name: true, email: true } },
+          submissions: {
+            include: {
+              question: { select: { id: true, type: true, content: true, difficulty: true } },
+              testCaseResults: {
+                include: {
+                  testCase: {
+                    select: { isPublic: true, input: true, expectedOutput: true, weight: true },
+                  },
+                },
+              },
+            },
+          },
+        },
+      });
+      if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
+
+      return reply.send({ test, attempt });
+    }
+  );
+
   // --- Variant CRUD ---
 
   app.get('/:id/variants', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {

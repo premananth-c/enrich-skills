@@ -9,8 +9,13 @@ import {
   isOutputMatchMode,
   getEffectiveShowResultsFlags,
 } from '@enrich-skills/shared';
-import { requireTenant, authenticate } from '../lib/tenant.js';
+import { requireTenant, authenticate, requireModuleAccess } from '../lib/tenant.js';
 import { judgeQueue } from '../lib/judgeQueue.js';
+import {
+  enqueueAiReviewsForAttempt,
+  enqueueAiReviewRegenerate,
+  serializeAiReviewSubmission,
+} from '../lib/aiReviewEnqueue.js';
 
 type AttemptTestConfig = {
   attemptLimit?: number;
@@ -21,7 +26,9 @@ type AttemptTestConfig = {
   scoreDistribution?: 'equal' | 'custom';
   questionWeights?: Record<string, number>;
   codingLanguage?: string;
+  aiFeedbackEnabled?: boolean;
 };
+
 
 /** Prisma expects DB columns to match the schema; missing columns surface as P2022 or raw DB errors. */
 function isMissingAttemptSchemaError(err: unknown): boolean {
@@ -672,7 +679,10 @@ export async function attemptRoutes(app: FastifyInstance) {
     const prisma = await request.getTenantPrisma();
     const attempt = await prisma.attempt.findFirst({
       where: { id: request.params.id, userId: user.sub, status: 'in_progress' },
-      include: { submissions: true, test: { select: { config: true } } },
+      include: {
+        submissions: { include: { question: { select: { type: true } } } },
+        test: { select: { config: true, type: true } },
+      },
     });
     if (!attempt) return reply.status(404).send({ error: 'Attempt not found or already submitted' });
 
@@ -688,6 +698,10 @@ export async function attemptRoutes(app: FastifyInstance) {
       where: { id: request.params.id },
       data: { submittedAt, score: result.totalScore, maxScore: result.maxScore, status: 'submitted' },
     });
+
+    if (config.aiFeedbackEnabled && attempt.test.type === 'coding') {
+      await enqueueAiReviewsForAttempt(prisma, attempt.id, attempt.submissions);
+    }
 
     if (showResultsImmediately) {
       return reply.send({
@@ -713,4 +727,82 @@ export async function attemptRoutes(app: FastifyInstance) {
       resultsAvailable: false,
     });
   });
+
+  app.get('/:id/ai-review', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+    const user = request.user as { sub: string };
+    const prisma = await request.getTenantPrisma();
+    const attempt = await prisma.attempt.findFirst({
+      where: { id: request.params.id, userId: user.sub },
+      include: {
+        test: { select: { config: true } },
+        submissions: {
+          where: { question: { type: 'coding' } },
+          select: {
+            questionId: true,
+            aiReviewStatus: true,
+            aiReview: true,
+            aiReviewError: true,
+            aiReviewModel: true,
+            aiReviewLanguage: true,
+            aiReviewGeneratedAt: true,
+          },
+        },
+      },
+    });
+    if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
+    if (attempt.status === 'in_progress') {
+      return reply.status(400).send({ error: 'Submit the test first' });
+    }
+
+    const config = attempt.test.config as AttemptTestConfig;
+    const { showResultsImmediately } = getEffectiveShowResultsFlags(config);
+    if (!showResultsImmediately && attempt.status !== 'graded') {
+      return reply.status(403).send({ error: 'Results are not available yet' });
+    }
+
+    return reply.send({
+      reviews: attempt.submissions.map(serializeAiReviewSubmission),
+    });
+  });
+
+  app.post(
+    '/:id/ai-review/regenerate',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      await requireModuleAccess(request, 'tests', 'edit');
+      const prisma = await request.getTenantPrisma();
+      const body = (request.body ?? {}) as { questionIds?: string[] };
+
+      const attempt = await prisma.attempt.findFirst({
+        where: { id: request.params.id },
+        include: {
+          test: { select: { tenantId: true, config: true, type: true } },
+          submissions: {
+            where: { question: { type: 'coding' } },
+            select: { id: true, questionId: true, aiReviewStatus: true, code: true },
+          },
+        },
+      });
+      if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
+
+      const config = attempt.test.config as AttemptTestConfig;
+      if (!config.aiFeedbackEnabled) {
+        return reply.status(400).send({ error: 'AI feedback is not enabled for this test' });
+      }
+
+      let targets = attempt.submissions.filter(
+        (s) => s.aiReviewStatus === 'failed' || s.aiReviewStatus === null
+      );
+      if (body.questionIds?.length) {
+        const idSet = new Set(body.questionIds);
+        targets = targets.filter((s) => idSet.has(s.questionId));
+      }
+
+      const enqueued = await enqueueAiReviewRegenerate(
+        prisma,
+        targets.map((s) => s.id)
+      );
+
+      return reply.send({ message: 'AI review regeneration queued', enqueued });
+    }
+  );
 }

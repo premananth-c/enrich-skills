@@ -8,6 +8,7 @@ import Questions from './pages/Questions';
 import QuestionForm from './pages/QuestionForm';
 import Tests from './pages/Tests';
 import TestDetail from './pages/TestDetail';
+import AttemptDetail from './pages/AttemptDetail';
 import TestForm from './pages/TestForm';
 import Students from './pages/Students';
 import Batches from './pages/Batches';
@@ -66,6 +67,7 @@ export default function App() {
             <Route path="tests" element={<ModuleRoute moduleKey="tests"><Tests /></ModuleRoute>} />
             <Route path="tests/new" element={<ModuleRoute moduleKey="tests" access="edit"><TestForm /></ModuleRoute>} />
             <Route path="tests/:id" element={<ModuleRoute moduleKey="tests"><TestDetail /></ModuleRoute>} />
+            <Route path="tests/:testId/attempts/:attemptId" element={<ModuleRoute moduleKey="tests"><AttemptDetail /></ModuleRoute>} />
             <Route path="tests/:id/edit" element={<Navigate to=".." replace />} />
             <Route path="batches" element={<ModuleRoute moduleKey="batches"><Batches /></ModuleRoute>} />
             <Route path="batches/new" element={<ModuleRoute moduleKey="batches" access="edit"><BatchForm /></ModuleRoute>} />

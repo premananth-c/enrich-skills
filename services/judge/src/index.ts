@@ -13,6 +13,7 @@
 
 import 'dotenv/config';
 import './worker.js';
+import './aiReviewer.js';
 import http from 'http';
 import { runCode, type RunResult } from './runner.js';
 

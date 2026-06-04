@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
 import { api } from '../lib/api';
+import AiReviewPanel, { type AiReviewReport } from '../components/AiReviewPanel';
 
 interface ResultSubmission {
   id: string;
@@ -10,6 +11,12 @@ interface ResultSubmission {
   selectedOptionId?: string;
   status: string;
   score?: number;
+  aiReviewStatus?: string | null;
+  aiReview?: AiReviewReport | null;
+  aiReviewError?: string | null;
+  aiReviewModel?: string | null;
+  aiReviewLanguage?: string | null;
+  aiReviewGeneratedAt?: string | null;
   question: {
     id: string;
     type: string;
@@ -293,6 +300,21 @@ export default function TestResult() {
               >
                 {sub.code}
               </pre>
+              {attemptId &&
+                (result.test?.config as { aiFeedbackEnabled?: boolean })?.aiFeedbackEnabled && (
+                <AiReviewPanel
+                  attemptId={attemptId}
+                  questionId={sub.questionId}
+                  initial={{
+                    status: sub.aiReviewStatus ?? null,
+                    report: (sub.aiReview as AiReviewReport | null) ?? null,
+                    error: sub.aiReviewError ?? null,
+                    model: sub.aiReviewModel ?? null,
+                    language: sub.aiReviewLanguage ?? null,
+                    generatedAt: sub.aiReviewGeneratedAt ?? null,
+                  }}
+                />
+              )}
             </div>
           )}
         </div>
