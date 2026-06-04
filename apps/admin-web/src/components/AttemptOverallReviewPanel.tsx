@@ -103,7 +103,23 @@ export default function AttemptOverallReviewPanel({
     </button>
   ) : null;
 
-  if (!localStatus || localStatus === 'skipped') return null;
+  if (localStatus === 'skipped') return null;
+
+  if (!localStatus) {
+    return (
+      <div style={panelStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', gap: '0.5rem' }}>
+          <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Overall AI Test Review</h2>
+          {regenerateButton}
+        </div>
+        <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          No overall review yet for this attempt (common for submissions before this feature was
+          enabled). Click &quot;Regenerate overall test review&quot; to generate one from the
+          per-question AI reviews.
+        </p>
+      </div>
+    );
+  }
 
   if (localStatus === 'queued' || localStatus === 'generating') {
     return (

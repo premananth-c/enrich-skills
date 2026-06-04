@@ -61,6 +61,11 @@ export default function AttemptOverallReviewPanel({
     if (initial) setState(initial);
   }, [initial]);
 
+  // Backfill: attempts finished before overall review shipped have null status.
+  useEffect(() => {
+    if (!initial?.status) void fetchOverall();
+  }, [attemptId, initial?.status, fetchOverall]);
+
   useEffect(() => {
     const status = state?.status;
     if (status !== 'queued' && status !== 'generating') return;
@@ -76,7 +81,20 @@ export default function AttemptOverallReviewPanel({
   const report = state?.report;
   const error = state?.error;
 
-  if (!status || status === 'skipped') return null;
+  if (status === 'skipped') return null;
+
+  if (!status) {
+    return (
+      <div style={panelStyle}>
+        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.5rem' }}>Overall AI Test Review</h2>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          Overall test review has not been generated for this attempt yet. Your instructor can
+          trigger it from the admin attempt view, or it will be created automatically on newly
+          submitted tests.
+        </p>
+      </div>
+    );
+  }
 
   if (status === 'queued' || status === 'generating') {
     return (
