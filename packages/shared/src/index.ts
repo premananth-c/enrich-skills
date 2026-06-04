@@ -27,4 +27,12 @@ export * from './lib/sanitize.js';
 export * from './lib/codingLanguages.js';
 export * from './lib/outputCompare.js';
 export * from './lib/testConfig.js';
-export * from './lib/groupByTopic.js';
+export {
+  UNTAGGED_TOPIC,
+  primaryTopic,
+  groupByPrimaryTopic,
+  computeTopicAiStats,
+  formatTopicAiStatsLine,
+  type TopicGroup,
+  type TopicAiStats,
+} from './lib/groupByTopic.js';
