@@ -790,7 +790,11 @@ export async function attemptRoutes(app: FastifyInstance) {
       }
 
       let targets = attempt.submissions.filter(
-        (s) => s.aiReviewStatus === 'failed' || s.aiReviewStatus === null
+        (s) =>
+          s.aiReviewStatus === 'failed' ||
+          s.aiReviewStatus === null ||
+          s.aiReviewStatus === 'queued' ||
+          s.aiReviewStatus === 'generating'
       );
       if (body.questionIds?.length) {
         const idSet = new Set(body.questionIds);
