@@ -52,14 +52,18 @@ const cardStyle: React.CSSProperties = {
 };
 
 export default function AttemptDetail() {
-  const { id: testId, attemptId } = useParams();
+  const { testId, attemptId } = useParams();
   const { canEdit } = useAuth();
   const [data, setData] = useState<AttemptDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   const load = useCallback(async () => {
-    if (!testId || !attemptId) return;
+    if (!testId || !attemptId) {
+      setLoading(false);
+      setError('Invalid attempt URL');
+      return;
+    }
     setLoading(true);
     setError('');
     try {
