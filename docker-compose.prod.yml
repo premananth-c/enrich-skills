@@ -48,6 +48,10 @@ services:
       - DAILY_API_KEY=${DAILY_API_KEY:-}
       - DAILY_BASE_URL=${DAILY_BASE_URL:-https://api.daily.co/v1}
       - DAILY_WEBHOOK_SECRET=${DAILY_WEBHOOK_SECRET:-}
+      - OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - OPENROUTER_AI_REVIEW_MODEL=google/gemini-2.5-flash-lite
+      - OPENROUTER_REFERER=${OPENROUTER_REFERER:-https://rankership.com}
+      - OPENROUTER_APP_TITLE=${OPENROUTER_APP_TITLE:-Rankership}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     depends_on:
