@@ -1,7 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link, useLocation } from 'react-router-dom';
+import {
+  groupByPrimaryTopic,
+  computeTopicAiStats,
+  formatTopicAiStatsLine,
+  UNTAGGED_TOPIC,
+} from '@enrich-skills/shared';
 import { api } from '../lib/api';
 import AiReviewPanel, { type AiReviewReport } from '../components/AiReviewPanel';
+import AttemptOverallReviewPanel, {
+  type AttemptOverallReviewState,
+} from '../components/AttemptOverallReviewPanel';
 
 interface ResultSubmission {
   id: string;
@@ -20,6 +29,7 @@ interface ResultSubmission {
   question: {
     id: string;
     type: string;
+    tags?: string[];
     content: {
       title: string;
       description: string;
@@ -43,6 +53,7 @@ interface AttemptResult {
   percentage?: number;
   test?: { id: string; title: string; type: string; config: Record<string, unknown> };
   submissions?: ResultSubmission[];
+  overallReview?: AttemptOverallReviewState;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -165,6 +176,12 @@ export default function TestResult() {
   const scorePercent = result.maxScore ? Math.round(((result.score ?? 0) / result.maxScore) * 100) : 0;
   const passPercentage = result.passPercentage ?? 40;
   const resultStatus = result.result ?? (scorePercent >= passPercentage ? 'pass' : 'fail');
+  const submissions = result.submissions ?? [];
+  const aiEnabled = (result.test?.config as { aiFeedbackEnabled?: boolean })?.aiFeedbackEnabled === true;
+  const topicGroups = groupByPrimaryTopic(submissions, (s) => s.question.tags);
+  const showTopicHeaders =
+    topicGroups.length > 1 || (topicGroups[0]?.topic ?? UNTAGGED_TOPIC) !== UNTAGGED_TOPIC;
+  let questionIndex = 0;
 
   return (
     <div style={{ maxWidth: 800, margin: '0 auto' }}>
@@ -224,9 +241,33 @@ export default function TestResult() {
         </div>
       </div>
 
-      {/* Per-question breakdown */}
+      {aiEnabled && attemptId && (
+        <AttemptOverallReviewPanel
+          attemptId={attemptId}
+          initial={result.overallReview}
+        />
+      )}
+
+      {/* Per-question breakdown (grouped by question tags / topic) */}
       <h2 style={{ fontSize: '1.1rem', margin: '1.5rem 0 0.75rem' }}>Question Breakdown</h2>
-      {result.submissions?.map((sub, i) => (
+      {topicGroups.map((group) => {
+        const codingSubs = group.items.filter((s) => s.question.type === 'coding');
+        const topicAiStats = aiEnabled ? computeTopicAiStats(codingSubs) : null;
+        return (
+          <section key={group.topic} style={{ marginBottom: '1.25rem' }}>
+            {showTopicHeaders && (
+              <div style={{ marginBottom: '0.65rem' }}>
+                <h3 style={{ fontSize: '1rem', margin: '0 0 0.2rem', fontWeight: 600 }}>{group.topic}</h3>
+                {topicAiStats && codingSubs.length > 0 && (
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    AI reviews: {formatTopicAiStatsLine(topicAiStats)}
+                  </p>
+                )}
+              </div>
+            )}
+            {group.items.map((sub) => {
+              const i = questionIndex++;
+              return (
         <div key={sub.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.75rem', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 500, minWidth: 0, ...longTextStyle }}>Q{i + 1}: {sub.question.content.title}</span>
@@ -300,8 +341,7 @@ export default function TestResult() {
               >
                 {sub.code}
               </pre>
-              {attemptId &&
-                (result.test?.config as { aiFeedbackEnabled?: boolean })?.aiFeedbackEnabled && (
+              {attemptId && aiEnabled && (
                 <AiReviewPanel
                   attemptId={attemptId}
                   questionId={sub.questionId}
@@ -318,7 +358,11 @@ export default function TestResult() {
             </div>
           )}
         </div>
-      ))}
+              );
+            })}
+          </section>
+        );
+      })}
       <div style={{ marginTop: '1.25rem', display: 'flex', justifyContent: 'center' }}>
         <Link
           to={`/attempt/${attemptId}?review=1`}

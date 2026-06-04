@@ -14,7 +14,10 @@ import { judgeQueue } from '../lib/judgeQueue.js';
 import {
   enqueueAiReviewsForAttempt,
   enqueueAiReviewRegenerate,
+  enqueueAttemptOverallReview,
+  enqueueAttemptOverallReviewRegenerate,
   serializeAiReviewSubmission,
+  serializeAttemptOverallReview,
 } from '../lib/aiReviewEnqueue.js';
 
 type AttemptTestConfig = {
@@ -414,7 +417,7 @@ export async function attemptRoutes(app: FastifyInstance) {
           select: { id: true, title: true, type: true, config: true },
         },
         submissions: {
-          include: { question: { select: { id: true, type: true, content: true } } },
+          include: { question: { select: { id: true, type: true, content: true, tags: true } } },
         },
       },
     });
@@ -448,6 +451,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     return reply.send({
       ...attempt,
+      overallReview: serializeAttemptOverallReview(attempt),
       resultsAvailable: true,
       result: result.result,
       passPercentage: result.passPercentage,
@@ -701,6 +705,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     if (config.aiFeedbackEnabled && attempt.test.type === 'coding') {
       await enqueueAiReviewsForAttempt(prisma, attempt.id, attempt.submissions);
+      await enqueueAttemptOverallReview(prisma, attempt.id);
     }
 
     if (showResultsImmediately) {
@@ -762,8 +767,38 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     return reply.send({
       reviews: attempt.submissions.map(serializeAiReviewSubmission),
+      overall: serializeAttemptOverallReview(attempt),
     });
   });
+
+  app.post(
+    '/:id/ai-overall-review/regenerate',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      await requireModuleAccess(request, 'tests', 'edit');
+      const prisma = await request.getTenantPrisma();
+
+      const attempt = await prisma.attempt.findFirst({
+        where: { id: request.params.id },
+        include: { test: { select: { config: true, type: true } } },
+      });
+      if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
+
+      const config = attempt.test.config as AttemptTestConfig;
+      if (!config.aiFeedbackEnabled) {
+        return reply.status(400).send({ error: 'AI feedback is not enabled for this test' });
+      }
+      if (attempt.test.type !== 'coding') {
+        return reply.status(400).send({ error: 'Overall AI review applies to coding tests only' });
+      }
+
+      const queued = await enqueueAttemptOverallReviewRegenerate(prisma, attempt.id);
+      if (!queued) {
+        return reply.status(400).send({ error: 'No coding submissions to review for this attempt' });
+      }
+
+      return reply.send({ message: 'Overall test review regeneration queued' });
+    }
+  );
 
   app.post(
     '/:id/ai-review/regenerate',

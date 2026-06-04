@@ -79,3 +79,109 @@ export function serializeAiReviewSubmission(sub: {
     generatedAt: sub.aiReviewGeneratedAt,
   };
 }
+
+export function serializeAttemptOverallReview(attempt: {
+  aiOverallReviewStatus: string | null;
+  aiOverallReview: unknown;
+  aiOverallReviewError: string | null;
+  aiOverallReviewModel: string | null;
+  aiOverallReviewGeneratedAt: Date | null;
+}) {
+  return {
+    status: attempt.aiOverallReviewStatus,
+    report: attempt.aiOverallReviewStatus === 'ready' ? attempt.aiOverallReview : null,
+    error: attempt.aiOverallReviewError,
+    model: attempt.aiOverallReviewModel,
+    generatedAt: attempt.aiOverallReviewGeneratedAt,
+  };
+}
+
+const ATTEMPT_REVIEW_JOB_ID = (attemptId: string) => `attempt-review-${attemptId}`;
+
+export async function enqueueAttemptOverallReview(
+  prisma: PrismaClient,
+  attemptId: string,
+  opts?: { delayMs?: number; force?: boolean }
+): Promise<void> {
+  const attempt = await prisma.attempt.findUnique({
+    where: { id: attemptId },
+    select: {
+      aiOverallReviewStatus: true,
+      test: { select: { type: true, config: true } },
+      submissions: {
+        where: { question: { type: 'coding' } },
+        select: { code: true },
+      },
+    },
+  });
+  if (!attempt) return;
+
+  const config = attempt.test.config as { aiFeedbackEnabled?: boolean };
+  if (!config.aiFeedbackEnabled || attempt.test.type !== 'coding') return;
+
+  const hasCode = attempt.submissions.some((s) => s.code?.trim());
+  if (!hasCode) {
+    await prisma.attempt.update({
+      where: { id: attemptId },
+      data: { aiOverallReviewStatus: 'skipped', aiOverallReviewError: null },
+    });
+    return;
+  }
+
+  if (
+    !opts?.force &&
+    (attempt.aiOverallReviewStatus === 'ready' || attempt.aiOverallReviewStatus === 'generating')
+  ) {
+    return;
+  }
+
+  await prisma.attempt.update({
+    where: { id: attemptId },
+    data: {
+      aiOverallReviewStatus: 'queued',
+      aiOverallReviewError: null,
+      ...(opts?.force
+        ? {
+            aiOverallReview: Prisma.JsonNull,
+            aiOverallReviewModel: null,
+            aiOverallReviewGeneratedAt: null,
+          }
+        : {}),
+    },
+  });
+
+  await aiReviewQueue.add(
+    'attempt-review',
+    { attemptId },
+    {
+      jobId: ATTEMPT_REVIEW_JOB_ID(attemptId),
+      delay: opts?.delayMs ?? 45_000,
+      attempts: 10,
+      backoff: { type: 'exponential', delay: 12_000 },
+    }
+  );
+}
+
+export async function enqueueAttemptOverallReviewRegenerate(
+  prisma: PrismaClient,
+  attemptId: string
+): Promise<boolean> {
+  const attempt = await prisma.attempt.findUnique({
+    where: { id: attemptId },
+    include: {
+      test: { select: { type: true, config: true } },
+      submissions: {
+        where: { question: { type: 'coding' } },
+        select: { code: true },
+      },
+    },
+  });
+  if (!attempt) return false;
+
+  const config = attempt.test.config as { aiFeedbackEnabled?: boolean };
+  if (!config.aiFeedbackEnabled || attempt.test.type !== 'coding') return false;
+  if (!attempt.submissions.some((s) => s.code?.trim())) return false;
+
+  await enqueueAttemptOverallReview(prisma, attemptId, { force: true, delayMs: 0 });
+  return true;
+}

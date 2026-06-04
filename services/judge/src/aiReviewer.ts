@@ -1,7 +1,11 @@
-import { Worker, Job } from 'bullmq';
+import { Worker, Job, Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import { aiReviewPayloadSchema } from '@enrich-skills/shared';
 import { openRouterChatWithFallback } from './openrouter.js';
+import {
+  maybeScheduleAttemptOverallReview,
+  processAttemptOverallReview,
+} from './aiAttemptReviewer.js';
 
 const prisma = new PrismaClient();
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -152,6 +156,9 @@ async function processAiReview(job: Job<AiReviewJobData>) {
     });
 
     console.log(`[AI Review] Submission ${submissionId} ready (model=${model})`);
+
+    const attemptId = submission.attemptId;
+    await maybeScheduleAttemptOverallReview(attemptId, aiReviewQueue);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const isLastAttempt = (job.opts.attempts ?? 1) <= job.attemptsMade;
@@ -183,11 +190,22 @@ const redisConnection = (() => {
   }
 })();
 
-const worker = new Worker('ai-review', processAiReview, {
-  connection: redisConnection,
-  concurrency: 2,
-  limiter: { max: 10, duration: 60_000 },
-});
+const aiReviewQueue = new Queue('ai-review', { connection: redisConnection });
+
+const worker = new Worker(
+  'ai-review',
+  async (job: Job) => {
+    if (job.name === 'attempt-review') {
+      return processAttemptOverallReview(job as Job<{ attemptId: string }>);
+    }
+    return processAiReview(job as Job<AiReviewJobData>);
+  },
+  {
+    connection: redisConnection,
+    concurrency: 2,
+    limiter: { max: 10, duration: 60_000 },
+  }
+);
 
 worker.on('completed', (job) => {
   console.log(`[AI Review] Job ${job.id} completed`);

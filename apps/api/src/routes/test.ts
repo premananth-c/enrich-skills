@@ -1,6 +1,7 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createTestSchema, updateTestSchema } from '@enrich-skills/shared';
+import { serializeAttemptOverallReview } from '../lib/aiReviewEnqueue.js';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
 
@@ -248,7 +249,7 @@ export async function testRoutes(app: FastifyInstance) {
           user: { select: { id: true, name: true, email: true } },
           submissions: {
             include: {
-              question: { select: { id: true, type: true, content: true, difficulty: true } },
+              question: { select: { id: true, type: true, content: true, difficulty: true, tags: true } },
               testCaseResults: {
                 include: {
                   testCase: {
@@ -262,7 +263,13 @@ export async function testRoutes(app: FastifyInstance) {
       });
       if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
 
-      return reply.send({ test, attempt });
+      return reply.send({
+        test,
+        attempt: {
+          ...attempt,
+          overallReview: serializeAttemptOverallReview(attempt),
+        },
+      });
     }
   );
 

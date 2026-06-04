@@ -9,6 +9,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@enrich-skills/shared": "workspace:*",
     "@monaco-editor/react": "^4.6.0",
     "dompurify": "^3.3.1",
     "pdfjs-dist": "^5.5.207",

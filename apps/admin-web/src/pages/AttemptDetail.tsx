@@ -1,9 +1,18 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useParams, Link } from 'react-router-dom';
+import {
+  groupByPrimaryTopic,
+  computeTopicAiStats,
+  formatTopicAiStatsLine,
+  UNTAGGED_TOPIC,
+} from '@enrich-skills/shared';
 import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 import { formatStatusLabel } from '../lib/status';
 import AiReviewPanel, { type AiReviewReport } from '../components/AiReviewPanel';
+import AttemptOverallReviewPanel, {
+  type AttemptOverallReviewReport,
+} from '../components/AttemptOverallReviewPanel';
 
 interface SubmissionDetail {
   id: string;
@@ -20,6 +29,7 @@ interface SubmissionDetail {
   question: {
     id: string;
     type: string;
+    tags?: string[];
     content: { title?: string; description?: string };
     difficulty: string;
   };
@@ -40,6 +50,13 @@ interface AttemptDetailData {
     status: string;
     user: { id: string; name: string; email: string | null };
     submissions: SubmissionDetail[];
+    overallReview?: {
+      status: string | null;
+      report: AttemptOverallReviewReport | null;
+      error: string | null;
+      model: string | null;
+      generatedAt: string | null;
+    };
   };
 }
 
@@ -110,6 +127,10 @@ export default function AttemptDetail() {
   const { test, attempt } = data;
   const aiEnabled = test.config?.aiFeedbackEnabled === true;
   const canRegenerate = canEdit('tests') && aiEnabled;
+  const topicGroups = groupByPrimaryTopic(attempt.submissions, (s) => s.question.tags);
+  const showTopicHeaders =
+    topicGroups.length > 1 || (topicGroups[0]?.topic ?? UNTAGGED_TOPIC) !== UNTAGGED_TOPIC;
+  let questionIndex = 0;
 
   return (
     <div>
@@ -131,8 +152,36 @@ export default function AttemptDetail() {
         )}
       </p>
 
+      {aiEnabled && attemptId && (
+        <AttemptOverallReviewPanel
+          attemptId={attemptId}
+          status={attempt.overallReview?.status ?? null}
+          report={(attempt.overallReview?.report as AttemptOverallReviewReport | null) ?? null}
+          error={attempt.overallReview?.error}
+          canRegenerate={canRegenerate}
+          onRefreshed={refresh}
+        />
+      )}
+
       <h2 style={{ fontSize: '1.1rem', marginBottom: '0.75rem' }}>Submissions</h2>
-      {attempt.submissions.map((sub, i) => (
+      {topicGroups.map((group) => {
+        const codingSubs = group.items.filter((s) => s.question.type === 'coding');
+        const topicAiStats = aiEnabled ? computeTopicAiStats(codingSubs) : null;
+        return (
+          <section key={group.topic} style={{ marginBottom: '1.25rem' }}>
+            {showTopicHeaders && (
+              <div style={{ marginBottom: '0.65rem' }}>
+                <h3 style={{ fontSize: '1rem', margin: '0 0 0.2rem', fontWeight: 600 }}>{group.topic}</h3>
+                {topicAiStats && codingSubs.length > 0 && (
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: 'var(--color-text-muted)' }}>
+                    AI reviews: {formatTopicAiStatsLine(topicAiStats)}
+                  </p>
+                )}
+              </div>
+            )}
+            {group.items.map((sub) => {
+              const i = questionIndex++;
+              return (
         <div key={sub.id} style={cardStyle}>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.5rem' }}>
             <span style={{ fontWeight: 600 }}>
@@ -197,7 +246,11 @@ export default function AttemptDetail() {
             </p>
           )}
         </div>
-      ))}
+              );
+            })}
+          </section>
+        );
+      })}
     </div>
   );
 }
