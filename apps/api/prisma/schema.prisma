@@ -216,6 +216,11 @@ model Attempt {
   status      String    @default("in_progress") // in_progress, submitted, graded
   /// When the test has shuffle enabled, question IDs in display order for this attempt (JSON array of UUID strings).
   questionOrder Json?
+  aiOverallReview            Json?
+  aiOverallReviewStatus      String?
+  aiOverallReviewError       String?
+  aiOverallReviewModel       String?
+  aiOverallReviewGeneratedAt DateTime?
 
   user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   test        Test         @relation(fields: [testId], references: [id], onDelete: Cascade)

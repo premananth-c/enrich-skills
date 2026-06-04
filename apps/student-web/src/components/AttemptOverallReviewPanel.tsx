@@ -1,0 +1,181 @@
+import { useEffect, useState, useCallback } from 'react';
+import { api } from '../lib/api';
+
+export interface AttemptTopicInsight {
+  topic: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  trend?: string;
+}
+
+export interface AttemptOverallReviewReport {
+  overallSummary: string;
+  performanceTrend: string;
+  topicInsights: AttemptTopicInsight[];
+  overallStrengths: string[];
+  overallWeaknesses: string[];
+  recommendations: string[];
+}
+
+export interface AttemptOverallReviewState {
+  status: string | null;
+  report: AttemptOverallReviewReport | null;
+  error: string | null;
+  model: string | null;
+  generatedAt: string | null;
+}
+
+interface AttemptOverallReviewPanelProps {
+  attemptId: string;
+  initial?: AttemptOverallReviewState;
+}
+
+const panelStyle: React.CSSProperties = {
+  marginTop: '1.25rem',
+  marginBottom: '1.25rem',
+  padding: '1.25rem',
+  background: 'var(--color-surface)',
+  border: '1px solid var(--color-border)',
+  borderRadius: '10px',
+};
+
+export default function AttemptOverallReviewPanel({
+  attemptId,
+  initial,
+}: AttemptOverallReviewPanelProps) {
+  const [state, setState] = useState<AttemptOverallReviewState | null>(initial ?? null);
+
+  const fetchOverall = useCallback(async () => {
+    try {
+      const res = await api<{ overall: AttemptOverallReviewState }>(
+        `/attempts/${attemptId}/ai-review`
+      );
+      if (res.overall) setState(res.overall);
+    } catch {
+      // ignore poll errors
+    }
+  }, [attemptId]);
+
+  useEffect(() => {
+    if (initial) setState(initial);
+  }, [initial]);
+
+  useEffect(() => {
+    const status = state?.status;
+    if (status !== 'queued' && status !== 'generating') return;
+    const t = setInterval(() => void fetchOverall(), 4000);
+    const stop = setTimeout(() => clearInterval(t), 120_000);
+    return () => {
+      clearInterval(t);
+      clearTimeout(stop);
+    };
+  }, [state?.status, fetchOverall]);
+
+  const status = state?.status;
+  const report = state?.report;
+  const error = state?.error;
+
+  if (!status || status === 'skipped') return null;
+
+  if (status === 'queued' || status === 'generating') {
+    return (
+      <div style={panelStyle}>
+        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.5rem' }}>Overall AI Test Review</h2>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          Generating your overall performance report…
+        </p>
+      </div>
+    );
+  }
+
+  if (status === 'failed') {
+    return (
+      <div style={panelStyle}>
+        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.5rem' }}>Overall AI Test Review</h2>
+        <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+          Overall review could not be generated{error ? `: ${error}` : '.'}
+        </p>
+      </div>
+    );
+  }
+
+  if (!report) return null;
+
+  return (
+    <div style={panelStyle}>
+      <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.75rem' }}>Overall AI Test Review</h2>
+      <p style={{ margin: '0 0 1rem', fontSize: '0.95rem', lineHeight: 1.5 }}>{report.overallSummary}</p>
+      {report.performanceTrend && (
+        <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+          <strong>Trend:</strong> {report.performanceTrend}
+        </p>
+      )}
+
+      {report.topicInsights.length > 0 && (
+        <div style={{ marginBottom: '1rem' }}>
+          <h3 style={{ fontSize: '1rem', margin: '0 0 0.5rem' }}>By topic</h3>
+          {report.topicInsights.map((topic) => (
+            <div
+              key={topic.topic}
+              style={{
+                marginBottom: '0.75rem',
+                padding: '0.75rem',
+                background: 'var(--color-bg)',
+                borderRadius: '8px',
+                border: '1px solid var(--color-border)',
+              }}
+            >
+              <div style={{ fontWeight: 600, marginBottom: '0.25rem' }}>
+                {topic.topic}
+                {topic.trend ? (
+                  <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                    {' '}
+                    · {topic.trend}
+                  </span>
+                ) : null}
+              </div>
+              <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>{topic.summary}</p>
+              {topic.strengths.length > 0 && (
+                <div style={{ fontSize: '0.85rem', color: '#22c55e', marginBottom: '0.25rem' }}>
+                  Strengths: {topic.strengths.join(' · ')}
+                </div>
+              )}
+              {topic.weaknesses.length > 0 && (
+                <div style={{ fontSize: '0.85rem', color: '#f59e0b' }}>
+                  Focus areas: {topic.weaknesses.join(' · ')}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      <InsightList title="Overall strengths" items={report.overallStrengths} color="#22c55e" />
+      <InsightList title="Areas to improve" items={report.overallWeaknesses} color="#f59e0b" />
+      <InsightList title="Recommendations" items={report.recommendations} />
+    </div>
+  );
+}
+
+function InsightList({
+  title,
+  items,
+  color,
+}: {
+  title: string;
+  items: string[];
+  color?: string;
+}) {
+  if (items.length === 0) return null;
+  return (
+    <div style={{ marginBottom: '0.75rem' }}>
+      <div style={{ fontWeight: 600, fontSize: '0.9rem', color, marginBottom: '0.25rem' }}>{title}</div>
+      <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9rem' }}>
+        {items.map((item, i) => (
+          <li key={i}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
