@@ -233,6 +233,12 @@ model Submission {
   status          String   @default("pending") // pending, running, passed, failed, error
   score           Float?
   aiRatings       Json?
+  aiReview            Json?
+  aiReviewStatus      String?
+  aiReviewError       String?
+  aiReviewModel       String?
+  aiReviewLanguage    String?
+  aiReviewGeneratedAt DateTime?
   output          String?
   errorMessage    String?
   executionDetails Json?

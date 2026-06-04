@@ -13,6 +13,7 @@ import {
   monacoLanguageForCodingId,
 } from '../lib/codingLanguagesUi';
 import { getEffectiveShowResultsFlags } from '../lib/testConfig';
+import AiReviewPanel, { type AiReviewReport } from '../components/AiReviewPanel';
 
 function defaultCodeForLang(lang: string): string {
   return DEFAULT_CODE_TEMPLATES[lang as CodingLanguageId] ?? DEFAULT_CODE_TEMPLATES.python;
@@ -40,6 +41,12 @@ interface Submission {
   selectedOptionId?: string;
   status: string;
   score?: number;
+  aiReviewStatus?: string | null;
+  aiReview?: AiReviewReport | null;
+  aiReviewError?: string | null;
+  aiReviewModel?: string | null;
+  aiReviewLanguage?: string | null;
+  aiReviewGeneratedAt?: string | null;
 }
 
 interface RunResult {
@@ -64,6 +71,7 @@ interface AttemptData {
       showResultsImmediately?: boolean;
       restrictBrowserDuringTest?: boolean;
       codingLanguage?: string;
+      aiFeedbackEnabled?: boolean;
     };
     testQuestions: { question: Question; order: number }[];
   };
@@ -785,6 +793,23 @@ export default function TestAttempt() {
                   ))}
                 </div>
               )}
+              {isReview &&
+                attempt.test.config?.aiFeedbackEnabled &&
+                attemptId &&
+                submission && (
+                  <AiReviewPanel
+                    attemptId={attemptId}
+                    questionId={qId}
+                    initial={{
+                      status: submission.aiReviewStatus ?? null,
+                      report: submission.aiReview ?? null,
+                      error: submission.aiReviewError ?? null,
+                      model: submission.aiReviewModel ?? null,
+                      language: submission.aiReviewLanguage ?? null,
+                      generatedAt: submission.aiReviewGeneratedAt ?? null,
+                    }}
+                  />
+                )}
             </>
           )}
         </div>
