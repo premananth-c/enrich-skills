@@ -17,7 +17,8 @@ interface AiReviewPanelProps {
   report: AiReviewReport | null;
   error?: string | null;
   canRegenerate?: boolean;
-  onRegenerated?: () => void;
+  /** Silent refresh of attempt detail (no full-page loading). */
+  onRefreshed?: () => void;
 }
 
 const panelStyle: React.CSSProperties = {
@@ -42,7 +43,7 @@ export default function AiReviewPanel({
   report,
   error,
   canRegenerate,
-  onRegenerated,
+  onRefreshed,
 }: AiReviewPanelProps) {
   const [regenerating, setRegenerating] = useState(false);
   const [localStatus, setLocalStatus] = useState(status);
@@ -59,7 +60,7 @@ export default function AiReviewPanel({
         body: JSON.stringify({ questionIds: [questionId] }),
       });
       setLocalStatus('queued');
-      onRegenerated?.();
+      onRefreshed?.();
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to queue regeneration');
     } finally {
@@ -69,13 +70,38 @@ export default function AiReviewPanel({
 
   useEffect(() => {
     if (localStatus !== 'queued' && localStatus !== 'generating') return;
-    const t = setInterval(() => onRegenerated?.(), 4000);
+    const t = setInterval(() => onRefreshed?.(), 4000);
     const stop = setTimeout(() => clearInterval(t), 60_000);
     return () => {
       clearInterval(t);
       clearTimeout(stop);
     };
-  }, [localStatus, onRegenerated]);
+  }, [localStatus, onRefreshed]);
+
+  const showRegenerate =
+    canRegenerate &&
+    (localStatus === 'failed' ||
+      localStatus == null ||
+      localStatus === 'queued' ||
+      localStatus === 'generating');
+
+  const regenerateButton = showRegenerate ? (
+    <button
+      type="button"
+      onClick={handleRegenerate}
+      disabled={regenerating}
+      style={{
+        padding: '0.3rem 0.6rem',
+        fontSize: '0.8rem',
+        border: '1px solid var(--color-border)',
+        borderRadius: 4,
+        cursor: regenerating ? 'wait' : 'pointer',
+        flexShrink: 0,
+      }}
+    >
+      {regenerating ? 'Queuing…' : localStatus === 'generating' || localStatus === 'queued' ? 'Retry' : 'Regenerate'}
+    </button>
+  ) : null;
 
   if (!localStatus || localStatus === 'skipped') {
     return (
@@ -91,9 +117,12 @@ export default function AiReviewPanel({
   if (localStatus === 'queued' || localStatus === 'generating') {
     return (
       <div style={panelStyle}>
-        <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>AI Code Review</div>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
+          <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>AI Code Review</div>
+          {regenerateButton}
+        </div>
         <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-          Generating review…
+          Generating review… (updates every few seconds)
         </p>
       </div>
     );
@@ -104,22 +133,7 @@ export default function AiReviewPanel({
       <div style={panelStyle}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem' }}>
           <div style={{ fontWeight: 600, marginBottom: '0.35rem' }}>AI Code Review</div>
-          {canRegenerate && (
-            <button
-              type="button"
-              onClick={handleRegenerate}
-              disabled={regenerating}
-              style={{
-                padding: '0.3rem 0.6rem',
-                fontSize: '0.8rem',
-                border: '1px solid var(--color-border)',
-                borderRadius: 4,
-                cursor: regenerating ? 'wait' : 'pointer',
-              }}
-            >
-              {regenerating ? 'Queuing…' : 'Regenerate'}
-            </button>
-          )}
+          {regenerateButton}
         </div>
         <p style={{ margin: 0, color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
           Review failed{error ? `: ${error}` : '.'}
@@ -134,22 +148,7 @@ export default function AiReviewPanel({
     <div style={panelStyle}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.5rem' }}>
         <div style={{ fontWeight: 600 }}>AI Code Review</div>
-        {canRegenerate && (
-          <button
-            type="button"
-            onClick={handleRegenerate}
-            disabled={regenerating}
-            style={{
-              padding: '0.3rem 0.6rem',
-              fontSize: '0.8rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: 4,
-              cursor: regenerating ? 'wait' : 'pointer',
-            }}
-          >
-            {regenerating ? 'Queuing…' : 'Regenerate'}
-          </button>
-        )}
+        {regenerateButton}
       </div>
       <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.45 }}>{report.overallSummary}</p>
 

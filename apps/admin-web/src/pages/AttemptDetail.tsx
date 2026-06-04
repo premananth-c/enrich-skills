@@ -58,26 +58,34 @@ export default function AttemptDetail() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (opts?: { silent?: boolean }) => {
     if (!testId || !attemptId) {
       setLoading(false);
       setError('Invalid attempt URL');
       return;
     }
-    setLoading(true);
-    setError('');
+    if (!opts?.silent) {
+      setLoading(true);
+      setError('');
+    }
     try {
       const res = await api<AttemptDetailData>(
-        `/tests/${testId}/attempts/${attemptId}/detail`
+        `/tests/${testId}/attempts/${attemptId}/detail`,
+        { silent: true }
       );
       setData(res);
+      setError('');
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed to load attempt');
-      setData(null);
+      if (!opts?.silent) {
+        setError(e instanceof Error ? e.message : 'Failed to load attempt');
+        setData(null);
+      }
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [testId, attemptId]);
+
+  const refresh = useCallback(() => load({ silent: true }), [load]);
 
   useEffect(() => {
     void load();
@@ -176,11 +184,8 @@ export default function AttemptDetail() {
                   status={sub.aiReviewStatus}
                   report={sub.aiReview}
                   error={sub.aiReviewError}
-                  canRegenerate={
-                    canRegenerate &&
-                    (sub.aiReviewStatus === 'failed' || sub.aiReviewStatus == null)
-                  }
-                  onRegenerated={load}
+                  canRegenerate={canRegenerate}
+                  onRefreshed={refresh}
                 />
               )}
             </>
