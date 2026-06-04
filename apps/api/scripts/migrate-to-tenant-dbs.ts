@@ -210,6 +210,23 @@ async function main() {
     const target = new TenantPrisma({ datasources: { db: { url: targetUrl } } });
 
     try {
+      // Ensure the target tenant DB has its own Tenant row before we insert
+      // anything that FKs to it (User, Test, Course, Batch, …). provisionTenant
+      // creates the database and runs migrations, but does NOT seed this row,
+      // so without this step the very first user insert hits P2003
+      // `User_tenantId_fkey`.
+      await target.tenant.upsert({
+        where: { id: args.tenantId },
+        update: { name: tenant.name, slug: tenant.slug, status: 'active' },
+        create: {
+          id: args.tenantId,
+          name: tenant.name,
+          slug: tenant.slug,
+          status: 'active',
+        },
+      });
+      console.log(`  Tenant row in target DB ensured: ${tenant.slug} (${args.tenantId})`);
+
       // For each model we copy, we record the ids of the rows we read from
       // the source. Subsequent `fk-scoped` steps filter their parent FK to
       // this set, so we only carry across children of rows we actually

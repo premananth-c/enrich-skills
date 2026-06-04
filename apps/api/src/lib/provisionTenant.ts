@@ -17,6 +17,7 @@ import { randomBytes } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Client as PgClient } from 'pg';
+import { PrismaClient as TenantPrisma } from '@prisma/client';
 import { controlPrisma } from './controlPrisma.js';
 import { encryptSecret } from './crypto.js';
 
@@ -149,6 +150,33 @@ export async function provisionTenant(input: ProvisionTenantInput): Promise<Prov
       await logProvisionStep(tenant.id, 'run_migrations', 'succeeded');
     } catch (err) {
       await logProvisionStep(tenant.id, 'run_migrations', 'failed', { error: String(err) });
+      throw err;
+    }
+
+    // 4b) Seed the tenant DB's own Tenant row. The tenant schema has FKs from
+    //     User/Test/Course/Batch/… → Tenant(id), so without this row the very
+    //     first insert into the new DB hits a P2003 FK violation. Use the same
+    //     id as the control-plane tenant so JWT `tenantId` claims match.
+    await logProvisionStep(tenant.id, 'seed_tenant_row', 'pending');
+    try {
+      const tenantClient = new TenantPrisma({ datasources: { db: { url: tenantUrl } } });
+      try {
+        await tenantClient.tenant.upsert({
+          where: { id: tenant.id },
+          update: { name: input.name, slug: input.slug, status: 'active' },
+          create: {
+            id: tenant.id,
+            name: input.name,
+            slug: input.slug,
+            status: 'active',
+          },
+        });
+      } finally {
+        await tenantClient.$disconnect();
+      }
+      await logProvisionStep(tenant.id, 'seed_tenant_row', 'succeeded');
+    } catch (err) {
+      await logProvisionStep(tenant.id, 'seed_tenant_row', 'failed', { error: String(err) });
       throw err;
     }
 
