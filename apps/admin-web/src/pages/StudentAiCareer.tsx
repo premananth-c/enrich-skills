@@ -100,6 +100,19 @@ export default function StudentAiCareer() {
     setRegenerating(true);
     try {
       await api(`/users/${studentId}/ai-career-review/regenerate`, { method: 'POST' });
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              careerReview: {
+                ...prev.careerReview,
+                status: 'queued',
+                report: null,
+                error: null,
+              },
+            }
+          : prev
+      );
       await load({ silent: true });
     } catch (e) {
       alert(e instanceof Error ? e.message : 'Failed to queue report');
@@ -107,6 +120,13 @@ export default function StudentAiCareer() {
       setRegenerating(false);
     }
   };
+
+  const status = data?.careerReview.status ?? null;
+  const showRegenerateLabel =
+    status === 'ready' ||
+    status === 'failed' ||
+    status === 'queued' ||
+    status === 'generating';
 
   if (loading) {
     return <div style={{ padding: '2rem', color: 'var(--color-text-muted)' }}>Loading…</div>;
@@ -156,7 +176,7 @@ export default function StudentAiCareer() {
           >
             {regenerating
               ? 'Queuing…'
-              : careerReview.status === 'ready'
+              : showRegenerateLabel
                 ? 'Regenerate career comparison report'
                 : 'Generate career comparison report'}
           </button>
@@ -168,6 +188,15 @@ export default function StudentAiCareer() {
           Cross-test AI career comparison
         </h2>
 
+        {careerReview.status && (
+          <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+            Status: <strong>{careerReview.status}</strong>
+            {careerReview.generatedAt &&
+              careerReview.status === 'ready' &&
+              ` · Generated ${new Date(careerReview.generatedAt).toLocaleString()}`}
+          </p>
+        )}
+
         {!careerReview.status && (
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
             No report yet. Generate one to compare this student across all coding tests they have taken.
@@ -176,13 +205,15 @@ export default function StudentAiCareer() {
 
         {(careerReview.status === 'queued' || careerReview.status === 'generating') && (
           <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            Generating career comparison report…
+            Generating career comparison report… (auto-refreshes every few seconds). If this stays
+            longer than 2 minutes, click Regenerate.
           </p>
         )}
 
         {careerReview.status === 'failed' && (
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
-            Report failed{careerReview.error ? `: ${careerReview.error}` : '.'}
+          <p style={{ margin: 0, color: '#ef4444' }}>
+            Report failed{careerReview.error ? `: ${careerReview.error}` : '.'} Click Regenerate to
+            retry.
           </p>
         )}
 
