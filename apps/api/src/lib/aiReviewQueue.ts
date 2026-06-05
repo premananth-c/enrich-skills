@@ -49,4 +49,13 @@ export const aiReviewQueue = {
     }
     return queue.add(...args);
   },
+  /** Remove a prior job so regenerate can re-queue with the same jobId. */
+  removeJobIfExists: async (jobId: string): Promise<void> => {
+    const queue = getAiReviewQueue();
+    if (!queue) return;
+    const existing = await queue.getJob(jobId);
+    if (existing) {
+      await existing.remove();
+    }
+  },
 };

@@ -172,11 +172,16 @@ export async function enqueueAttemptOverallReview(
     },
   });
 
+  const jobId = ATTEMPT_REVIEW_JOB_ID(attemptId);
+  if (opts?.force) {
+    await aiReviewQueue.removeJobIfExists(jobId);
+  }
+
   await aiReviewQueue.add(
     'attempt-review',
     { attemptId },
     {
-      jobId: ATTEMPT_REVIEW_JOB_ID(attemptId),
+      jobId,
       delay: opts?.delayMs ?? 45_000,
       attempts: 10,
       backoff: { type: 'exponential', delay: 12_000 },
@@ -260,15 +265,28 @@ export async function enqueueCareerReviewRegenerate(
     },
   });
 
-  await aiReviewQueue.add(
+  const jobId = CAREER_REVIEW_JOB_ID(userId);
+  await aiReviewQueue.removeJobIfExists(jobId);
+
+  const job = await aiReviewQueue.add(
     'career-review',
     { userId },
     {
-      jobId: CAREER_REVIEW_JOB_ID(userId),
+      jobId,
       attempts: 3,
       backoff: { type: 'exponential', delay: 15_000 },
     }
   );
+  if (!job) {
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        aiCareerReviewStatus: 'failed',
+        aiCareerReviewError: 'AI review queue unavailable (REDIS_URL)',
+      },
+    });
+    return { queued: false, codingAttempts };
+  }
 
   return { queued: true, codingAttempts };
 }
