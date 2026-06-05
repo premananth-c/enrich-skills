@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react';
+import { formatDuration } from '@enrich-skills/shared';
 import { api } from '../lib/api';
 
 export interface AiReviewReport {
@@ -18,6 +19,7 @@ export interface AiReviewState {
   model: string | null;
   language: string | null;
   generatedAt: string | null;
+  timeSpentSeconds?: number | null;
 }
 
 interface AiReviewPanelProps {
@@ -25,8 +27,9 @@ interface AiReviewPanelProps {
   questionId: string;
   initial?: Pick<
     AiReviewState,
-    'status' | 'report' | 'error' | 'model' | 'language' | 'generatedAt'
+    'status' | 'report' | 'error' | 'model' | 'language' | 'generatedAt' | 'timeSpentSeconds'
   >;
+  timeSpentSeconds?: number | null;
   pollWhenPending?: boolean;
 }
 
@@ -49,6 +52,7 @@ export default function AiReviewPanel({
   attemptId,
   questionId,
   initial,
+  timeSpentSeconds: timeSpentProp,
   pollWhenPending = true,
 }: AiReviewPanelProps) {
   const [state, setState] = useState<AiReviewState | null>(
@@ -132,9 +136,16 @@ export default function AiReviewPanel({
 
   if (!report) return null;
 
+  const timeSpent = timeSpentProp ?? state?.timeSpentSeconds ?? null;
+
   return (
     <div style={panelStyle}>
       <div style={{ fontWeight: 600, marginBottom: '0.5rem' }}>AI Code Review</div>
+      {timeSpent != null && (
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          Time to submit this question: <strong>{formatDuration(timeSpent)}</strong>
+        </p>
+      )}
       <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.45 }}>{report.overallSummary}</p>
 
       <div

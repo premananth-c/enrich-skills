@@ -2,7 +2,11 @@ import { Job, Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
 import {
   aiAttemptReviewPayloadSchema,
+  computeQuestionTimings,
+  computeTotalTestSeconds,
+  formatDuration,
   primaryTopic,
+  timingByQuestionId,
   type AiReviewPayload,
 } from '@enrich-skills/shared';
 import { openRouterChatWithFallback } from './openrouter.js';
@@ -19,24 +23,36 @@ function buildAttemptReviewPrompt(
   testTitle: string,
   score: number | null,
   maxScore: number | null,
+  totalTestSeconds: number | null,
   questions: Array<{
     title: string;
     topic: string;
     difficulty: string;
     submissionStatus: string;
     score: number | null;
+    timeSpentSeconds: number | null;
     aiReview: AiReviewPayload | null;
     aiReviewStatus: string | null;
-  }>
+  }>,
+  languages: string[]
 ): { system: string; user: string } {
   const scoreLine =
     score != null && maxScore != null && maxScore > 0
       ? `Score: ${score} / ${maxScore} (${Math.round((score / maxScore) * 100)}%)`
       : 'Score: not available';
 
+  const totalTimeLine =
+    totalTestSeconds != null
+      ? `Total test time: ${formatDuration(totalTestSeconds)} (${totalTestSeconds}s)`
+      : 'Total test time: not available';
+
   const questionBlocks = questions
     .map((q, i) => {
       const review = q.aiReview;
+      const timeLine =
+        q.timeSpentSeconds != null
+          ? `Time on question: ${formatDuration(q.timeSpentSeconds)} (${q.timeSpentSeconds}s)`
+          : 'Time on question: not recorded';
       const reviewBlock = review
         ? `Per-question AI review:
   Summary: ${review.overallSummary}
@@ -48,32 +64,37 @@ function buildAttemptReviewPrompt(
       return `Q${i + 1} [Topic: ${q.topic}] [${q.difficulty}]
 Title: ${q.title}
 Result: ${q.submissionStatus}${q.score != null ? ` (score ${q.score})` : ''}
+${timeLine}
 ${reviewBlock}`;
     })
     .join('\n\n');
 
   const system = `You are a senior engineering mentor writing a consolidated performance report for a coding assessment.
-Use the per-question results and AI reviews below. Group insights by topic/tag.
+Use per-question results, timing, and AI reviews. Group insights by topic/tag.
+Comment on time management — especially if easy questions took disproportionately long.
+Include job-readiness learning paths based on languages used: ${languages.join(', ') || 'unknown'}.
 Respond with a single JSON object only (no markdown fences) matching this schema:
 {
-  "overallSummary": string (3-5 sentences on overall performance),
-  "performanceTrend": string (1-3 sentences on patterns across the attempt),
-  "topicInsights": [
-    {
-      "topic": string,
-      "summary": string (2-3 sentences for this topic),
-      "strengths": string[] (2-4 items),
-      "weaknesses": string[] (2-4 items),
-      "trend": string (optional, e.g. "strong", "mixed", "needs focus")
-    }
-  ],
-  "overallStrengths": string[] (3-6 cross-topic strengths),
-  "overallWeaknesses": string[] (3-6 cross-topic weaknesses),
+  "overallSummary": string (3-5 sentences),
+  "performanceTrend": string (1-3 sentences),
+  "topicInsights": [{ "topic": string, "summary": string, "strengths": string[], "weaknesses": string[], "trend": string }],
+  "overallStrengths": string[] (3-6),
+  "overallWeaknesses": string[] (3-6),
+  "improvementAreas": string[] (3-6 skill gaps),
+  "additionalLearning": string[] (4-8 topics/courses/projects for employability in current market),
+  "jobReadinessNote": string (2-4 sentences on job market fit for their language stack),
+  "timeAnalysis": {
+    "totalTimeSeconds": number (use provided total),
+    "summary": string (time management assessment),
+    "observations": string[] (2-5, note easy vs hard question timing)
+  },
   "recommendations": string[] (4-8 actionable next steps)
 }`;
 
   const user = `Test: ${testTitle}
 ${scoreLine}
+${totalTimeLine}
+Languages: ${languages.join(', ') || '—'}
 
 Questions:
 ${questionBlocks}`;
@@ -136,6 +157,14 @@ export async function processAttemptOverallReview(job: Job<AttemptReviewJobData>
   });
 
   try {
+    const timingMap = timingByQuestionId(
+      computeQuestionTimings(attempt.startedAt, codingSubs)
+    );
+    const totalTestSeconds = computeTotalTestSeconds(attempt.startedAt, attempt.submittedAt);
+    const languages = [
+      ...new Set(codingSubs.map((s) => s.language).filter((l): l is string => Boolean(l))),
+    ];
+
     const questions = codingSubs.map((s) => {
       const content = s.question.content as { title?: string };
       return {
@@ -144,6 +173,7 @@ export async function processAttemptOverallReview(job: Job<AttemptReviewJobData>
         difficulty: s.question.difficulty,
         submissionStatus: s.status,
         score: s.score,
+        timeSpentSeconds: timingMap.get(s.questionId) ?? null,
         aiReview:
           s.aiReviewStatus === 'ready' && s.aiReview
             ? (s.aiReview as AiReviewPayload)
@@ -156,7 +186,9 @@ export async function processAttemptOverallReview(job: Job<AttemptReviewJobData>
       attempt.test.title,
       attempt.score,
       attempt.maxScore,
-      questions
+      totalTestSeconds,
+      questions,
+      languages
     );
 
     const { content, model } = await openRouterChatWithFallback({
@@ -166,7 +198,7 @@ export async function processAttemptOverallReview(job: Job<AttemptReviewJobData>
       ],
       jsonMode: true,
       temperature: 0.25,
-      maxTokens: 1400,
+      maxTokens: 1800,
     });
 
     let parsed: unknown;
@@ -181,10 +213,18 @@ export async function processAttemptOverallReview(job: Job<AttemptReviewJobData>
       throw new Error(`AI response schema invalid: ${validated.error.message.slice(0, 300)}`);
     }
 
+    const report = {
+      ...validated.data,
+      timeAnalysis: {
+        ...validated.data.timeAnalysis,
+        totalTimeSeconds: totalTestSeconds ?? validated.data.timeAnalysis.totalTimeSeconds,
+      },
+    };
+
     await prisma.attempt.update({
       where: { id: attemptId },
       data: {
-        aiOverallReview: validated.data,
+        aiOverallReview: report,
         aiOverallReviewStatus: 'ready',
         aiOverallReviewError: null,
         aiOverallReviewModel: model,

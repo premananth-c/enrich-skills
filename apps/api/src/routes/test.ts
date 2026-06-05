@@ -1,7 +1,11 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { prisma } from '../lib/prisma.js';
 import { createTestSchema, updateTestSchema } from '@enrich-skills/shared';
-import { serializeAttemptOverallReview } from '../lib/aiReviewEnqueue.js';
+import {
+  buildAttemptTimingContext,
+  serializeAttemptOverallReview,
+} from '../lib/aiReviewEnqueue.js';
+import { formatDuration } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
 
@@ -263,11 +267,20 @@ export async function testRoutes(app: FastifyInstance) {
       });
       if (!attempt) return reply.status(404).send({ error: 'Attempt not found' });
 
+      const timingCtx = buildAttemptTimingContext(attempt, attempt.submissions);
+      const totalTestSeconds = timingCtx.totalTestSeconds;
+
       return reply.send({
         test,
         attempt: {
           ...attempt,
           overallReview: serializeAttemptOverallReview(attempt),
+          totalTestSeconds,
+          totalTestDuration: totalTestSeconds != null ? formatDuration(totalTestSeconds) : null,
+          submissions: attempt.submissions.map((s) => ({
+            ...s,
+            timeSpentSeconds: timingCtx.timingMap.get(s.questionId) ?? null,
+          })),
         },
       });
     }

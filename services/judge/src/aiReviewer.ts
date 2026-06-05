@@ -1,11 +1,17 @@
 import { Worker, Job, Queue } from 'bullmq';
 import { PrismaClient } from '@prisma/client';
-import { aiReviewPayloadSchema } from '@enrich-skills/shared';
+import {
+  aiReviewPayloadSchema,
+  computeQuestionTimings,
+  formatDuration,
+  timingByQuestionId,
+} from '@enrich-skills/shared';
 import { openRouterChatWithFallback } from './openrouter.js';
 import {
   maybeScheduleAttemptOverallReview,
   processAttemptOverallReview,
 } from './aiAttemptReviewer.js';
+import { processCareerReview } from './aiCareerReviewer.js';
 
 const prisma = new PrismaClient();
 const REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
@@ -23,9 +29,10 @@ function truncate(s: string, max: number): string {
 
 function buildPrompt(
   language: string,
-  question: { content: unknown },
+  question: { content: unknown; difficulty?: string },
   code: string,
-  testCases: { input: string; expectedOutput: string }[]
+  testCases: { input: string; expectedOutput: string }[],
+  timeSpentSeconds: number | null
 ): { system: string; user: string } {
   const content = question.content as { title?: string; description?: string };
   const title = content.title ?? 'Coding question';
@@ -37,8 +44,14 @@ function buildPrompt(
           .join('\n')
       : 'No public sample cases.';
 
+  const timeLine =
+    timeSpentSeconds != null
+      ? `Time spent on this question before final submission: ${formatDuration(timeSpentSeconds)} (${timeSpentSeconds}s). Briefly comment on whether this timing seems reasonable for the difficulty (${question.difficulty ?? 'unknown'}).`
+      : 'Time spent on this question: not recorded.';
+
   const system = `You are a senior ${language} engineer reviewing student code for an online assessment.
 Evaluate code quality, idiomatic use of ${language}, readability, efficiency, and style — not only whether tests might pass.
+If timing data is provided, weave a short timing observation into overallSummary.
 Respond with a single JSON object only (no markdown fences) matching this schema:
 {
   "language": string (must be "${language}"),
@@ -57,6 +70,7 @@ Respond with a single JSON object only (no markdown fences) matching this schema
   const user = `Question: ${title}
 ${description ? `Description:\n${description}\n` : ''}
 Language: ${language}
+${timeLine}
 
 Public test cases:
 ${casesText}
@@ -77,6 +91,19 @@ async function processAiReview(job: Job<AiReviewJobData>) {
     where: { id: submissionId },
     include: {
       question: { include: { testCases: { where: { isPublic: true } } } },
+      attempt: {
+        select: {
+          startedAt: true,
+          submissions: {
+            select: {
+              questionId: true,
+              code: true,
+              codeSubmittedAt: true,
+              updatedAt: true,
+            },
+          },
+        },
+      },
     },
   });
 
@@ -109,6 +136,11 @@ async function processAiReview(job: Job<AiReviewJobData>) {
   });
 
   try {
+    const timingMap = timingByQuestionId(
+      computeQuestionTimings(submission.attempt.startedAt, submission.attempt.submissions)
+    );
+    const timeSpentSeconds = timingMap.get(submission.questionId) ?? null;
+
     const { system, user } = buildPrompt(
       language,
       submission.question,
@@ -116,7 +148,8 @@ async function processAiReview(job: Job<AiReviewJobData>) {
       submission.question.testCases.map((tc) => ({
         input: tc.input,
         expectedOutput: tc.expectedOutput,
-      }))
+      })),
+      timeSpentSeconds
     );
 
     const { content, model } = await openRouterChatWithFallback({
@@ -197,6 +230,9 @@ const worker = new Worker(
   async (job: Job) => {
     if (job.name === 'attempt-review') {
       return processAttemptOverallReview(job as Job<{ attemptId: string }>);
+    }
+    if (job.name === 'career-review') {
+      return processCareerReview(job as Job<{ userId: string }>);
     }
     return processAiReview(job as Job<AiReviewJobData>);
   },

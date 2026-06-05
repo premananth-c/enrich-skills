@@ -12,6 +12,7 @@ import {
 import { requireTenant, authenticate, requireModuleAccess } from '../lib/tenant.js';
 import { judgeQueue } from '../lib/judgeQueue.js';
 import {
+  buildAttemptTimingContext,
   enqueueAiReviewsForAttempt,
   enqueueAiReviewRegenerate,
   enqueueAttemptOverallReview,
@@ -19,6 +20,7 @@ import {
   serializeAiReviewSubmission,
   serializeAttemptOverallReview,
 } from '../lib/aiReviewEnqueue.js';
+import { computeTotalTestSeconds, formatDuration } from '@enrich-skills/shared';
 
 type AttemptTestConfig = {
   attemptLimit?: number;
@@ -449,9 +451,18 @@ export async function attemptRoutes(app: FastifyInstance) {
       config
     );
 
+    const timingCtx = buildAttemptTimingContext(attempt, attempt.submissions);
+    const totalTestSeconds = timingCtx.totalTestSeconds;
+
     return reply.send({
       ...attempt,
       overallReview: serializeAttemptOverallReview(attempt),
+      totalTestSeconds,
+      totalTestDuration: totalTestSeconds != null ? formatDuration(totalTestSeconds) : null,
+      submissions: attempt.submissions.map((s) => ({
+        ...s,
+        timeSpentSeconds: timingCtx.timingMap.get(s.questionId) ?? null,
+      })),
       resultsAvailable: true,
       result: result.result,
       passPercentage: result.passPercentage,
@@ -573,7 +584,7 @@ export async function attemptRoutes(app: FastifyInstance) {
 
     await prisma.submission.update({
       where: { id: submission.id },
-      data: { code, language, status: 'pending' },
+      data: { code, language, status: 'pending', codeSubmittedAt: new Date() },
     });
 
     await judgeQueue.add('evaluate', {
@@ -744,6 +755,9 @@ export async function attemptRoutes(app: FastifyInstance) {
           where: { question: { type: 'coding' } },
           select: {
             questionId: true,
+            code: true,
+            codeSubmittedAt: true,
+            updatedAt: true,
             aiReviewStatus: true,
             aiReview: true,
             aiReviewError: true,
@@ -765,9 +779,14 @@ export async function attemptRoutes(app: FastifyInstance) {
       return reply.status(403).send({ error: 'Results are not available yet' });
     }
 
+    const timingCtx = buildAttemptTimingContext(attempt, attempt.submissions);
+
     return reply.send({
-      reviews: attempt.submissions.map(serializeAiReviewSubmission),
+      reviews: attempt.submissions.map((s) =>
+        serializeAiReviewSubmission(s, timingCtx.timingMap.get(s.questionId))
+      ),
       overall: serializeAttemptOverallReview(attempt),
+      totalTestSeconds: timingCtx.totalTestSeconds,
     });
   });
 

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { formatDuration } from '@enrich-skills/shared';
 import { api } from '../lib/api';
 
 export interface AiReviewReport {
@@ -15,6 +16,7 @@ interface AiReviewPanelProps {
   questionId: string;
   status: string | null;
   report: AiReviewReport | null;
+  timeSpentSeconds?: number | null;
   error?: string | null;
   canRegenerate?: boolean;
   /** Silent refresh of attempt detail (no full-page loading). */
@@ -41,6 +43,7 @@ export default function AiReviewPanel({
   questionId,
   status,
   report,
+  timeSpentSeconds,
   error,
   canRegenerate,
   onRefreshed,
@@ -150,6 +153,11 @@ export default function AiReviewPanel({
         <div style={{ fontWeight: 600 }}>AI Code Review</div>
         {regenerateButton}
       </div>
+      {timeSpentSeconds != null && (
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          Time to submit: <strong>{formatDuration(timeSpentSeconds)}</strong>
+        </p>
+      )}
       <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', lineHeight: 1.45 }}>{report.overallSummary}</p>
 
       <div

@@ -1,4 +1,10 @@
 import { Prisma, type PrismaClient } from '@prisma/client';
+import {
+  computeQuestionTimings,
+  computeTotalTestSeconds,
+  timingByQuestionId,
+  type SubmissionTimingInput,
+} from '@enrich-skills/shared';
 import { aiReviewQueue } from './aiReviewQueue.js';
 
 type SubmissionRow = {
@@ -60,15 +66,30 @@ export async function enqueueAiReviewRegenerate(
   return count;
 }
 
-export function serializeAiReviewSubmission(sub: {
-  questionId: string;
-  aiReviewStatus: string | null;
-  aiReview: unknown;
-  aiReviewError: string | null;
-  aiReviewModel: string | null;
-  aiReviewLanguage: string | null;
-  aiReviewGeneratedAt: Date | null;
-}) {
+export function buildAttemptTimingContext(
+  attempt: { startedAt: Date; submittedAt: Date | null },
+  submissions: SubmissionTimingInput[]
+) {
+  const questionTimings = computeQuestionTimings(attempt.startedAt, submissions);
+  return {
+    questionTimings,
+    timingMap: timingByQuestionId(questionTimings),
+    totalTestSeconds: computeTotalTestSeconds(attempt.startedAt, attempt.submittedAt),
+  };
+}
+
+export function serializeAiReviewSubmission(
+  sub: {
+    questionId: string;
+    aiReviewStatus: string | null;
+    aiReview: unknown;
+    aiReviewError: string | null;
+    aiReviewModel: string | null;
+    aiReviewLanguage: string | null;
+    aiReviewGeneratedAt: Date | null;
+  },
+  timeSpentSeconds?: number | null
+) {
   return {
     questionId: sub.questionId,
     status: sub.aiReviewStatus,
@@ -77,6 +98,7 @@ export function serializeAiReviewSubmission(sub: {
     model: sub.aiReviewModel,
     language: sub.aiReviewLanguage,
     generatedAt: sub.aiReviewGeneratedAt,
+    timeSpentSeconds: timeSpentSeconds ?? null,
   };
 }
 
@@ -184,4 +206,69 @@ export async function enqueueAttemptOverallReviewRegenerate(
 
   await enqueueAttemptOverallReview(prisma, attemptId, { force: true, delayMs: 0 });
   return true;
+}
+
+const CAREER_REVIEW_JOB_ID = (userId: string) => `career-review-${userId}`;
+
+export function serializeCareerReview(user: {
+  aiCareerReviewStatus: string | null;
+  aiCareerReview: unknown;
+  aiCareerReviewError: string | null;
+  aiCareerReviewModel: string | null;
+  aiCareerReviewGeneratedAt: Date | null;
+  aiCareerReviewTestCount: number | null;
+}) {
+  return {
+    status: user.aiCareerReviewStatus,
+    report: user.aiCareerReviewStatus === 'ready' ? user.aiCareerReview : null,
+    error: user.aiCareerReviewError,
+    model: user.aiCareerReviewModel,
+    generatedAt: user.aiCareerReviewGeneratedAt,
+    testsAnalyzed: user.aiCareerReviewTestCount,
+  };
+}
+
+export async function enqueueCareerReviewRegenerate(
+  prisma: PrismaClient,
+  userId: string
+): Promise<{ queued: boolean; codingAttempts: number }> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { role: true },
+  });
+  if (!user || user.role !== 'student') return { queued: false, codingAttempts: 0 };
+
+  const codingAttempts = await prisma.attempt.count({
+    where: {
+      userId,
+      status: { in: ['submitted', 'graded'] },
+      test: { type: 'coding' },
+      submissions: { some: { code: { not: null } } },
+    },
+  });
+  if (codingAttempts === 0) return { queued: false, codingAttempts: 0 };
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      aiCareerReviewStatus: 'queued',
+      aiCareerReviewError: null,
+      aiCareerReview: Prisma.JsonNull,
+      aiCareerReviewModel: null,
+      aiCareerReviewGeneratedAt: null,
+      aiCareerReviewTestCount: null,
+    },
+  });
+
+  await aiReviewQueue.add(
+    'career-review',
+    { userId },
+    {
+      jobId: CAREER_REVIEW_JOB_ID(userId),
+      attempts: 3,
+      backoff: { type: 'exponential', delay: 15_000 },
+    }
+  );
+
+  return { queued: true, codingAttempts };
 }

@@ -9,6 +9,7 @@ import QuestionForm from './pages/QuestionForm';
 import Tests from './pages/Tests';
 import TestDetail from './pages/TestDetail';
 import AttemptDetail from './pages/AttemptDetail';
+import StudentAiCareer from './pages/StudentAiCareer';
 import TestForm from './pages/TestForm';
 import Students from './pages/Students';
 import Batches from './pages/Batches';
@@ -61,6 +62,7 @@ export default function App() {
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="students" element={<ModuleRoute moduleKey="students"><Students /></ModuleRoute>} />
+            <Route path="students/:studentId/ai-career" element={<ModuleRoute moduleKey="students"><StudentAiCareer /></ModuleRoute>} />
             <Route path="questions" element={<ModuleRoute moduleKey="questions"><Questions /></ModuleRoute>} />
             <Route path="questions/new" element={<ModuleRoute moduleKey="questions" access="edit"><QuestionForm /></ModuleRoute>} />
             <Route path="questions/:id/edit" element={<ModuleRoute moduleKey="questions" access="edit"><QuestionForm /></ModuleRoute>} />

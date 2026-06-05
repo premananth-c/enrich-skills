@@ -26,6 +26,7 @@ interface ResultSubmission {
   aiReviewModel?: string | null;
   aiReviewLanguage?: string | null;
   aiReviewGeneratedAt?: string | null;
+  timeSpentSeconds?: number | null;
   question: {
     id: string;
     type: string;
@@ -54,6 +55,7 @@ interface AttemptResult {
   test?: { id: string; title: string; type: string; config: Record<string, unknown> };
   submissions?: ResultSubmission[];
   overallReview?: AttemptOverallReviewState;
+  totalTestDuration?: string | null;
 }
 
 const cardStyle: React.CSSProperties = {
@@ -245,6 +247,7 @@ export default function TestResult() {
         <AttemptOverallReviewPanel
           attemptId={attemptId}
           initial={result.overallReview}
+          totalTestDuration={result.totalTestDuration}
         />
       )}
 
@@ -345,6 +348,7 @@ export default function TestResult() {
                 <AiReviewPanel
                   attemptId={attemptId}
                   questionId={sub.questionId}
+                  timeSpentSeconds={sub.timeSpentSeconds}
                   initial={{
                     status: sub.aiReviewStatus ?? null,
                     report: (sub.aiReview as AiReviewReport | null) ?? null,
@@ -352,6 +356,7 @@ export default function TestResult() {
                     model: sub.aiReviewModel ?? null,
                     language: sub.aiReviewLanguage ?? null,
                     generatedAt: sub.aiReviewGeneratedAt ?? null,
+                    timeSpentSeconds: sub.timeSpentSeconds,
                   }}
                 />
               )}
