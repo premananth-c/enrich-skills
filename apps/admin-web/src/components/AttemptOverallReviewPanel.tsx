@@ -9,12 +9,22 @@ export interface AttemptTopicInsight {
   trend?: string;
 }
 
+export interface AttemptTimeAnalysis {
+  totalTimeSeconds: number;
+  summary: string;
+  observations: string[];
+}
+
 export interface AttemptOverallReviewReport {
   overallSummary: string;
   performanceTrend: string;
   topicInsights: AttemptTopicInsight[];
   overallStrengths: string[];
   overallWeaknesses: string[];
+  improvementAreas?: string[];
+  additionalLearning?: string[];
+  jobReadinessNote?: string;
+  timeAnalysis?: AttemptTimeAnalysis;
   recommendations: string[];
 }
 
@@ -22,6 +32,7 @@ interface AttemptOverallReviewPanelProps {
   attemptId: string;
   status: string | null;
   report: AttemptOverallReviewReport | null;
+  totalTestDuration?: string | null;
   error?: string | null;
   canRegenerate?: boolean;
   onRefreshed?: () => void;
@@ -39,6 +50,7 @@ export default function AttemptOverallReviewPanel({
   attemptId,
   status,
   report,
+  totalTestDuration,
   error,
   canRegenerate,
   onRefreshed,
@@ -157,6 +169,11 @@ export default function AttemptOverallReviewPanel({
         <h2 style={{ fontSize: '1.1rem', margin: 0 }}>Overall AI Test Review</h2>
         {regenerateButton}
       </div>
+      {totalTestDuration && (
+        <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          Total test time: <strong>{totalTestDuration}</strong>
+        </p>
+      )}
       <p style={{ margin: '0 0 1rem', fontSize: '0.95rem', lineHeight: 1.5 }}>{report.overallSummary}</p>
       {report.performanceTrend && (
         <p style={{ margin: '0 0 1rem', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
@@ -203,8 +220,27 @@ export default function AttemptOverallReviewPanel({
         </div>
       )}
 
+      {report.timeAnalysis && (
+        <div style={{ marginBottom: '1rem', fontSize: '0.9rem' }}>
+          <strong>Time management:</strong> {report.timeAnalysis.summary}
+          {report.timeAnalysis.observations.length > 0 && (
+            <ul style={{ margin: '0.35rem 0 0', paddingLeft: '1.25rem' }}>
+              {report.timeAnalysis.observations.map((o, i) => (
+                <li key={i}>{o}</li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+      {report.jobReadinessNote && (
+        <p style={{ margin: '0 0 1rem', fontSize: '0.9rem' }}>
+          <strong>Job readiness:</strong> {report.jobReadinessNote}
+        </p>
+      )}
       <InsightList title="Overall strengths" items={report.overallStrengths} color="#22c55e" />
       <InsightList title="Areas to improve" items={report.overallWeaknesses} color="#f59e0b" />
+      <InsightList title="Improvement areas" items={report.improvementAreas ?? []} />
+      <InsightList title="Additional learning" items={report.additionalLearning ?? []} />
       <InsightList title="Recommendations" items={report.recommendations} />
     </div>
   );

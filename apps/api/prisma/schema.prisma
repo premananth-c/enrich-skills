@@ -44,6 +44,12 @@ model User {
   isActive     Boolean  @default(true)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  aiCareerReview            Json?
+  aiCareerReviewStatus      String?
+  aiCareerReviewError       String?
+  aiCareerReviewModel       String?
+  aiCareerReviewGeneratedAt DateTime?
+  aiCareerReviewTestCount   Int?
 
   tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   attempts             Attempt[]
@@ -247,6 +253,8 @@ model Submission {
   output          String?
   errorMessage    String?
   executionDetails Json?
+  /// Last time the student submitted code for this question during the attempt.
+  codeSubmittedAt DateTime?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 

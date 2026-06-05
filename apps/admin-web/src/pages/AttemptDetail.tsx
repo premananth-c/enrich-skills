@@ -26,6 +26,7 @@ interface SubmissionDetail {
   aiReviewStatus: string | null;
   aiReview: AiReviewReport | null;
   aiReviewError: string | null;
+  timeSpentSeconds?: number | null;
   question: {
     id: string;
     type: string;
@@ -57,6 +58,7 @@ interface AttemptDetailData {
       model: string | null;
       generatedAt: string | null;
     };
+    totalTestDuration?: string | null;
   };
 }
 
@@ -157,6 +159,7 @@ export default function AttemptDetail() {
           attemptId={attemptId}
           status={attempt.overallReview?.status ?? null}
           report={(attempt.overallReview?.report as AttemptOverallReviewReport | null) ?? null}
+          totalTestDuration={attempt.totalTestDuration}
           error={attempt.overallReview?.error}
           canRegenerate={canRegenerate}
           onRefreshed={refresh}
@@ -232,6 +235,7 @@ export default function AttemptDetail() {
                   questionId={sub.questionId}
                   status={sub.aiReviewStatus}
                   report={sub.aiReview}
+                  timeSpentSeconds={sub.timeSpentSeconds}
                   error={sub.aiReviewError}
                   canRegenerate={canRegenerate}
                   onRefreshed={refresh}

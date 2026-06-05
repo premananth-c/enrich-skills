@@ -18,6 +18,7 @@ export * from './schemas/question.js';
 export * from './schemas/attempt.js';
 export * from './schemas/aiReview.js';
 export * from './schemas/aiAttemptReview.js';
+export * from './schemas/aiCareerReview.js';
 export * from './schemas/batch.js';
 export * from './schemas/course.js';
 export * from './schemas/schedule.js';
@@ -36,3 +37,12 @@ export {
   type TopicGroup,
   type TopicAiStats,
 } from './lib/groupByTopic.js';
+export {
+  computeQuestionTimings,
+  computeTotalTestSeconds,
+  formatDuration,
+  timingByQuestionId,
+  getSubmissionSubmitTime,
+  type QuestionTiming,
+  type SubmissionTimingInput,
+} from './lib/attemptTiming.js';

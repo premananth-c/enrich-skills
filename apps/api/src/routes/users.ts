@@ -15,6 +15,10 @@ import { logRevision } from '../lib/revision.js';
 import { randomUUID } from 'crypto';
 import { sendAdminInviteEmail } from '../lib/email.js';
 import { getTenantWebUrls } from '../lib/tenantUrls.js';
+import {
+  enqueueCareerReviewRegenerate,
+  serializeCareerReview,
+} from '../lib/aiReviewEnqueue.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -767,4 +771,70 @@ export async function userRoutes(app: FastifyInstance) {
     });
     return reply.send({ message: `Student "${user.name}" has been permanently deleted` });
   });
+
+  app.get(
+    '/:id/ai-career-review',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      await requireModuleAccess(request, 'students', 'view');
+      const tenantId = requireTenant(request);
+      const prisma = await request.getTenantPrisma();
+      const user = await prisma.user.findFirst({
+        where: { id: request.params.id, tenantId, role: 'student' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          aiCareerReviewStatus: true,
+          aiCareerReview: true,
+          aiCareerReviewError: true,
+          aiCareerReviewModel: true,
+          aiCareerReviewGeneratedAt: true,
+          aiCareerReviewTestCount: true,
+        },
+      });
+      if (!user) return reply.status(404).send({ error: 'Student not found' });
+
+      const codingAttempts = await prisma.attempt.count({
+        where: {
+          userId: user.id,
+          status: { in: ['submitted', 'graded'] },
+          test: { type: 'coding' },
+          submissions: { some: { code: { not: null } } },
+        },
+      });
+
+      return reply.send({
+        student: { id: user.id, name: user.name, email: user.email },
+        codingAttempts,
+        careerReview: serializeCareerReview(user),
+      });
+    }
+  );
+
+  app.post(
+    '/:id/ai-career-review/regenerate',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      await requireModuleAccess(request, 'students', 'edit');
+      const tenantId = requireTenant(request);
+      const prisma = await request.getTenantPrisma();
+      const user = await prisma.user.findFirst({
+        where: { id: request.params.id, tenantId, role: 'student' },
+        select: { id: true },
+      });
+      if (!user) return reply.status(404).send({ error: 'Student not found' });
+
+      const result = await enqueueCareerReviewRegenerate(prisma, user.id);
+      if (!result.queued) {
+        return reply.status(400).send({
+          error: 'Student has no completed coding test attempts with code submissions',
+          codingAttempts: result.codingAttempts,
+        });
+      }
+
+      return reply.send({
+        message: 'Career comparison AI report queued',
+        codingAttempts: result.codingAttempts,
+      });
+    }
+  );
 }
