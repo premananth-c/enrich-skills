@@ -20,6 +20,8 @@ import CourseForm from './pages/CourseForm';
 import CourseDetail from './pages/CourseDetail';
 import PdfViewer from './pages/PdfViewer';
 import Reports from './pages/Reports';
+import Clients from './pages/Clients';
+import ClientDetail from './pages/ClientDetail';
 import ToastViewport from './components/ToastViewport';
 import UploadProgressToast from './components/UploadProgressToast';
 import ManageUsers from './pages/ManageUsers';
@@ -71,6 +73,8 @@ export default function App() {
             <Route path="tests/:id" element={<ModuleRoute moduleKey="tests"><TestDetail /></ModuleRoute>} />
             <Route path="tests/:testId/attempts/:attemptId" element={<ModuleRoute moduleKey="tests"><AttemptDetail /></ModuleRoute>} />
             <Route path="tests/:id/edit" element={<Navigate to=".." replace />} />
+            <Route path="clients" element={<ModuleRoute moduleKey="clients"><Clients /></ModuleRoute>} />
+            <Route path="clients/:id" element={<ModuleRoute moduleKey="clients"><ClientDetail /></ModuleRoute>} />
             <Route path="batches" element={<ModuleRoute moduleKey="batches"><Batches /></ModuleRoute>} />
             <Route path="batches/new" element={<ModuleRoute moduleKey="batches" access="edit"><BatchForm /></ModuleRoute>} />
             <Route path="batches/:id" element={<ModuleRoute moduleKey="batches"><BatchDetail /></ModuleRoute>} />

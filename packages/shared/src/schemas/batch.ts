@@ -3,6 +3,7 @@ import { z } from 'zod';
 export const createBatchSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional(),
+  clientId: z.string().uuid().optional(),
 });
 
 export const updateBatchSchema = createBatchSchema.partial();

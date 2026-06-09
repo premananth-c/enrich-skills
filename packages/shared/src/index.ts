@@ -20,6 +20,7 @@ export * from './schemas/aiReview.js';
 export * from './schemas/aiAttemptReview.js';
 export * from './schemas/aiCareerReview.js';
 export * from './schemas/batch.js';
+export * from './schemas/client.js';
 export * from './schemas/course.js';
 export * from './schemas/schedule.js';
 export * from './schemas/enquiry.js';

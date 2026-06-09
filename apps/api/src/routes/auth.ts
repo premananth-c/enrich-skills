@@ -44,6 +44,7 @@ async function resolvePermissionsForUser(db: PrismaClient, tenantId: string, rol
       reports: 'edit',
       manage_users: 'edit',
       meetings: 'edit',
+      clients: 'edit',
     };
   }
   if (role === 'admin') {
@@ -56,6 +57,7 @@ async function resolvePermissionsForUser(db: PrismaClient, tenantId: string, rol
       reports: 'edit',
       manage_users: 'none',
       meetings: 'edit',
+      clients: 'edit',
     };
   }
   if (role === 'invited') {
@@ -68,6 +70,7 @@ async function resolvePermissionsForUser(db: PrismaClient, tenantId: string, rol
       reports: 'none',
       manage_users: 'none',
       meetings: 'none',
+      clients: 'none',
     };
   }
   const base = {
@@ -79,6 +82,7 @@ async function resolvePermissionsForUser(db: PrismaClient, tenantId: string, rol
     reports: 'none',
     manage_users: 'none',
     meetings: 'none',
+    clients: 'none',
   } as Record<ModuleKey, PermissionLevel>;
   const roleDef = await db.roleDefinition.findFirst({
     where: { tenantId, roleKey: role, isActive: true },
@@ -122,6 +126,8 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'Email already registered' });
     }
 
+    const generalClient = await db.client.findFirst({ where: { tenantId: resolvedTenantId, isGeneral: true } });
+
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await db.user.create({
       data: {
@@ -130,6 +136,7 @@ export async function authRoutes(app: FastifyInstance) {
         passwordHash,
         name,
         role: 'student',
+        clientId: generalClient?.id ?? null,
       },
     });
     await logRevision(db, {
@@ -239,6 +246,12 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'An account with this email already exists' });
     }
 
+    let clientId: string | null = (invite as any).clientId ?? null;
+    if (!clientId) {
+      const general = await db.client.findFirst({ where: { tenantId: invite.tenantId, isGeneral: true } });
+      clientId = general?.id ?? null;
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await db.user.create({
       data: {
@@ -249,6 +262,7 @@ export async function authRoutes(app: FastifyInstance) {
         phoneNumber,
         address,
         role: 'student',
+        clientId,
       },
     });
     await logRevision(db, {

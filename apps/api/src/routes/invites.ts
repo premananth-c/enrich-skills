@@ -4,6 +4,7 @@ import { createInviteSchema } from '@enrich-skills/shared';
 import { requireModuleAccess } from '../lib/tenant.js';
 import { sendInviteEmail } from '../lib/email.js';
 import { getTenantWebUrls } from '../lib/tenantUrls.js';
+import { resolveClientScope } from '../lib/clientScope.js';
 
 const INVITE_EXPIRY_DAYS = 2;
 
@@ -108,6 +109,16 @@ export async function inviteRoutes(app: FastifyInstance) {
       courseDueDateVal = parseCourseDueDateYmd(courseDueDate);
     }
 
+    const scope = await resolveClientScope(request, prisma);
+    let inviteClientId: string | undefined;
+    if (batchId) {
+      const batch = await prisma.batch.findFirst({ where: { id: batchId, tenantId }, select: { clientId: true } });
+      inviteClientId = batch?.clientId ?? undefined;
+    }
+    if (!inviteClientId && scope.mode === 'client') {
+      inviteClientId = scope.clientId;
+    }
+
     const invite = await prisma.invite.create({
       data: {
         tenantId,
@@ -120,6 +131,7 @@ export async function inviteRoutes(app: FastifyInstance) {
         batchId: batchId || undefined,
         courseId: courseId || undefined,
         courseDueDate: courseDueDateVal ?? undefined,
+        clientId: inviteClientId ?? undefined,
       },
     });
 

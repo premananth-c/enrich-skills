@@ -13,6 +13,7 @@ import { studentRoutes } from './routes/student.js';
 import { userRoutes } from './routes/users.js';
 import { inviteRoutes } from './routes/invites.js';
 import { batchRoutes } from './routes/batches.js';
+import { clientRoutes } from './routes/clients.js';
 import { courseRoutes } from './routes/courses.js';
 import { courseAssignmentRoutes } from './routes/courseAssignments.js';
 import { scheduleRoutes } from './routes/schedule.js';
@@ -82,6 +83,7 @@ async function main() {
   app.register(userRoutes, { prefix: '/api/v1/users' });
   app.register(inviteRoutes, { prefix: '/api/v1/invites' });
   app.register(batchRoutes, { prefix: '/api/v1/batches' });
+  app.register(clientRoutes, { prefix: '/api/v1/clients' });
   app.register(courseRoutes, { prefix: '/api/v1/courses' });
   app.register(courseAssignmentRoutes, { prefix: '/api/v1/course-assignments' });
   app.register(scheduleRoutes, { prefix: '/api/v1/schedule' });

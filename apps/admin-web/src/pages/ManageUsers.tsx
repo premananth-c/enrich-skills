@@ -3,7 +3,7 @@ import { api } from '../lib/api';
 import { useAuth } from '../context/AuthContext';
 
 type PermissionLevel = 'none' | 'view' | 'edit';
-type ModuleKey = 'courses' | 'batches' | 'tests' | 'questions' | 'students' | 'reports' | 'manage_users';
+type ModuleKey = 'courses' | 'batches' | 'tests' | 'questions' | 'students' | 'reports' | 'manage_users' | 'clients';
 
 interface RoleDefinition {
   id: string;
@@ -30,9 +30,10 @@ const moduleLabels: Record<ModuleKey, string> = {
   students: 'Students',
   reports: 'Reports',
   manage_users: 'Manage Users',
+  clients: 'Clients',
 };
 
-const configurableModuleKeys: ModuleKey[] = ['courses', 'batches', 'tests', 'questions', 'students', 'reports'];
+const configurableModuleKeys: ModuleKey[] = ['courses', 'batches', 'tests', 'questions', 'students', 'reports', 'clients'];
 
 const defaultPermissions: Record<ModuleKey, PermissionLevel> = {
   courses: 'none',
@@ -42,6 +43,7 @@ const defaultPermissions: Record<ModuleKey, PermissionLevel> = {
   students: 'none',
   reports: 'none',
   manage_users: 'none',
+  clients: 'none',
 };
 
 export default function ManageUsers() {

@@ -1,5 +1,6 @@
 import { FastifyInstance, FastifyRequest, FastifyReply } from 'fastify';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
+import { resolveClientScope, clientWhere, assertClientAccess } from '../lib/clientScope.js';
 
 type AttemptTestConfig = {
   attemptLimit?: number;
@@ -89,6 +90,7 @@ export async function reportsRoutes(app: FastifyInstance) {
   app.get('/', async (request: FastifyRequest<{ Querystring: { type: string; batchId?: string; testId?: string; userId?: string; q?: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'reports', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
     const { type, batchId, testId, userId, q } = request.query;
     if (!type) return reply.status(400).send({ error: 'type is required: batch | test | student' });
 
@@ -101,6 +103,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         },
       });
       if (!batch) return reply.status(404).send({ error: 'Batch not found' });
+      assertClientAccess(scope, batch.clientId);
       const batchTestIds = (await prisma.batchTestAssignment.findMany({ where: { batchId }, select: { testId: true } })).map((x) => x.testId);
       const memberIds = batch.members.map((m) => m.user.id);
       const attemptsRaw = await prisma.attempt.findMany({
@@ -133,7 +136,7 @@ export async function reportsRoutes(app: FastifyInstance) {
         orderBy: { startedAt: 'desc' },
       });
       const batches = await prisma.batch.findMany({
-        where: { tenantId },
+        where: { tenantId, ...clientWhere(scope) },
         select: { id: true, name: true },
         orderBy: { name: 'asc' },
       });
@@ -147,6 +150,7 @@ export async function reportsRoutes(app: FastifyInstance) {
           where: {
             tenantId,
             role: 'student',
+            ...clientWhere(scope),
             OR: [
               { email: { contains: q, mode: 'insensitive' } },
               { name: { contains: q, mode: 'insensitive' } },
@@ -162,9 +166,10 @@ export async function reportsRoutes(app: FastifyInstance) {
       if (!targetUserId) return reply.status(400).send({ error: 'userId or q (search) is required for type=student' });
       const user = await prisma.user.findFirst({
         where: { id: targetUserId, tenantId },
-        select: { id: true, name: true, email: true },
+        select: { id: true, name: true, email: true, clientId: true },
       });
       if (!user) return reply.status(404).send({ error: 'Student not found' });
+      assertClientAccess(scope, user.clientId);
       const [batches, courseAssignments, attempts] = await Promise.all([
         prisma.batchMember.findMany({
           where: { userId: targetUserId },

@@ -27,6 +27,8 @@ interface Student {
   phoneNumber?: string | null;
   address?: string | null;
   createdAt: string;
+  clientId?: string | null;
+  client?: { id: string; name: string } | null;
 }
 
 interface Invite {
@@ -490,6 +492,7 @@ export default function Students() {
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
@@ -500,6 +503,7 @@ export default function Students() {
                 <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
                       {s.isActive ? 'Active' : 'Inactive'}
