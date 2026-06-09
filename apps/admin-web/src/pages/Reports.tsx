@@ -10,6 +10,7 @@ import {
 } from '../lib/reportExport';
 import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
 import { SearchablePickerCombobox } from '../components/SearchablePickerCombobox';
+import StudentReportPanel from '../components/StudentReportPanel';
 
 type ReportView = 'batch' | 'test' | 'student';
 
@@ -61,6 +62,7 @@ export default function Reports() {
   const [studentReport, setStudentReport] = useState<StudentReport | null>(null);
   const [loading, setLoading] = useState(false);
   const studentReportLoadId = useRef(0);
+  const [drilldownUserId, setDrilldownUserId] = useState<string | null>(null);
 
   useEffect(() => {
     api<{ id: string; name: string }[]>('/batches').then((b) => setBatches(b.map((x) => ({ id: x.id, name: x.name })))).catch(() => setBatches([]));
@@ -259,7 +261,9 @@ export default function Reports() {
                 <tbody>
                   {batchAttempts.map((a) => (
                     <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.75rem 1rem' }}>{a.user.name}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <button type="button" onClick={() => setDrilldownUserId(a.userId)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}>{a.user.name}</button>
+                      </td>
                       <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.user.email}</td>
                       <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.test.title}</td>
                       <td style={{ padding: '0.75rem 1rem' }}>{formatAttemptFraction(a.attemptNumber, a.maxAttempts)}</td>
@@ -355,7 +359,9 @@ export default function Reports() {
                 <tbody>
                   {testAttempts.map((a) => (
                     <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.75rem 1rem' }}>{a.user.name}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <button type="button" onClick={() => setDrilldownUserId(a.userId)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}>{a.user.name}</button>
+                      </td>
                       <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.user.email}</td>
                       <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.test.title}</td>
                       <td style={{ padding: '0.75rem 1rem' }}>{formatAttemptFraction(a.attemptNumber, a.maxAttempts)}</td>
@@ -458,6 +464,10 @@ export default function Reports() {
             <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Could not load report for this student.</div>
           )}
         </div>
+      )}
+
+      {drilldownUserId && (
+        <StudentReportPanel userId={drilldownUserId} onClose={() => setDrilldownUserId(null)} />
       )}
     </div>
   );

@@ -29,6 +29,7 @@ model Tenant {
   courseAssignments  CourseAssignment[]
   notifications     Notification[]
   liveMeetings      LiveMeeting[]
+  clients           Client[]
 }
 
 model User {
@@ -51,7 +52,10 @@ model User {
   aiCareerReviewGeneratedAt DateTime?
   aiCareerReviewTestCount   Int?
 
+  clientId     String?
+
   tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client               Client?              @relation("StudentClient", fields: [clientId], references: [id], onDelete: SetNull)
   attempts             Attempt[]
   invitesSent          Invite[]             @relation("InvitedBy")
   batchMembers         BatchMember[]
@@ -61,9 +65,11 @@ model User {
   notifications        Notification[]
   activitySubmissions  ActivitySubmission[]
   hostedMeetings       LiveMeeting[]        @relation("MeetingHost")
+  clientMemberships    ClientMember[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
+  @@index([clientId])
 }
 
 model RoleDefinition {
@@ -196,6 +202,7 @@ model Invite {
   batchId         String?
   courseId        String?
   courseDueDate   DateTime?
+  clientId        String?
   usedAt          DateTime?
   createdAt       DateTime  @default(now())
 
@@ -205,6 +212,7 @@ model Invite {
   variant TestVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   batch   Batch?       @relation("InviteBatch", fields: [batchId], references: [id], onDelete: SetNull)
   course  Course?      @relation("InviteCourse", fields: [courseId], references: [id], onDelete: SetNull)
+  client  Client?      @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   @@index([token])
   @@index([tenantId, email])
@@ -330,6 +338,7 @@ model AssignmentTest {
 model Batch {
   id          String   @id @default(uuid())
   tenantId    String
+  clientId    String?
   name        String
   description String?
   isArchived  Boolean  @default(false)
@@ -337,6 +346,7 @@ model Batch {
   updatedAt   DateTime @updatedAt
 
   tenant            Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  client            Client?             @relation(fields: [clientId], references: [id], onDelete: SetNull)
   members           BatchMember[]
   scheduleEvents    BatchScheduleEvent[]
   schedulerNotes    SchedulerNote[]
@@ -347,6 +357,7 @@ model Batch {
   liveMeetings      LiveMeeting[]
 
   @@index([tenantId])
+  @@index([clientId])
 }
 
 model BatchTestAssignment {
@@ -691,6 +702,40 @@ model PaymentEvent {
 
   @@unique([provider, eventId])
   @@index([tenantId, createdAt])
+}
+
+// ----- Client (sub-tenant isolation) -----
+model Client {
+  id         String   @id @default(uuid())
+  tenantId   String
+  name       String
+  isGeneral  Boolean  @default(false)
+  isArchived Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  tenant       Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members      ClientMember[]
+  batches      Batch[]
+  studentUsers User[]         @relation("StudentClient")
+  invites      Invite[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+}
+
+model ClientMember {
+  id       String   @id @default(uuid())
+  clientId String
+  userId   String
+  joinedAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, userId])
+  @@index([clientId])
+  @@index([userId])
 }
 
 // ----- Business Enquiries (from landing page) -----

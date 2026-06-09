@@ -19,6 +19,7 @@ import {
   enqueueCareerReviewRegenerate,
   serializeCareerReview,
 } from '../lib/aiReviewEnqueue.js';
+import { resolveClientScope, clientWhere, assertClientAccess } from '../lib/clientScope.js';
 
 export async function userRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -114,8 +115,10 @@ export async function userRoutes(app: FastifyInstance) {
     const tenantId = await requireModuleAccess(request, 'students', 'view');
     const prisma = await request.getTenantPrisma();
     const role = (request.query as { role?: string }).role;
+    const scope = await resolveClientScope(request, prisma);
+    const clientFilter = role === 'student' ? clientWhere(scope) : {};
     const users = await prisma.user.findMany({
-      where: { tenantId, ...(role && { role }) },
+      where: { tenantId, ...(role && { role }), ...clientFilter },
       select: {
         id: true,
         email: true,
@@ -126,6 +129,8 @@ export async function userRoutes(app: FastifyInstance) {
         address: true,
         createdAt: true,
         updatedAt: true,
+        clientId: true,
+        client: { select: { id: true, name: true } },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -195,6 +200,7 @@ export async function userRoutes(app: FastifyInstance) {
       reports: 'none',
       manage_users: 'none',
       meetings: 'none',
+      clients: 'none',
     };
     for (const key of MODULE_KEYS) {
       const val = body.permissions?.[key];
@@ -240,6 +246,7 @@ export async function userRoutes(app: FastifyInstance) {
       reports: 'none',
       manage_users: 'none',
       meetings: 'none',
+      clients: 'none',
     };
     const permissionsProvided = body.permissions !== undefined;
     for (const key of MODULE_KEYS) {
@@ -450,12 +457,14 @@ export async function userRoutes(app: FastifyInstance) {
     const tenantId = requireTenant(request);
     const prisma = await request.getTenantPrisma();
     const actor = request.user as { sub: string };
+    const scope = await resolveClientScope(request, prisma);
     const body = request.body as {
       name?: string;
       email?: string;
       password?: string;
       phoneNumber?: string;
       address?: string;
+      clientId?: string;
     };
     const name = (body.name || '').trim();
     const password = body.password || '';
@@ -474,6 +483,18 @@ export async function userRoutes(app: FastifyInstance) {
       const offline = `offline_${Date.now()}_${Math.random().toString(16).slice(2, 8)}@offline.local`;
       email = offline;
     }
+    let resolvedClientId: string | null = null;
+    if (scope.mode === 'client') {
+      resolvedClientId = scope.clientId;
+    } else if (body.clientId) {
+      const client = await prisma.client.findFirst({ where: { id: body.clientId, tenantId } });
+      if (!client) return reply.status(400).send({ error: 'Client not found' });
+      resolvedClientId = body.clientId;
+    } else {
+      const general = await prisma.client.findFirst({ where: { tenantId, isGeneral: true } });
+      resolvedClientId = general?.id ?? null;
+    }
+
     const passwordHash = await bcrypt.hash(password, 12);
     const student = await prisma.user.create({
       data: {
@@ -485,6 +506,7 @@ export async function userRoutes(app: FastifyInstance) {
         phoneNumber: body.phoneNumber?.trim() || null,
         address: body.address?.trim() || null,
         isActive: true,
+        clientId: resolvedClientId,
       },
       select: {
         id: true,
@@ -582,14 +604,23 @@ export async function userRoutes(app: FastifyInstance) {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');
     const prisma = await request.getTenantPrisma();
     const admin = request.user as { sub: string };
-    const body = request.body as { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean };
+    const scope = await resolveClientScope(request, prisma);
+    const body = request.body as { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean; clientId?: string | null };
     const user = await prisma.user.findFirst({
       where: { id: request.params.id, tenantId },
-      select: { id: true, role: true },
+      select: { id: true, role: true, clientId: true },
     });
     if (!user) return reply.status(404).send({ error: 'User not found' });
     if (user.role !== 'student') return reply.status(403).send({ error: 'Only students can be edited here' });
-    const data: { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean } = {};
+    assertClientAccess(scope, user.clientId);
+    const data: { name?: string; email?: string; phoneNumber?: string | null; address?: string | null; isActive?: boolean; clientId?: string | null } = {};
+    if (body.clientId !== undefined && scope.mode === 'all') {
+      if (body.clientId) {
+        const client = await prisma.client.findFirst({ where: { id: body.clientId, tenantId } });
+        if (!client) return reply.status(400).send({ error: 'Client not found' });
+      }
+      data.clientId = body.clientId ?? null;
+    }
     if (body.name !== undefined) data.name = body.name.trim() || '';
     if (body.email !== undefined) {
       const normalized = body.email.trim().toLowerCase();

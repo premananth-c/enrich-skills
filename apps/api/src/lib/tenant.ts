@@ -9,6 +9,7 @@ export const MODULE_KEYS = [
   'reports',
   'manage_users',
   'meetings',
+  'clients',
 ] as const;
 
 export type ModuleKey = (typeof MODULE_KEYS)[number];
@@ -25,6 +26,7 @@ const DEFAULT_ADMIN_PERMISSIONS: Record<ModuleKey, PermissionLevel> = {
   reports: 'edit',
   manage_users: 'none',
   meetings: 'edit',
+  clients: 'edit',
 };
 
 function hasLevel(granted: PermissionLevel, required: 'view' | 'edit') {
@@ -79,6 +81,7 @@ export async function getResolvedPermissions(request: FastifyRequest): Promise<R
       reports: 'edit',
       manage_users: 'edit',
       meetings: 'edit',
+      clients: 'edit',
     };
   }
 

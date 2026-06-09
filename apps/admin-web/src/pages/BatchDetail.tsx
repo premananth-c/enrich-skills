@@ -7,6 +7,7 @@ import { downloadXlsxRows, reportAttemptsToFlatRows, sanitizeReportFilename } fr
 import { emitToast } from '../lib/toast';
 import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
 import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import StudentReportPanel from '../components/StudentReportPanel';
 import {
   adminBtnCancel,
   adminBtnCancelSm,
@@ -108,6 +109,7 @@ export default function BatchDetail() {
   const [assignTestOpen, setAssignTestOpen] = useState(false);
   const [assignTestId, setAssignTestId] = useState('');
   const [reportAttempts, setReportAttempts] = useState<BatchReportAttempt[]>([]);
+  const [drilldownUserId, setDrilldownUserId] = useState<string | null>(null);
   const [bulkMembersFile, setBulkMembersFile] = useState<File | null>(null);
   const [bulkMembersBusy, setBulkMembersBusy] = useState(false);
   const [bulkMembersProgress, setBulkMembersProgress] = useState('');
@@ -777,7 +779,9 @@ export default function BatchDetail() {
             <tbody>
               {reportAttempts.map((a) => (
                 <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '0.75rem 1rem' }}>{a.user.name}</td>
+                  <td style={{ padding: '0.75rem 1rem' }}>
+                    <button type="button" onClick={() => setDrilldownUserId(a.userId)} style={{ background: 'none', border: 'none', color: 'var(--color-primary)', cursor: 'pointer', padding: 0, font: 'inherit', textDecoration: 'underline' }}>{a.user.name}</button>
+                  </td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{a.user.email}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{a.test.title}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>{formatAttemptFraction(a.attemptNumber, a.maxAttempts)}</td>
@@ -792,6 +796,10 @@ export default function BatchDetail() {
           </table>
           {reportAttempts.length === 0 && <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>No attempts yet. Assign tests to the batch and students will see them here once they take tests.</div>}
         </div>
+      )}
+
+      {drilldownUserId && (
+        <StudentReportPanel userId={drilldownUserId} onClose={() => setDrilldownUserId(null)} />
       )}
     </div>
   );

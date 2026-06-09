@@ -16,6 +16,7 @@ interface Batch {
   description: string | null;
   isArchived?: boolean;
   _count?: { members: number };
+  client?: { id: string; name: string } | null;
 }
 
 export default function Batches() {
@@ -99,6 +100,7 @@ export default function Batches() {
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
+                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Students</th>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
               </tr>
@@ -109,6 +111,7 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <Link to={`/batches/${b.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>{b.name}</Link>
                   </td>
+                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b.client?.name ?? '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b._count?.members ?? 0}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
