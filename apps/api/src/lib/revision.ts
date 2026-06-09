@@ -1,6 +1,6 @@
 import type { Prisma, PrismaClient } from '@prisma/client';
 
-type RevisionModule = 'tests' | 'students' | 'courses' | 'questions' | 'batches';
+type RevisionModule = 'tests' | 'students' | 'courses' | 'questions' | 'batches' | 'clients';
 type RevisionAction = 'created' | 'updated' | 'archived' | 'deleted';
 
 interface LogRevisionInput {
