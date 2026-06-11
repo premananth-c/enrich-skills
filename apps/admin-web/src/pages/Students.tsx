@@ -78,6 +78,9 @@ export default function Students() {
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState('');
   const [search, setSearch] = useState('');
+  const [inviteSearch, setInviteSearch] = useState('');
+  const [expiredInviteSearch, setExpiredInviteSearch] = useState('');
+  const [activePage, setActivePage] = useState(1);
   const [historyTarget, setHistoryTarget] = useState<{ id: string; name: string } | null>(null);
   const [directOpen, setDirectOpen] = useState(false);
   const [directForm, setDirectForm] = useState({ name: '', email: '', password: '', phoneNumber: '', address: '' });
@@ -329,13 +332,38 @@ export default function Students() {
   };
 
   const inputStyle: React.CSSProperties = { width: '100%', padding: '0.5rem 0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, color: 'var(--color-text)', fontSize: '0.95rem' };
+  const searchInputStyle: React.CSSProperties = {
+    width: '100%',
+    maxWidth: 380,
+    padding: '0.6rem 0.85rem',
+    background: '#fff',
+    border: '2px solid #d1d5db',
+    borderRadius: 8,
+    color: '#111827',
+    fontWeight: 600,
+  };
   const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25rem', color: 'var(--color-text-muted)', fontSize: '0.85rem', fontWeight: 500 };
   const canInvite = !inviteSending && inviteEmail.trim().length > 0;
+  const ACTIVE_PAGE_SIZE = 15;
 
   const now = new Date();
   // Only show unaccepted invites here; accepted ones appear as registered students
   const pendingInvites = invites.filter((i) => !i.usedAt && new Date(i.expiresAt) > now);
   const expiredInvites = invites.filter((i) => !i.usedAt && new Date(i.expiresAt) <= now);
+
+  const filterInvites = (list: Invite[], q: string) => {
+    const term = q.trim().toLowerCase();
+    if (!term) return list;
+    return list.filter(
+      (i) =>
+        i.email.toLowerCase().includes(term) ||
+        i.inviter.name.toLowerCase().includes(term) ||
+        (i.test?.title?.toLowerCase().includes(term) ?? false)
+    );
+  };
+
+  const filteredPendingInvites = filterInvites(pendingInvites, inviteSearch);
+  const filteredExpiredInvites = filterInvites(expiredInvites, expiredInviteSearch);
 
   const isEditDirty =
     editForm.name !== initialEditForm.name ||
@@ -351,6 +379,20 @@ export default function Students() {
   });
   const activeStudents = filtered.filter((s) => s.isActive);
   const archivedStudents = filtered.filter((s) => !s.isActive);
+  const totalActivePages = Math.max(1, Math.ceil(activeStudents.length / ACTIVE_PAGE_SIZE));
+  const safeActivePage = Math.min(activePage, totalActivePages);
+  const paginatedActiveStudents = activeStudents.slice(
+    (safeActivePage - 1) * ACTIVE_PAGE_SIZE,
+    safeActivePage * ACTIVE_PAGE_SIZE
+  );
+
+  useEffect(() => {
+    setActivePage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (activePage > totalActivePages) setActivePage(totalActivePages);
+  }, [activePage, totalActivePages]);
 
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
@@ -432,99 +474,221 @@ export default function Students() {
           </button>
         </div>
       </div>
-      {/* ── Invited Students ───────────────────────────────────────────── */}
-      {(pendingInvites.length > 0 || expiredInvites.length > 0 || invitesLoading) && (
-        <div style={{ marginBottom: '2rem' }}>
-          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            Invited Students
-            {pendingInvites.length > 0 && (
-              <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.78rem', background: '#8b5cf622', color: '#a78bfa', fontWeight: 600 }}>
-                {pendingInvites.length} pending
-              </span>
+      {/* ── Active Students + Expired Invites (side by side) ────────────── */}
+      <div
+        style={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: '1.25rem',
+          marginBottom: '2rem',
+          alignItems: 'flex-start',
+        }}
+      >
+        <div style={{ flex: '2 1 480px', minWidth: 0 }}>
+          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem' }}>Active Students</h2>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search students by name or email"
+              style={searchInputStyle}
+            />
+          </div>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+            {activeStudents.length === 0 ? (
+              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No active students found. Use &quot;Invite Student&quot; to send an invite by email.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedActiveStudents.map((s) => (
+                    <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
+                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
+                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
+                          {s.isActive ? 'Active' : 'Inactive'}
+                        </span>
+                      </td>
+                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
+                          <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
+                          <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                          <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             )}
+          </div>
+          {activeStudents.length > ACTIVE_PAGE_SIZE && (
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                marginTop: '0.75rem',
+                fontSize: '0.9rem',
+                color: 'var(--color-text-muted)',
+              }}
+            >
+              <span>
+                Showing {(safeActivePage - 1) * ACTIVE_PAGE_SIZE + 1}–
+                {Math.min(safeActivePage * ACTIVE_PAGE_SIZE, activeStudents.length)} of {activeStudents.length}
+              </span>
+              <div style={{ display: 'flex', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  onClick={() => setActivePage((p) => Math.max(1, p - 1))}
+                  disabled={safeActivePage <= 1}
+                  style={adminBtnCancelSm}
+                >
+                  Previous
+                </button>
+                <span style={{ padding: '0.35rem 0.5rem' }}>
+                  Page {safeActivePage} of {totalActivePages}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setActivePage((p) => Math.min(totalActivePages, p + 1))}
+                  disabled={safeActivePage >= totalActivePages}
+                  style={adminBtnCancelSm}
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div style={{ flex: '1 1 280px', minWidth: 280 }}>
+          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            Expired Invites
             {expiredInvites.length > 0 && (
               <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.78rem', background: '#f59e0b22', color: '#fbbf24', fontWeight: 600 }}>
                 {expiredInvites.length} expired
               </span>
             )}
           </h2>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+          <div style={{ marginBottom: '0.75rem' }}>
+            <input
+              value={expiredInviteSearch}
+              onChange={(e) => setExpiredInviteSearch(e.target.value)}
+              placeholder="Search expired invites by email, inviter, or test"
+              style={searchInputStyle}
+            />
+          </div>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'auto' }}>
             {invitesLoading ? (
               <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Loading invites…</div>
+            ) : filteredExpiredInvites.length === 0 ? (
+              <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+                {expiredInvites.length === 0 ? 'No expired invites.' : 'No expired invites match your search.'}
+              </div>
             ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Invited By</th>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Test</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Invited On</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Expires</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Expired On</th>
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 140 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {renderInviteRows(pendingInvites)}
-                  {renderInviteRows(expiredInvites)}
+                  {filteredExpiredInvites.map((inv) => (
+                    <tr key={inv.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.75rem 1rem' }}>{inv.email}</td>
+                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{inv.test?.title ?? <span style={{ opacity: 0.45 }}>—</span>}</td>
+                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{new Date(inv.expiresAt).toLocaleDateString()}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            type="button"
+                            onClick={() => handleResendInvite(inv)}
+                            disabled={!canEdit('students')}
+                            style={adminBtnPrimarySmDisabled(!canEdit('students'))}
+                          >
+                            Resend
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleRevokeInvite(inv)}
+                            disabled={!canEdit('students')}
+                            style={adminBtnDestructiveDisabled(!canEdit('students'))}
+                          >
+                            Revoke
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             )}
           </div>
         </div>
-      )}
+      </div>
 
-      {/* ── Registered Students ─────────────────────────────────────────── */}
-      <div style={{ marginBottom: '1rem' }}>
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search students by name or email"
-          style={{ width: 380, padding: '0.6rem 0.85rem', background: '#fff', border: '2px solid #d1d5db', borderRadius: 8, color: '#111827', fontWeight: 600 }}
-        />
-      </div>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-        {activeStudents.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No students registered yet. Use &quot;Invite Student&quot; to send an invite by email.</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {activeStudents.map((s) => (
-                <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
-                      {s.isActive ? 'Active' : 'Inactive'}
-                    </span>
-                  </td>
-                  <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
-                      <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
-                      <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
-                    </div>
-                  </td>
+      {/* ── Invited Students (pending) ──────────────────────────────────── */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          Invited Students
+          {pendingInvites.length > 0 && (
+            <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.78rem', background: '#8b5cf622', color: '#a78bfa', fontWeight: 600 }}>
+              {pendingInvites.length} pending
+            </span>
+          )}
+        </h2>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <input
+            value={inviteSearch}
+            onChange={(e) => setInviteSearch(e.target.value)}
+            placeholder="Search invites by email, inviter, or test"
+            style={searchInputStyle}
+          />
+        </div>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'auto' }}>
+          {invitesLoading ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Loading invites…</div>
+          ) : filteredPendingInvites.length === 0 ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              {pendingInvites.length === 0 ? 'No pending invites.' : 'No invites match your search.'}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Invited By</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Test</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Invited On</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Expires</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 140 }}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
+              </thead>
+              <tbody>{renderInviteRows(filteredPendingInvites)}</tbody>
+            </table>
+          )}
+        </div>
       </div>
-      <h2 style={{ margin: '1.5rem 0 0.75rem', fontSize: '1.05rem' }}>Archived Students</h2>
+
+      <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem' }}>Archived Students</h2>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
         {archivedStudents.length === 0 ? (
           <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>No archived students.</div>
