@@ -13,7 +13,9 @@ import {
 } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
 import { randomUUID } from 'crypto';
-import { sendAdminInviteEmail } from '../lib/email.js';
+import { sendAdminInviteEmail, sendCareerReportEmail } from '../lib/email.js';
+import { buildCareerReportEmailHtml } from '../lib/careerReportEmail.js';
+import type { AiCareerReviewLegacy, AiCareerReviewPayload } from '@enrich-skills/shared';
 import { getTenantWebUrls } from '../lib/tenantUrls.js';
 import {
   enqueueCareerReviewRegenerate,
@@ -866,6 +868,40 @@ export async function userRoutes(app: FastifyInstance) {
         message: 'Career comparison AI report queued',
         codingAttempts: result.codingAttempts,
       });
+    }
+  );
+
+  app.post(
+    '/:id/ai-career-review/send-email',
+    async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
+      await requireModuleAccess(request, 'students', 'edit');
+      const tenantId = requireTenant(request);
+      const prisma = await request.getTenantPrisma();
+      const user = await prisma.user.findFirst({
+        where: { id: request.params.id, tenantId, role: 'student' },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          aiCareerReviewStatus: true,
+          aiCareerReview: true,
+        },
+      });
+      if (!user) return reply.status(404).send({ error: 'Student not found' });
+      if (!user.email?.trim()) {
+        return reply.status(400).send({ error: 'Student has no email address on file' });
+      }
+      if (user.aiCareerReviewStatus !== 'ready' || !user.aiCareerReview) {
+        return reply.status(400).send({ error: 'Career report is not ready to send' });
+      }
+
+      const html = buildCareerReportEmailHtml(
+        user.name,
+        user.aiCareerReview as AiCareerReviewPayload | AiCareerReviewLegacy
+      );
+      await sendCareerReportEmail(user.email, user.name, html);
+
+      return reply.send({ message: `Career report sent to ${user.email}` });
     }
   );
 }

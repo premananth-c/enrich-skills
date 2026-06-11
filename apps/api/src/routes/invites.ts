@@ -205,6 +205,23 @@ export async function inviteRoutes(app: FastifyInstance) {
     return reply.send(updated);
   });
 
+  app.post('/bulk-delete', async (request: FastifyRequest, reply: FastifyReply) => {
+    const tenantId = await requireModuleAccess(request, 'students', 'edit');
+    const prisma = await request.getTenantPrisma();
+
+    const body = request.body as { ids?: string[] };
+    const ids = Array.isArray(body?.ids) ? body.ids.filter((id) => typeof id === 'string' && id.length > 0) : [];
+    if (ids.length === 0) {
+      return reply.status(400).send({ error: 'At least one invite id is required' });
+    }
+
+    const result = await prisma.invite.deleteMany({
+      where: { id: { in: ids }, tenantId, usedAt: null },
+    });
+
+    return reply.send({ deleted: result.count });
+  });
+
   // Revoke (delete) a pending invite
   app.delete('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'edit');

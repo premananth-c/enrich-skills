@@ -81,6 +81,9 @@ export default function Students() {
   const [inviteSearch, setInviteSearch] = useState('');
   const [expiredInviteSearch, setExpiredInviteSearch] = useState('');
   const [activePage, setActivePage] = useState(1);
+  const [expiredPage, setExpiredPage] = useState(1);
+  const [selectedExpiredIds, setSelectedExpiredIds] = useState<Set<string>>(new Set());
+  const [bulkDeletingExpired, setBulkDeletingExpired] = useState(false);
   const [historyTarget, setHistoryTarget] = useState<{ id: string; name: string } | null>(null);
   const [directOpen, setDirectOpen] = useState(false);
   const [directForm, setDirectForm] = useState({ name: '', email: '', password: '', phoneNumber: '', address: '' });
@@ -286,9 +289,54 @@ export default function Students() {
     try {
       await api(`/invites/${invite.id}`, { method: 'DELETE' });
       setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      setSelectedExpiredIds((prev) => {
+        const next = new Set(prev);
+        next.delete(invite.id);
+        return next;
+      });
       emitToast('success', `Invite revoked`);
     } catch (err) {
       emitToast('error', err instanceof Error ? err.message : 'Failed to revoke invite');
+    }
+  };
+
+  const handleDeleteExpiredInvite = async (invite: Invite) => {
+    if (!confirm(`Delete expired invite for ${invite.email}?`)) return;
+    try {
+      await api(`/invites/${invite.id}`, { method: 'DELETE' });
+      setInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      setSelectedExpiredIds((prev) => {
+        const next = new Set(prev);
+        next.delete(invite.id);
+        return next;
+      });
+      emitToast('success', 'Expired invite deleted');
+    } catch (err) {
+      emitToast('error', err instanceof Error ? err.message : 'Failed to delete invite');
+    }
+  };
+
+  const handleBulkDeleteExpired = async (ids: string[]) => {
+    if (ids.length === 0) return;
+    if (!confirm(`Delete ${ids.length} expired invite${ids.length === 1 ? '' : 's'}? This cannot be undone.`)) return;
+    setBulkDeletingExpired(true);
+    try {
+      const res = await api<{ deleted: number }>('/invites/bulk-delete', {
+        method: 'POST',
+        body: JSON.stringify({ ids }),
+      });
+      const deletedSet = new Set(ids);
+      setInvites((prev) => prev.filter((i) => !deletedSet.has(i.id)));
+      setSelectedExpiredIds((prev) => {
+        const next = new Set(prev);
+        ids.forEach((id) => next.delete(id));
+        return next;
+      });
+      emitToast('success', `Deleted ${res.deleted} expired invite${res.deleted === 1 ? '' : 's'}`);
+    } catch (err) {
+      emitToast('error', err instanceof Error ? err.message : 'Failed to bulk delete invites');
+    } finally {
+      setBulkDeletingExpired(false);
     }
   };
 
@@ -385,6 +433,18 @@ export default function Students() {
     (safeActivePage - 1) * ACTIVE_PAGE_SIZE,
     safeActivePage * ACTIVE_PAGE_SIZE
   );
+  const totalExpiredPages = Math.max(1, Math.ceil(filteredExpiredInvites.length / ACTIVE_PAGE_SIZE));
+  const safeExpiredPage = Math.min(expiredPage, totalExpiredPages);
+  const paginatedExpiredInvites = filteredExpiredInvites.slice(
+    (safeExpiredPage - 1) * ACTIVE_PAGE_SIZE,
+    safeExpiredPage * ACTIVE_PAGE_SIZE
+  );
+  const allFilteredExpiredSelected =
+    filteredExpiredInvites.length > 0 &&
+    filteredExpiredInvites.every((i) => selectedExpiredIds.has(i.id));
+  const pageExpiredAllSelected =
+    paginatedExpiredInvites.length > 0 &&
+    paginatedExpiredInvites.every((i) => selectedExpiredIds.has(i.id));
 
   useEffect(() => {
     setActivePage(1);
@@ -394,6 +454,14 @@ export default function Students() {
     if (activePage > totalActivePages) setActivePage(totalActivePages);
   }, [activePage, totalActivePages]);
 
+  useEffect(() => {
+    setExpiredPage(1);
+  }, [expiredInviteSearch]);
+
+  useEffect(() => {
+    if (expiredPage > totalExpiredPages) setExpiredPage(totalExpiredPages);
+  }, [expiredPage, totalExpiredPages]);
+
   if (loading) return <div style={{ padding: '2rem' }}>Loading...</div>;
 
   const inviteStatusBadge = (invite: Invite) => {
@@ -401,6 +469,82 @@ export default function Students() {
       return <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: '#f59e0b22', color: '#fbbf24', fontWeight: 500 }}>Expired</span>;
     }
     return <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: '#8b5cf622', color: '#a78bfa', fontWeight: 500 }}>Pending</span>;
+  };
+
+  const renderPagination = (
+    page: number,
+    totalPages: number,
+    totalItems: number,
+    onPageChange: (page: number) => void
+  ) => {
+    if (totalItems <= ACTIVE_PAGE_SIZE) return null;
+    const safePage = Math.min(page, totalPages);
+    return (
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          marginTop: '0.75rem',
+          fontSize: '0.9rem',
+          color: 'var(--color-text-muted)',
+        }}
+      >
+        <span>
+          Showing {(safePage - 1) * ACTIVE_PAGE_SIZE + 1}–
+          {Math.min(safePage * ACTIVE_PAGE_SIZE, totalItems)} of {totalItems}
+        </span>
+        <div style={{ display: 'flex', gap: '0.5rem' }}>
+          <button
+            type="button"
+            onClick={() => onPageChange(Math.max(1, safePage - 1))}
+            disabled={safePage <= 1}
+            style={adminBtnCancelSm}
+          >
+            Previous
+          </button>
+          <span style={{ padding: '0.35rem 0.5rem' }}>
+            Page {safePage} of {totalPages}
+          </span>
+          <button
+            type="button"
+            onClick={() => onPageChange(Math.min(totalPages, safePage + 1))}
+            disabled={safePage >= totalPages}
+            style={adminBtnCancelSm}
+          >
+            Next
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const toggleExpiredSelection = (id: string, checked: boolean) => {
+    setSelectedExpiredIds((prev) => {
+      const next = new Set(prev);
+      if (checked) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  };
+
+  const toggleExpiredPageSelection = (checked: boolean) => {
+    setSelectedExpiredIds((prev) => {
+      const next = new Set(prev);
+      paginatedExpiredInvites.forEach((i) => {
+        if (checked) next.add(i.id);
+        else next.delete(i.id);
+      });
+      return next;
+    });
+  };
+
+  const toggleAllFilteredExpiredSelection = (checked: boolean) => {
+    if (!checked) {
+      setSelectedExpiredIds(new Set());
+      return;
+    }
+    setSelectedExpiredIds(new Set(filteredExpiredInvites.map((i) => i.id)));
   };
 
   const renderInviteRows = (list: Invite[]) =>
@@ -474,177 +618,62 @@ export default function Students() {
           </button>
         </div>
       </div>
-      {/* ── Active Students + Expired Invites (side by side) ────────────── */}
-      <div
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: '1.25rem',
-          marginBottom: '2rem',
-          alignItems: 'flex-start',
-        }}
-      >
-        <div style={{ flex: '2 1 480px', minWidth: 0 }}>
-          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem' }}>Active Students</h2>
-          <div style={{ marginBottom: '0.75rem' }}>
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search students by name or email"
-              style={searchInputStyle}
-            />
-          </div>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-            {activeStudents.length === 0 ? (
-              <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No active students found. Use &quot;Invite Student&quot; to send an invite by email.</div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
+      {/* ── 1. Active Students ────────────────────────────────────────────── */}
+      <div style={{ marginBottom: '2rem' }}>
+        <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem' }}>Active Students</h2>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search students by name or email"
+            style={searchInputStyle}
+          />
+        </div>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+          {activeStudents.length === 0 ? (
+            <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No active students found. Use &quot;Invite Student&quot; to send an invite by email.</div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Name</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Client</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Registered</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 120 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedActiveStudents.map((s) => (
+                  <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
+                        {s.isActive ? 'Active' : 'Inactive'}
+                      </span>
+                    </td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
+                        <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
+                        <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                        <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
+                      </div>
+                    </td>
                   </tr>
-                </thead>
-                <tbody>
-                  {paginatedActiveStudents.map((s) => (
-                    <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
-                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
-                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
-                          {s.isActive ? 'Active' : 'Inactive'}
-                        </span>
-                      </td>
-                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
-                          <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
-                          <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
-                          <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-          {activeStudents.length > ACTIVE_PAGE_SIZE && (
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                marginTop: '0.75rem',
-                fontSize: '0.9rem',
-                color: 'var(--color-text-muted)',
-              }}
-            >
-              <span>
-                Showing {(safeActivePage - 1) * ACTIVE_PAGE_SIZE + 1}–
-                {Math.min(safeActivePage * ACTIVE_PAGE_SIZE, activeStudents.length)} of {activeStudents.length}
-              </span>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button
-                  type="button"
-                  onClick={() => setActivePage((p) => Math.max(1, p - 1))}
-                  disabled={safeActivePage <= 1}
-                  style={adminBtnCancelSm}
-                >
-                  Previous
-                </button>
-                <span style={{ padding: '0.35rem 0.5rem' }}>
-                  Page {safeActivePage} of {totalActivePages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setActivePage((p) => Math.min(totalActivePages, p + 1))}
-                  disabled={safeActivePage >= totalActivePages}
-                  style={adminBtnCancelSm}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+                ))}
+              </tbody>
+            </table>
           )}
         </div>
-
-        <div style={{ flex: '1 1 280px', minWidth: 280 }}>
-          <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
-            Expired Invites
-            {expiredInvites.length > 0 && (
-              <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.78rem', background: '#f59e0b22', color: '#fbbf24', fontWeight: 600 }}>
-                {expiredInvites.length} expired
-              </span>
-            )}
-          </h2>
-          <div style={{ marginBottom: '0.75rem' }}>
-            <input
-              value={expiredInviteSearch}
-              onChange={(e) => setExpiredInviteSearch(e.target.value)}
-              placeholder="Search expired invites by email, inviter, or test"
-              style={searchInputStyle}
-            />
-          </div>
-          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'auto' }}>
-            {invitesLoading ? (
-              <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Loading invites…</div>
-            ) : filteredExpiredInvites.length === 0 ? (
-              <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
-                {expiredInvites.length === 0 ? 'No expired invites.' : 'No expired invites match your search.'}
-              </div>
-            ) : (
-              <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 480 }}>
-                <thead>
-                  <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Test</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Expired On</th>
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 140 }}>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredExpiredInvites.map((inv) => (
-                    <tr key={inv.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                      <td style={{ padding: '0.75rem 1rem' }}>{inv.email}</td>
-                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{inv.test?.title ?? <span style={{ opacity: 0.45 }}>—</span>}</td>
-                      <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{new Date(inv.expiresAt).toLocaleDateString()}</td>
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem' }}>
-                          <button
-                            type="button"
-                            onClick={() => handleResendInvite(inv)}
-                            disabled={!canEdit('students')}
-                            style={adminBtnPrimarySmDisabled(!canEdit('students'))}
-                          >
-                            Resend
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleRevokeInvite(inv)}
-                            disabled={!canEdit('students')}
-                            style={adminBtnDestructiveDisabled(!canEdit('students'))}
-                          >
-                            Revoke
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
+        {renderPagination(activePage, totalActivePages, activeStudents.length, setActivePage)}
       </div>
 
-      {/* ── Invited Students (pending) ──────────────────────────────────── */}
+      {/* ── 2. Invited Students (pending) ───────────────────────────────── */}
       <div style={{ marginBottom: '2rem' }}>
         <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
           Invited Students
@@ -688,6 +717,121 @@ export default function Students() {
         </div>
       </div>
 
+      {/* ── 3. Expired Invites ──────────────────────────────────────────── */}
+      <div style={{ marginBottom: '2rem' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '1rem', marginBottom: '0.75rem', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0, fontSize: '1.05rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            Expired Invites
+            {expiredInvites.length > 0 && (
+              <span style={{ padding: '2px 8px', borderRadius: 12, fontSize: '0.78rem', background: '#f59e0b22', color: '#fbbf24', fontWeight: 600 }}>
+                {expiredInvites.length} expired
+              </span>
+            )}
+          </h2>
+          {canEdit('students') && filteredExpiredInvites.length > 0 && (
+            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => handleBulkDeleteExpired(Array.from(selectedExpiredIds))}
+                disabled={bulkDeletingExpired || selectedExpiredIds.size === 0}
+                style={adminBtnDestructiveMdDisabled(bulkDeletingExpired || selectedExpiredIds.size === 0)}
+              >
+                {bulkDeletingExpired ? 'Deleting…' : `Bulk Delete (${selectedExpiredIds.size} selected)`}
+              </button>
+              <button
+                type="button"
+                onClick={() => toggleAllFilteredExpiredSelection(!allFilteredExpiredSelected)}
+                disabled={bulkDeletingExpired}
+                style={adminBtnCancelSm}
+              >
+                {allFilteredExpiredSelected ? 'Clear selection' : `Select all ${filteredExpiredInvites.length} filtered`}
+              </button>
+            </div>
+          )}
+        </div>
+        <div style={{ marginBottom: '0.75rem' }}>
+          <input
+            value={expiredInviteSearch}
+            onChange={(e) => setExpiredInviteSearch(e.target.value)}
+            placeholder="Search expired invites by email, inviter, or test"
+            style={searchInputStyle}
+          />
+        </div>
+        <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'auto' }}>
+          {invitesLoading ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>Loading invites…</div>
+          ) : filteredExpiredInvites.length === 0 ? (
+            <div style={{ padding: '1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
+              {expiredInvites.length === 0 ? 'No expired invites.' : 'No expired invites match your search.'}
+            </div>
+          ) : (
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                  {canEdit('students') && (
+                    <th style={{ padding: '0.75rem 1rem', width: 40 }}>
+                      <input
+                        type="checkbox"
+                        checked={pageExpiredAllSelected}
+                        onChange={(e) => toggleExpiredPageSelection(e.target.checked)}
+                        aria-label="Select all on page"
+                      />
+                    </th>
+                  )}
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Email</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Invited By</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Test</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Expired On</th>
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem', width: 200 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedExpiredInvites.map((inv) => (
+                  <tr key={inv.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                    {canEdit('students') && (
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedExpiredIds.has(inv.id)}
+                          onChange={(e) => toggleExpiredSelection(inv.id, e.target.checked)}
+                          aria-label={`Select ${inv.email}`}
+                        />
+                      </td>
+                    )}
+                    <td style={{ padding: '0.75rem 1rem' }}>{inv.email}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{inv.inviter.name}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>{inv.test?.title ?? <span style={{ opacity: 0.45 }}>—</span>}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{new Date(inv.expiresAt).toLocaleDateString()}</td>
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button
+                          type="button"
+                          onClick={() => handleResendInvite(inv)}
+                          disabled={!canEdit('students')}
+                          style={adminBtnPrimarySmDisabled(!canEdit('students'))}
+                        >
+                          Resend
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleDeleteExpiredInvite(inv)}
+                          disabled={!canEdit('students')}
+                          style={adminBtnDestructiveDisabled(!canEdit('students'))}
+                        >
+                          Delete
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+        {renderPagination(expiredPage, totalExpiredPages, filteredExpiredInvites.length, setExpiredPage)}
+      </div>
+
+      {/* ── 4. Archived Students ────────────────────────────────────────── */}
       <h2 style={{ margin: '0 0 0.75rem', fontSize: '1.05rem' }}>Archived Students</h2>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
         {archivedStudents.length === 0 ? (

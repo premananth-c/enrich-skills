@@ -1,8 +1,12 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { isIndustryCareerReport, type AiCareerReviewLegacy, type AiCareerReviewPayload } from '@enrich-skills/shared';
 import { api } from '../lib/api';
+import { emitToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
+import { adminBtnCancel, adminBtnPrimary } from '../lib/adminButtonStyles';
 
 interface CareerReviewData {
   student: { id: string; name: string; email: string | null };
@@ -25,9 +29,20 @@ const cardStyle: React.CSSProperties = {
 };
 
 const sectionTitle: React.CSSProperties = {
-  fontSize: '1rem',
-  margin: '0 0 0.65rem',
+  fontSize: '1.25rem',
+  margin: '0 0 0.75rem',
   fontWeight: 600,
+  lineHeight: 1.35,
+};
+
+const bodyText: React.CSSProperties = {
+  fontSize: '1.05rem',
+  lineHeight: 1.6,
+};
+
+const smallMuted: React.CSSProperties = {
+  fontSize: '0.95rem',
+  color: 'var(--color-text-muted)',
 };
 
 export default function StudentAiCareer() {
@@ -37,6 +52,9 @@ export default function StudentAiCareer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [regenerating, setRegenerating] = useState(false);
+  const [downloadingPdf, setDownloadingPdf] = useState(false);
+  const [sendingEmail, setSendingEmail] = useState(false);
+  const reportRef = useRef<HTMLDivElement>(null);
 
   const load = useCallback(
     async (opts?: { silent?: boolean }) => {
@@ -81,6 +99,63 @@ export default function StudentAiCareer() {
       clearTimeout(stop);
     };
   }, [data?.careerReview.status, load]);
+
+  const handleDownloadPdf = async () => {
+    const el = reportRef.current;
+    if (!el || !data) return;
+    setDownloadingPdf(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        backgroundColor: '#ffffff',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pageWidth;
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pageHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pageHeight;
+      }
+
+      const safeName = data.student.name.replace(/[^\w\-]+/g, '_').slice(0, 40);
+      pdf.save(`career-report-${safeName}.pdf`);
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Failed to generate PDF');
+    } finally {
+      setDownloadingPdf(false);
+    }
+  };
+
+  const handleSendEmail = async () => {
+    if (!studentId) return;
+    if (!data?.student.email) {
+      emitToast('error', 'Student has no email address on file');
+      return;
+    }
+    setSendingEmail(true);
+    try {
+      const res = await api<{ message: string }>(`/users/${studentId}/ai-career-review/send-email`, {
+        method: 'POST',
+      });
+      emitToast('success', res.message);
+    } catch (e) {
+      emitToast('error', e instanceof Error ? e.message : 'Failed to send email');
+    } finally {
+      setSendingEmail(false);
+    }
+  };
 
   const handleGenerate = async () => {
     if (!studentId) return;
@@ -134,50 +209,75 @@ export default function StudentAiCareer() {
   const canGenerate = canEdit('students');
   const isV2 = report != null && isIndustryCareerReport(report);
 
+  const reportReady = careerReview.status === 'ready' && report != null;
+
   return (
-    <div style={{ maxWidth: 920 }}>
-      <Link to="/students" style={{ fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+    <div style={{ maxWidth: 1040 }}>
+      <Link to="/students" style={{ ...smallMuted }}>
         &larr; Back to students
       </Link>
 
-      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginTop: '0.75rem' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: '1rem', marginTop: '0.75rem', flexWrap: 'wrap' }}>
         <div>
-          <h1 style={{ margin: '0 0 0.25rem' }}>{student.name}</h1>
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>{student.email ?? '—'}</p>
-          <p style={{ margin: '0.5rem 0 0', fontSize: '0.9rem', color: 'var(--color-text-muted)' }}>
+          <h1 style={{ margin: '0 0 0.35rem', fontSize: '1.75rem' }}>{student.name}</h1>
+          <p style={{ margin: 0, ...bodyText, color: 'var(--color-text-muted)' }}>{student.email ?? '—'}</p>
+          <p style={{ margin: '0.5rem 0 0', ...smallMuted }}>
             {codingAttempts} completed coding test{codingAttempts === 1 ? '' : 's'} with submissions
           </p>
         </div>
-        {canGenerate && (
-          <button
-            type="button"
-            onClick={handleGenerate}
-            disabled={regenerating || codingAttempts === 0}
-            style={{
-              padding: '0.5rem 1rem',
-              fontSize: '0.85rem',
-              border: '1px solid var(--color-border)',
-              borderRadius: 6,
-              cursor: regenerating || codingAttempts === 0 ? 'not-allowed' : 'pointer',
-              alignSelf: 'flex-start',
-            }}
-          >
-            {regenerating
-              ? 'Queuing…'
-              : showRegenerateLabel
-                ? 'Regenerate career comparison report'
-                : 'Generate career comparison report'}
-          </button>
-        )}
+        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignSelf: 'flex-start' }}>
+          {reportReady && (
+            <>
+              <button
+                type="button"
+                onClick={() => void handleDownloadPdf()}
+                disabled={downloadingPdf}
+                style={adminBtnCancel}
+              >
+                {downloadingPdf ? 'Preparing PDF…' : 'Download as PDF'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void handleSendEmail()}
+                disabled={sendingEmail || !student.email}
+                style={{
+                  ...adminBtnPrimary,
+                  opacity: sendingEmail || !student.email ? 0.6 : 1,
+                  cursor: sendingEmail || !student.email ? 'not-allowed' : 'pointer',
+                }}
+              >
+                {sendingEmail ? 'Sending…' : 'Send as email'}
+              </button>
+            </>
+          )}
+          {canGenerate && (
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={regenerating || codingAttempts === 0}
+              style={{
+                ...adminBtnPrimary,
+                opacity: regenerating || codingAttempts === 0 ? 0.6 : 1,
+                cursor: regenerating || codingAttempts === 0 ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {regenerating
+                ? 'Queuing…'
+                : showRegenerateLabel
+                  ? 'Regenerate career comparison report'
+                  : 'Generate career comparison report'}
+            </button>
+          )}
+        </div>
       </div>
 
-      <div style={{ ...cardStyle, marginTop: '1.25rem' }}>
-        <h2 style={{ fontSize: '1.1rem', margin: '0 0 0.75rem' }}>
+      <div ref={reportRef} style={{ ...cardStyle, marginTop: '1.25rem', fontSize: '1.05rem' }}>
+        <h2 style={{ fontSize: '1.4rem', margin: '0 0 0.85rem' }}>
           Industry-ready career report
         </h2>
 
         {careerReview.status && (
-          <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+          <p style={{ margin: '0 0 0.85rem', ...smallMuted }}>
             Status: <strong>{careerReview.status}</strong>
             {careerReview.generatedAt &&
               careerReview.status === 'ready' &&
@@ -187,19 +287,19 @@ export default function StudentAiCareer() {
         )}
 
         {!careerReview.status && (
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+          <p style={{ margin: 0, ...bodyText, color: 'var(--color-text-muted)' }}>
             No report yet. Generate one for placement-ready insights across all coding tests.
           </p>
         )}
 
         {(careerReview.status === 'queued' || careerReview.status === 'generating') && (
-          <p style={{ margin: 0, color: 'var(--color-text-muted)' }}>
+          <p style={{ margin: 0, ...bodyText, color: 'var(--color-text-muted)' }}>
             Generating report… (auto-refreshes). If stuck over 2 minutes, click Regenerate.
           </p>
         )}
 
         {careerReview.status === 'failed' && (
-          <p style={{ margin: 0, color: '#ef4444' }}>
+          <p style={{ margin: 0, ...bodyText, color: '#ef4444' }}>
             Report failed{careerReview.error ? `: ${careerReview.error}` : '.'} Click Regenerate.
           </p>
         )}
@@ -221,7 +321,7 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
 
   return (
     <>
-      <p style={{ margin: '0 0 1.25rem', lineHeight: 1.55, fontSize: '0.95rem' }}>
+      <p style={{ margin: '0 0 1.35rem', ...bodyText }}>
         {report.executiveSummary}
       </p>
 
@@ -237,15 +337,15 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
       <div style={{ marginBottom: '1.25rem' }}>
         <h3 style={sectionTitle}>
           1. Language agility & paradigm evaluation
-          <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+          <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.95rem' }}>
             {' '}
             · Versatility {report.languageAgility.versatilityScore}/10
           </span>
         </h3>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem' }}>
+        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>
           {report.languageAgility.versatilityJustification}
         </p>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem' }}>
+        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>
           <strong>Paradigm evaluation:</strong> {report.languageAgility.paradigmEvaluation}
         </p>
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
@@ -256,7 +356,7 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
                 padding: '0.35rem 0.65rem',
                 borderRadius: 6,
                 border: '1px solid var(--color-border)',
-                fontSize: '0.8rem',
+                fontSize: '0.95rem',
                 background: 'var(--color-bg)',
               }}
             >
@@ -265,14 +365,14 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
           ))}
         </div>
         {report.languageAgility.languageProficiency.map((lp) => (
-          <div key={`${lp.language}-detail`} style={{ marginBottom: '0.5rem', fontSize: '0.88rem' }}>
+          <div key={`${lp.language}-detail`} style={{ marginBottom: '0.5rem', ...bodyText }}>
             <strong>{lp.language}:</strong> {lp.idiomaticUsage} {lp.paradigmNotes}
           </div>
         ))}
-        <p style={{ margin: '0.5rem 0 0', fontSize: '0.88rem' }}>
+        <p style={{ margin: '0.5rem 0 0', ...bodyText }}>
           <strong>Data structures:</strong> {report.languageAgility.coreCsConcepts.dataStructures}
         </p>
-        <p style={{ margin: '0.25rem 0 0', fontSize: '0.88rem' }}>
+        <p style={{ margin: '0.25rem 0 0', ...bodyText }}>
           <strong>Algorithms:</strong> {report.languageAgility.coreCsConcepts.algorithms}
         </p>
       </div>
@@ -289,7 +389,7 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
 
       <div style={{ marginBottom: '1.25rem' }}>
         <h3 style={sectionTitle}>3. Algorithmic efficiency</h3>
-        <p style={{ margin: '0 0 0.75rem', fontSize: '0.9rem' }}>{report.algorithmicEfficiency.summary}</p>
+        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>{report.algorithmicEfficiency.summary}</p>
         {report.algorithmicEfficiency.problemAnalyses.map((p) => (
           <div
             key={p.problemTitle}
@@ -299,10 +399,10 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
               background: 'var(--color-bg)',
               borderRadius: 6,
               border: '1px solid var(--color-border)',
-              fontSize: '0.88rem',
+              ...bodyText,
             }}
           >
-            <div style={{ fontWeight: 600 }}>
+            <div style={{ fontWeight: 600, fontSize: '1.08rem' }}>
               {p.problemTitle} ({p.language}) · Optimization {p.optimizationScore}/10
             </div>
             <div style={{ color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
@@ -328,20 +428,20 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
             background: 'rgba(34,197,94,0.1)',
             borderRadius: 6,
             fontWeight: 600,
-            fontSize: '0.95rem',
+            fontSize: '1.1rem',
           }}
         >
           {report.industryFitment.employabilityTag}
         </p>
         {report.industryFitment.roleMappings.map((r) => (
-          <div key={r.role} style={{ marginBottom: '0.5rem', fontSize: '0.9rem' }}>
+          <div key={r.role} style={{ marginBottom: '0.5rem', ...bodyText }}>
             <strong>
               {r.role}
             </strong>
             <FitBadge level={r.fitLevel} /> — {r.rationale}
           </div>
         ))}
-        <p style={{ margin: '0.75rem 0 0', fontSize: '0.9rem' }}>
+        <p style={{ margin: '0.75rem 0 0', ...bodyText }}>
           <strong>Skill gap analysis:</strong> {report.industryFitment.skillGapAnalysis}
         </p>
       </div>
@@ -353,10 +453,10 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
           .sort((a, b) => a.week - b.week)
           .map((w) => (
             <div key={w.week} style={{ marginBottom: '0.75rem' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>
+              <div style={{ fontWeight: 600, fontSize: '1.08rem' }}>
                 Week {w.week}: {w.focus}
               </div>
-              <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', fontSize: '0.88rem' }}>
+              <ul style={{ margin: '0.25rem 0 0', paddingLeft: '1.25rem', ...bodyText }}>
                 {w.tasks.map((t, i) => (
                   <li key={i}>{t}</li>
                 ))}
@@ -371,10 +471,10 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
 function LegacyCareerReport({ report }: { report: AiCareerReviewLegacy }) {
   return (
     <>
-      <p style={{ margin: '0 0 0.75rem', fontSize: '0.85rem', color: 'var(--color-text-muted)' }}>
+      <p style={{ margin: '0 0 0.75rem', ...smallMuted }}>
         This is an older report format. Regenerate to get the industry-ready v2 report.
       </p>
-      <p style={{ margin: '0 0 1rem', lineHeight: 1.5 }}>{report.overallSummary}</p>
+      <p style={{ margin: '0 0 1rem', ...bodyText }}>{report.overallSummary}</p>
       <ListSection title="Strengths" items={report.strengths} color="#22c55e" />
       <ListSection title="Weaknesses" items={report.weaknesses} color="#f59e0b" />
       <ListSection title="Recommendations" items={report.recommendations} />
@@ -385,7 +485,7 @@ function LegacyCareerReport({ report }: { report: AiCareerReviewLegacy }) {
 function ScoreBar({ label, value, max }: { label: string; value: number; max: number }) {
   const pct = Math.round((value / max) * 100);
   return (
-    <div style={{ fontSize: '0.85rem' }}>
+    <div style={{ fontSize: '1rem' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.2rem' }}>
         <span>{label}</span>
         <span style={{ fontWeight: 600 }}>
@@ -417,7 +517,7 @@ function FitBadge({ level }: { level: string }) {
   const color =
     level === 'Strong' ? '#22c55e' : level === 'Moderate' ? '#f59e0b' : 'var(--color-text-muted)';
   return (
-    <span style={{ marginLeft: '0.35rem', fontSize: '0.8rem', color, fontWeight: 600 }}>
+    <span style={{ marginLeft: '0.35rem', fontSize: '0.95rem', color, fontWeight: 600 }}>
       [{level}]
     </span>
   );
@@ -425,7 +525,7 @@ function FitBadge({ level }: { level: string }) {
 
 function TextBlock({ label, text }: { label: string; text: string }) {
   return (
-    <p style={{ margin: '0 0 0.5rem', fontSize: '0.9rem' }}>
+    <p style={{ margin: '0 0 0.5rem', ...bodyText }}>
       <strong>{label}:</strong> {text}
     </p>
   );
@@ -443,10 +543,10 @@ function ListSection({
   if (items.length === 0) return null;
   return (
     <div style={{ marginBottom: '0.75rem' }}>
-      <div style={{ fontWeight: 600, fontSize: '0.9rem', color, marginBottom: '0.25rem' }}>
+      <div style={{ fontWeight: 600, fontSize: '1.05rem', color, marginBottom: '0.25rem' }}>
         {title}
       </div>
-      <ul style={{ margin: 0, paddingLeft: '1.25rem', fontSize: '0.9rem' }}>
+      <ul style={{ margin: 0, paddingLeft: '1.25rem', ...bodyText }}>
         {items.map((item, i) => (
           <li key={i}>{item}</li>
         ))}
