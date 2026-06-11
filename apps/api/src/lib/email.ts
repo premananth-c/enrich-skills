@@ -132,3 +132,28 @@ export async function sendMeetingInviteEmail(
     throw new Error(`Failed to send email: ${emailError.message}`);
   }
 }
+
+export async function sendCareerReportEmail(
+  to: string,
+  studentName: string,
+  htmlBody: string
+): Promise<void> {
+  const subject = `Your career comparison report — ${studentName}`;
+
+  if (!resend) {
+    console.log('[email] RESEND_API_KEY not set — career report for', to);
+    return;
+  }
+
+  const { error } = await resend.emails.send({
+    from: EMAIL_FROM,
+    to,
+    subject,
+    html: htmlBody,
+  });
+
+  if (error) {
+    console.error('[email] Resend error:', error);
+    throw new Error(`Failed to send email: ${error.message}`);
+  }
+}
