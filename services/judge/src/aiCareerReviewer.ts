@@ -13,85 +13,110 @@ import {
 import { openRouterChatWithFallback } from './openrouter.js';
 
 const prisma = new PrismaClient();
+const MAX_CODE_CHARS = 2000;
 
 interface CareerReviewJobData {
   userId: string;
 }
 
-function buildCareerReviewPrompt(
-  studentName: string,
-  attempts: Array<{
-    testTitle: string;
-    submittedAt: Date | null;
-    score: number | null;
-    maxScore: number | null;
-    totalTestSeconds: number | null;
-    languages: string[];
-    topics: string[];
-    overallReview: AiAttemptReviewPayload | null;
-    questionSummaries: Array<{
-      title: string;
-      topic: string;
-      difficulty: string;
-      status: string;
-      timeSpentSeconds: number | null;
-      aiSummary: string | null;
-    }>;
-  }>
-): { system: string; user: string } {
-  const blocks = attempts
-    .map((a, i) => {
-      const scorePct =
-        a.score != null && a.maxScore != null && a.maxScore > 0
-          ? `${Math.round((a.score / a.maxScore) * 100)}%`
-          : '—';
-      const qLines = a.questionSummaries
-        .map(
-          (q) =>
-            `  - ${q.title} [${q.topic}/${q.difficulty}] ${q.status}${
-              q.timeSpentSeconds != null ? `, ${formatDuration(q.timeSpentSeconds)}` : ''
-            }${q.aiSummary ? `: ${q.aiSummary.slice(0, 200)}` : ''}`
-        )
-        .join('\n');
-      const overall = a.overallReview
-        ? `Overall test AI: ${a.overallReview.overallSummary}`
-        : 'Overall test AI: not available';
+function truncateCode(code: string): string {
+  if (code.length <= MAX_CODE_CHARS) return code;
+  return code.slice(0, MAX_CODE_CHARS) + '\n// ... truncated ...';
+}
 
-      return `Test ${i + 1}: ${a.testTitle}
-Submitted: ${a.submittedAt?.toISOString() ?? '—'}
-Score: ${a.score ?? '—'}/${a.maxScore ?? '—'} (${scorePct})
-Total time: ${a.totalTestSeconds != null ? formatDuration(a.totalTestSeconds) : '—'}
-Languages: ${a.languages.join(', ') || '—'}
-Topics: ${[...new Set(a.topics)].join(', ') || '—'}
-${overall}
-Questions:
-${qLines}`;
-    })
-    .join('\n\n');
+const CAREER_REVIEW_SYSTEM_PROMPT = `You are a senior engineering manager and technical career coach generating an industry-ready employability report for a college placement cell and the student.
 
-  const system = `You are a technical career coach comparing a student's performance across multiple coding assessments.
-Synthesize cross-test patterns: strengths, weaknesses, improvement areas, and employability in the current job market.
-Focus on languages/domains they have actually practiced. Be specific and actionable.
-Respond with a single JSON object only (no markdown fences):
+You will receive a JSON payload of the student's coding test history: scores, languages, timing, per-question AI reviews, and code submissions.
+
+Generate a rigorous, honest report that goes beyond pass/fail. Engineering managers care about technical depth, idiomatic language use, code quality, algorithmic efficiency, and role fit.
+
+Respond with a single JSON object only (no markdown fences). Schema:
 {
-  "overallSummary": string (4-6 sentences comparing performance across tests),
-  "languagesAndDomains": string[] (unique stacks/topics they have worked in),
-  "strengths": string[] (4-8 recurring strengths),
-  "weaknesses": string[] (4-8 recurring weaknesses),
-  "improvementAreas": string[] (4-8 prioritized skill gaps),
-  "additionalLearning": string[] (6-10 courses, projects, certs, topics for current hiring trends),
-  "jobMarketOutlook": string (3-5 sentences on job readiness for their stack),
-  "testsAnalyzed": number,
-  "testInsights": [{ "testTitle": string, "languages": string[], "scoreSummary": string, "highlights": string }],
-  "recommendations": string[] (6-10 concrete next steps)
-}`;
+  "executiveSummary": string (4-6 sentences — placement-cell ready overview),
+  "competencyScores": {
+    "logic": number 1-10,
+    "codeQuality": number 1-10,
+    "speed": number 1-10,
+    "languageVersatility": number 1-10
+  },
+  "languageAgility": {
+    "versatilityScore": number 1-10,
+    "versatilityJustification": string,
+    "paradigmEvaluation": string (idiomatic vs C-style translation across languages),
+    "languageProficiency": [{
+      "language": string,
+      "fluencyScore": number 1-10,
+      "proficiencyLevel": string (e.g. Fluent, Intermediate, Beginner),
+      "idiomaticUsage": string,
+      "paradigmNotes": string
+    }],
+    "coreCsConcepts": {
+      "dataStructures": string (arrays, hash maps, trees, etc.),
+      "algorithms": string (sorting, DP, greedy, etc.)
+    }
+  },
+  "codeQuality": {
+    "readabilityAndMaintainability": string,
+    "namingConventions": string,
+    "modularity": string,
+    "robustnessAndEdgeCases": string (null, empty, boundaries, hidden cases),
+    "codeSmells": string[] (2-6 specific anti-patterns),
+    "bestPractices": string
+  },
+  "algorithmicEfficiency": {
+    "summary": string,
+    "problemAnalyses": [{
+      "problemTitle": string,
+      "language": string,
+      "timeComplexity": string (Big-O notation),
+      "spaceComplexity": string (Big-O notation),
+      "optimizationGap": string (exact gap vs optimal, e.g. nested loop O(n^2) vs hash map O(n)),
+      "optimizationScore": number 1-10
+    }]
+  },
+  "behavioralPatterns": {
+    "debuggingEfficiency": string (infer from submission patterns if limited data, state assumptions),
+    "timeManagement": string (time per question vs difficulty — flag easy problems taking too long)
+  },
+  "industryFitment": {
+    "employabilityTag": string (e.g. "Strong Backend Candidate"),
+    "roleMappings": [{
+      "role": string (Backend Developer, Data Engineer, Frontend/Fullstack Trainee, Systems Engineer, etc.),
+      "fitLevel": "Strong" | "Moderate" | "Emerging",
+      "rationale": string
+    }],
+    "skillGapAnalysis": string (what blocks technical interviews — be specific)
+  },
+  "fourWeekRoadmap": [{
+    "week": number 1-4,
+    "focus": string,
+    "tasks": string[] (3-4 highly specific tasks — never generic "practice coding")
+  }],
+  "testsAnalyzed": number
+}
 
-  const user = `Student: ${studentName}
-Coding tests completed (${attempts.length}):
+Rules:
+- Be specific: cite languages, problem types, and concrete gaps.
+- Use timing data when provided for time management analysis.
+- Use per-question AI scores and code when provided for quality/efficiency analysis.
+- fourWeekRoadmap must have exactly 4 weeks with actionable tasks.`;
 
-${blocks}`;
+function buildCareerReviewUserPrompt(
+  studentName: string,
+  payload: unknown
+): string {
+  return `Student: ${studentName}
 
-  return { system, user };
+Analyze the following JSON payload containing this student's performance across multiple coding tests and languages.
+
+${JSON.stringify(payload, null, 2)}
+
+Generate the industry-ready employability report covering:
+1. Language Agility & Paradigm Evaluation (versatility 1-10, idiomatic vs literal syntax)
+2. Production Code Quality (naming, modularity, edge cases, code smells)
+3. Algorithmic Efficiency Deep Dive (Time/Space Big-O per problem, optimization gap)
+4. Industry Role Mapping & Fitment (personas with Strong/Moderate/Emerging)
+5. Actionable 4-Week Skill Gap Roadmap (specific tasks, not generic advice)`;
 }
 
 export async function processCareerReview(job: Job<CareerReviewJobData>): Promise<void> {
@@ -153,41 +178,72 @@ export async function processCareerReview(job: Job<CareerReviewJobData>): Promis
 
       return {
         testTitle: attempt.test.title,
-        submittedAt: attempt.submittedAt,
+        submittedAt: attempt.submittedAt?.toISOString() ?? null,
         score: attempt.score,
         maxScore: attempt.maxScore,
+        scorePercent:
+          attempt.score != null && attempt.maxScore != null && attempt.maxScore > 0
+            ? Math.round((attempt.score / attempt.maxScore) * 100)
+            : null,
         totalTestSeconds: computeTotalTestSeconds(attempt.startedAt, attempt.submittedAt),
+        totalTestFormatted:
+          computeTotalTestSeconds(attempt.startedAt, attempt.submittedAt) != null
+            ? formatDuration(
+                computeTotalTestSeconds(attempt.startedAt, attempt.submittedAt)!
+              )
+            : null,
         languages,
-        topics,
+        topics: [...new Set(topics)],
         overallReview:
           attempt.aiOverallReviewStatus === 'ready' && attempt.aiOverallReview
             ? (attempt.aiOverallReview as AiAttemptReviewPayload)
             : null,
-        questionSummaries: codingSubs.map((s) => {
-          const content = s.question.content as { title?: string };
-          const ai = s.aiReview as AiReviewPayload | null;
+        questions: codingSubs.map((s) => {
+          const content = s.question.content as { title?: string; description?: string };
+          const ai =
+            s.aiReviewStatus === 'ready' && s.aiReview
+              ? (s.aiReview as AiReviewPayload)
+              : null;
           return {
             title: content.title ?? 'Coding question',
             topic: primaryTopic(s.question.tags),
             difficulty: s.question.difficulty,
-            status: s.status,
+            language: s.language,
+            submissionStatus: s.status,
+            passed: s.status === 'passed',
             timeSpentSeconds: timingMap.get(s.questionId) ?? null,
-            aiSummary: ai?.overallSummary ?? null,
+            timeSpentFormatted:
+              timingMap.get(s.questionId) != null
+                ? formatDuration(timingMap.get(s.questionId)!)
+                : null,
+            aiReview: ai
+              ? {
+                  summary: ai.overallSummary,
+                  strengths: ai.strengths,
+                  weaknesses: ai.weaknesses,
+                  scores: ai.scores,
+                }
+              : null,
+            code: s.code ? truncateCode(s.code) : null,
           };
         }),
       };
     });
 
-    const { system, user: userPrompt } = buildCareerReviewPrompt(user.name, payloadAttempts);
+    const userPrompt = buildCareerReviewUserPrompt(user.name, {
+      studentName: user.name,
+      testsAnalyzed: attempts.length,
+      attempts: payloadAttempts,
+    });
 
     const { content, model } = await openRouterChatWithFallback({
       messages: [
-        { role: 'system', content: system },
+        { role: 'system', content: CAREER_REVIEW_SYSTEM_PROMPT },
         { role: 'user', content: userPrompt },
       ],
       jsonMode: true,
-      temperature: 0.3,
-      maxTokens: 2200,
+      temperature: 0.25,
+      maxTokens: 4500,
     });
 
     let parsed: unknown;
@@ -199,7 +255,7 @@ export async function processCareerReview(job: Job<CareerReviewJobData>): Promis
 
     const validated = aiCareerReviewPayloadSchema.safeParse(parsed);
     if (!validated.success) {
-      throw new Error(`AI response schema invalid: ${validated.error.message.slice(0, 300)}`);
+      throw new Error(`AI response schema invalid: ${validated.error.message.slice(0, 400)}`);
     }
 
     const report = { ...validated.data, testsAnalyzed: attempts.length };
