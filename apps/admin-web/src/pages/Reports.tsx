@@ -66,8 +66,8 @@ export default function Reports() {
 
   useEffect(() => {
     api<{ id: string; name: string }[]>('/batches').then((b) => setBatches(b.map((x) => ({ id: x.id, name: x.name })))).catch(() => setBatches([]));
-    api<{ id: string; title: string; status: string }[]>('/tests')
-      .then((t) => setTests(t.filter((x) => x.status === 'published').map((x) => ({ id: x.id, title: x.title }))))
+    api<{ id: string; title: string }[]>('/reports/client-tests')
+      .then((t) => setTests(t.map((x) => ({ id: x.id, title: x.title }))))
       .catch(() => setTests([]));
     api<{ id: string; name: string; email: string | null }[]>('/users?role=student')
       .then((u) => setStudents(u.map((x) => ({ id: x.id, name: x.name, email: x.email ?? '' }))))

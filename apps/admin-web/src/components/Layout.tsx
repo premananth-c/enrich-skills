@@ -15,7 +15,7 @@ const navLinkStyle = ({ isActive }: { isActive: boolean }): React.CSSProperties 
 });
 
 export default function Layout() {
-  const { user, logout, canView, isSuperAdmin } = useAuth();
+  const { user, logout, canView, isSuperAdmin, isClientScoped } = useAuth();
   const navigate = useNavigate();
   const [showPasswordModal, setShowPasswordModal] = useState(false);
   const [currentPw, setCurrentPw] = useState('');
@@ -53,15 +53,15 @@ export default function Layout() {
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>
+          {!isClientScoped && <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>}
           {canView('courses') && <NavLink to="/courses" style={navLinkStyle}>Courses</NavLink>}
           {canView('batches') && <NavLink to="/batches" style={navLinkStyle}>Batches</NavLink>}
           {canView('tests') && <NavLink to="/tests" style={navLinkStyle}>Tests</NavLink>}
-          {canView('questions') && <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>}
+          {!isClientScoped && canView('questions') && <NavLink to="/questions" style={navLinkStyle}>Questions</NavLink>}
           {canView('students') && <NavLink to="/students" style={navLinkStyle}>Students</NavLink>}
-          {canView('clients') && <NavLink to="/clients" style={navLinkStyle}>Clients</NavLink>}
-          {canView('reports') && <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>}
-          {canView('meetings') && <NavLink to="/meetings" style={navLinkStyle}>Live Meetings</NavLink>}
+          {!isClientScoped && canView('clients') && <NavLink to="/clients" style={navLinkStyle}>Clients</NavLink>}
+          {!isClientScoped && canView('reports') && <NavLink to="/reports" style={navLinkStyle}>Reports</NavLink>}
+          {!isClientScoped && canView('meetings') && <NavLink to="/meetings" style={navLinkStyle}>Live Meetings</NavLink>}
           {isSuperAdmin && <NavLink to="/enquiries" style={navLinkStyle}>Enquiries</NavLink>}
           {isSuperAdmin && <NavLink to="/manage-users" style={navLinkStyle}>Manage Users</NavLink>}
         </nav>

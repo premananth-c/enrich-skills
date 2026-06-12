@@ -33,6 +33,7 @@ export const createInviteSchema = z
     courseId: z.string().uuid().optional(),
     /** ISO date string (YYYY-MM-DD) for course assignment when invite is accepted */
     courseDueDate: z.string().optional(),
+    clientIds: z.array(z.string().uuid()).optional(),
   })
   .refine((d) => !d.variantId || Boolean(d.testId), { message: 'variantId requires testId', path: ['variantId'] })
   .refine((d) => !d.courseDueDate?.trim() || Boolean(d.courseId), {

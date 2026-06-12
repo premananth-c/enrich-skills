@@ -54,6 +54,17 @@ function SuperAdminRoute({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
+function HomeRoute() {
+  const { isClientScoped, canView } = useAuth();
+  if (isClientScoped) {
+    if (canView('students')) return <Navigate to="/students" replace />;
+    if (canView('batches')) return <Navigate to="/batches" replace />;
+    if (canView('courses')) return <Navigate to="/courses" replace />;
+    if (canView('tests')) return <Navigate to="/tests" replace />;
+  }
+  return <Dashboard />;
+}
+
 export default function App() {
   return (
     <BrandingProvider>
@@ -62,7 +73,7 @@ export default function App() {
         <Routes>
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
-            <Route index element={<Dashboard />} />
+            <Route index element={<HomeRoute />} />
             <Route path="students" element={<ModuleRoute moduleKey="students"><Students /></ModuleRoute>} />
             <Route path="students/:studentId/ai-career" element={<ModuleRoute moduleKey="students"><StudentAiCareer /></ModuleRoute>} />
             <Route path="questions" element={<ModuleRoute moduleKey="questions"><Questions /></ModuleRoute>} />

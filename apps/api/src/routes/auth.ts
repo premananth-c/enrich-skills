@@ -246,11 +246,18 @@ export async function authRoutes(app: FastifyInstance) {
       return reply.status(409).send({ error: 'An account with this email already exists' });
     }
 
-    let clientId: string | null = (invite as any).clientId ?? null;
+    const inviteClientIds =
+      invite.clientIds && invite.clientIds.length > 0
+        ? invite.clientIds
+        : invite.clientId
+          ? [invite.clientId]
+          : [];
+    let clientId: string | null = inviteClientIds[0] ?? invite.clientId ?? null;
     if (!clientId) {
       const general = await db.client.findFirst({ where: { tenantId: invite.tenantId, isGeneral: true } });
       clientId = general?.id ?? null;
     }
+    const clientIds = inviteClientIds.length > 0 ? inviteClientIds : clientId ? [clientId] : [];
 
     const passwordHash = await bcrypt.hash(password, 12);
     const user = await db.user.create({
@@ -263,6 +270,7 @@ export async function authRoutes(app: FastifyInstance) {
         address,
         role: 'student',
         clientId,
+        clientIds,
       },
     });
     await logRevision(db, {
