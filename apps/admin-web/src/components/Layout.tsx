@@ -53,7 +53,7 @@ export default function Layout() {
           <div style={{ fontSize: '0.65rem', color: 'var(--color-text-muted)' }}>by Vihaan Digital Solutions</div>
         </Link>
         <nav style={{ marginTop: '2rem', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-          {!isClientScoped && <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>}
+          <NavLink to="/" end style={navLinkStyle}>Dashboard</NavLink>
           {canView('courses') && <NavLink to="/courses" style={navLinkStyle}>Courses</NavLink>}
           {canView('batches') && <NavLink to="/batches" style={navLinkStyle}>Batches</NavLink>}
           {canView('tests') && <NavLink to="/tests" style={navLinkStyle}>Tests</NavLink>}
