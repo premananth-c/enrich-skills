@@ -210,6 +210,10 @@ export async function reportsRoutes(app: FastifyInstance) {
         scope.mode === 'client'
           ? new Set(await getClientBatchIds(prisma, tenantId, scope.clientId))
           : null;
+      const clientTestIds =
+        scope.mode === 'client'
+          ? await getTestIdsForClientBatches(prisma, tenantId, scope.clientId)
+          : null;
       const [batches, courseAssignments, attempts] = await Promise.all([
         prisma.batchMember.findMany({
           where: {
@@ -219,11 +223,17 @@ export async function reportsRoutes(app: FastifyInstance) {
           include: { batch: { select: { id: true, name: true } } },
         }),
         prisma.courseAssignment.findMany({
-          where: { userId: targetUserId },
+          where: {
+            userId: targetUserId,
+            ...(clientBatchIdSet ? { batchId: { in: [...clientBatchIdSet] } } : {}),
+          },
           include: { course: { select: { id: true, title: true } }, batch: { select: { id: true, name: true } } },
         }),
         prisma.attempt.findMany({
-          where: { userId: targetUserId },
+          where: {
+            userId: targetUserId,
+            ...(clientTestIds ? { testId: { in: clientTestIds } } : {}),
+          },
           include: { test: { select: { id: true, title: true, config: true } } },
           orderBy: { startedAt: 'desc' },
         }),
