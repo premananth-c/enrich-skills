@@ -9,6 +9,7 @@ import {
   adminBtnPrimarySm,
 } from '../lib/adminButtonStyles';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import { useAuth } from '../context/AuthContext';
 
 interface Course {
   id: string;
@@ -18,6 +19,7 @@ interface Course {
 }
 
 export default function Courses() {
+  const { isClientScoped } = useAuth();
   const [courses, setCourses] = useState<Course[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -77,9 +79,11 @@ export default function Courses() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Courses</h1>
-        <button type="button" onClick={() => navigate('/courses/new')} style={adminBtnPrimary}>
-          + Create Course
-        </button>
+        {!isClientScoped && (
+          <button type="button" onClick={() => navigate('/courses/new')} style={adminBtnPrimary}>
+            + Create Course
+          </button>
+        )}
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input
@@ -91,13 +95,17 @@ export default function Courses() {
       </div>
       <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
         {activeCourses.length === 0 ? (
-          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No courses yet. Create a course and add chapters, topics, materials, and evaluations.</div>
+          <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>
+            {isClientScoped ? 'No courses assigned to your batches yet.' : 'No courses yet. Create a course and add chapters, topics, materials, and evaluations.'}
+          </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Title</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+                {!isClientScoped && (
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+                )}
               </tr>
             </thead>
             <tbody>
@@ -106,48 +114,54 @@ export default function Courses() {
                   <td style={{ padding: '0.75rem 1rem' }}>
                     <Link to={`/courses/${c.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none', fontWeight: 500 }}>{c.title}</Link>
                   </td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => navigate(`/courses/${c.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
-                      <button type="button" onClick={() => handleArchive(c.id, c.title)} style={adminBtnDestructiveTable}>Archive</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
-                    </div>
-                  </td>
+                  {!isClientScoped && (
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => navigate(`/courses/${c.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
+                        <button type="button" onClick={() => handleArchive(c.id, c.title)} style={adminBtnDestructiveTable}>Archive</button>
+                        <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
+                      </div>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
           </table>
         )}
       </div>
-      <h2 style={{ margin: '1.5rem 0 0.75rem', fontSize: '1.05rem' }}>Archived Courses</h2>
-      <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
-        {archivedCourses.length === 0 ? (
-          <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>No archived courses.</div>
-        ) : (
-          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-            <thead>
-              <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Title</th>
-                <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {archivedCourses.map((c) => (
-                <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
-                  <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{c.title}</td>
-                  <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => handleRevoke(c.id, c.title)} style={adminBtnPrimarySm}>Revoke</button>
-                      <button type="button" onClick={() => handleDelete(c.id, c.title)} style={adminBtnDestructiveTable}>Delete</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
+      {!isClientScoped && (
+        <>
+          <h2 style={{ margin: '1.5rem 0 0.75rem', fontSize: '1.05rem' }}>Archived Courses</h2>
+          <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
+            {archivedCourses.length === 0 ? (
+              <div style={{ padding: '1rem', color: 'var(--color-text-muted)' }}>No archived courses.</div>
+            ) : (
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Title</th>
+                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {archivedCourses.map((c) => (
+                    <tr key={c.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
+                      <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{c.title}</td>
+                      <td style={{ padding: '0.75rem 1rem' }}>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button type="button" onClick={() => handleRevoke(c.id, c.title)} style={adminBtnPrimarySm}>Revoke</button>
+                          <button type="button" onClick={() => handleDelete(c.id, c.title)} style={adminBtnDestructiveTable}>Delete</button>
+                          <button type="button" onClick={() => setHistoryTarget({ id: c.id, title: c.title })} style={adminBtnCancelSm}>Revision History</button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        </>
+      )}
       {historyTarget && (
         <RevisionHistoryModal
           module="courses"

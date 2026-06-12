@@ -15,6 +15,8 @@ import {
   updateEvaluationSchema,
 } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
+import { resolveClientScope } from '../lib/clientScope.js';
+import { assertCourseInClientScope, getCourseIdsForClientBatches } from '../lib/studentClients.js';
 import {
   saveFile, getFileUrl, deleteFile, STORAGE_KEYS,
   buildStorageKey, initiateMultipartUpload, getPresignedPartUrl,
@@ -29,9 +31,18 @@ export async function courseRoutes(app: FastifyInstance) {
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
     const { includeArchived } = request.query as { includeArchived?: string };
+    const clientCourseIds =
+      scope.mode === 'client'
+        ? await getCourseIdsForClientBatches(prisma, tenantId, scope.clientId)
+        : null;
     const courses = await prisma.course.findMany({
-      where: { tenantId, ...(includeArchived === 'true' ? {} : { isArchived: false }) },
+      where: {
+        tenantId,
+        ...(includeArchived === 'true' ? {} : { isArchived: false }),
+        ...(clientCourseIds ? { id: { in: clientCourseIds } } : {}),
+      },
       orderBy: { updatedAt: 'desc' },
     });
     return reply.send(courses);
@@ -40,6 +51,7 @@ export async function courseRoutes(app: FastifyInstance) {
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'courses', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
     const course = await prisma.course.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -47,6 +59,7 @@ export async function courseRoutes(app: FastifyInstance) {
       },
     });
     if (!course) return reply.status(404).send({ error: 'Course not found' });
+    await assertCourseInClientScope(prisma, tenantId, scope, course.id);
     return reply.send(course);
   });
 

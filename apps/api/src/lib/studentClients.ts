@@ -60,6 +60,37 @@ export async function getTestIdsForClientBatches(
   return assignments.map((a) => a.testId);
 }
 
+/** Course IDs assigned to any batch owned by the client (via CourseAssignment). */
+export async function getCourseIdsForClientBatches(
+  prisma: PrismaClient,
+  tenantId: string,
+  clientId: string
+): Promise<string[]> {
+  const batchIds = await getClientBatchIds(prisma, tenantId, clientId);
+  if (batchIds.length === 0) return [];
+  const assignments = await prisma.courseAssignment.findMany({
+    where: { tenantId, batchId: { in: batchIds } },
+    select: { courseId: true },
+    distinct: ['courseId'],
+  });
+  return assignments.map((a) => a.courseId);
+}
+
+export async function assertCourseInClientScope(
+  prisma: PrismaClient,
+  tenantId: string,
+  scope: ClientScope,
+  courseId: string
+): Promise<void> {
+  if (scope.mode === 'all') return;
+  const allowed = await getCourseIdsForClientBatches(prisma, tenantId, scope.clientId);
+  if (!allowed.includes(courseId)) {
+    const err = new Error('You do not have access to this course') as Error & { statusCode?: number };
+    err.statusCode = 403;
+    throw err;
+  }
+}
+
 export async function resolveStudentClientIds(
   prisma: PrismaClient,
   tenantId: string,
