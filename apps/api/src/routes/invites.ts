@@ -5,6 +5,7 @@ import { requireModuleAccess } from '../lib/tenant.js';
 import { sendInviteEmail } from '../lib/email.js';
 import { getTenantWebUrls } from '../lib/tenantUrls.js';
 import { resolveClientScope } from '../lib/clientScope.js';
+import { resolveStudentClientIds } from '../lib/studentClients.js';
 
 const INVITE_EXPIRY_DAYS = 2;
 
@@ -65,7 +66,7 @@ export async function inviteRoutes(app: FastifyInstance) {
     if (!parsed.success) {
       return reply.status(400).send({ error: parsed.error.flatten() });
     }
-    const { email, testId, variantId, batchId, courseId, courseDueDate } = parsed.data;
+    const { email, testId, variantId, batchId, courseId, courseDueDate, clientIds: requestedClientIds } = parsed.data;
 
     const existingUser = await prisma.user.findUnique({
       where: { tenantId_email: { tenantId, email: email.toLowerCase() } },
@@ -110,14 +111,16 @@ export async function inviteRoutes(app: FastifyInstance) {
     }
 
     const scope = await resolveClientScope(request, prisma);
-    let inviteClientId: string | undefined;
+    let inviteClientIds: string[] = [];
     if (batchId) {
       const batch = await prisma.batch.findFirst({ where: { id: batchId, tenantId }, select: { clientId: true } });
-      inviteClientId = batch?.clientId ?? undefined;
+      if (batch?.clientId) inviteClientIds = [batch.clientId];
     }
-    if (!inviteClientId && scope.mode === 'client') {
-      inviteClientId = scope.clientId;
+    if (inviteClientIds.length === 0) {
+      const resolved = await resolveStudentClientIds(prisma, tenantId, scope, requestedClientIds);
+      inviteClientIds = resolved.clientIds;
     }
+    const invitePrimaryClientId = inviteClientIds[0];
 
     const invite = await prisma.invite.create({
       data: {
@@ -131,7 +134,8 @@ export async function inviteRoutes(app: FastifyInstance) {
         batchId: batchId || undefined,
         courseId: courseId || undefined,
         courseDueDate: courseDueDateVal ?? undefined,
-        clientId: inviteClientId ?? undefined,
+        clientId: invitePrimaryClientId ?? undefined,
+        clientIds: inviteClientIds,
       },
     });
 
@@ -153,8 +157,19 @@ export async function inviteRoutes(app: FastifyInstance) {
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'students', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
     const invites = await prisma.invite.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(scope.mode === 'client'
+          ? {
+              OR: [
+                { clientId: scope.clientId },
+                { clientIds: { has: scope.clientId } },
+              ],
+            }
+          : {}),
+      },
       include: {
         test: { select: { id: true, title: true } },
         inviter: { select: { name: true, email: true } },

@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { api } from '../lib/api';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import ClientMultiSelect from '../components/ClientMultiSelect';
 import { useAuth } from '../context/AuthContext';
 import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
 import {
@@ -28,7 +29,14 @@ interface Student {
   address?: string | null;
   createdAt: string;
   clientId?: string | null;
+  clientIds?: string[];
   client?: { id: string; name: string } | null;
+  clients?: { id: string; name: string }[];
+}
+
+interface ClientOption {
+  id: string;
+  name: string;
 }
 
 interface Invite {
@@ -50,7 +58,7 @@ interface TestOption {
 }
 
 export default function Students() {
-  const { isSuperAdmin, canEdit } = useAuth();
+  const { isSuperAdmin, canEdit, isClientScoped } = useAuth();
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -90,6 +98,11 @@ export default function Students() {
   const [resetPw, setResetPw] = useState('');
   const [resetPwLoading, setResetPwLoading] = useState(false);
   const [resetPwSuccess, setResetPwSuccess] = useState(false);
+  const [clients, setClients] = useState<ClientOption[]>([]);
+  const [inviteClientIds, setInviteClientIds] = useState<string[]>([]);
+  const [bulkInviteClientIds, setBulkInviteClientIds] = useState<string[]>([]);
+  const [directClientIds, setDirectClientIds] = useState<string[]>([]);
+  const [editClientIds, setEditClientIds] = useState<string[]>([]);
 
   const loadStudents = () => {
     api<Student[]>('/users?role=student')
@@ -110,6 +123,13 @@ export default function Students() {
     loadStudents();
     loadInvites();
   }, []);
+
+  useEffect(() => {
+    if (isClientScoped) return;
+    api<ClientOption[]>('/users/client-options')
+      .then(setClients)
+      .catch(() => setClients([]));
+  }, [isClientScoped]);
 
   useEffect(() => {
     if (inviteOpen || bulkInviteOpen) {
@@ -159,6 +179,7 @@ export default function Students() {
               email,
               ...(bulkInviteTestId && { testId: bulkInviteTestId }),
               ...(bulkInviteVariantId && { variantId: bulkInviteVariantId }),
+              ...(bulkInviteClientIds.length > 0 && { clientIds: bulkInviteClientIds }),
             }),
           });
           ok++;
@@ -171,6 +192,7 @@ export default function Students() {
       setBulkInviteFile(null);
       setBulkInviteTestId('');
       setBulkInviteVariantId('');
+      setBulkInviteClientIds([]);
       loadStudents();
       loadInvites();
       emitToast('success', `Bulk invite finished: ${ok} sent${failed ? `, ${failed} failed` : ''}.`);
@@ -196,12 +218,14 @@ export default function Students() {
           email: inviteEmail.trim(),
           ...(inviteTestId && { testId: inviteTestId }),
           ...(inviteVariantId && { variantId: inviteVariantId }),
+          ...(inviteClientIds.length > 0 && { clientIds: inviteClientIds }),
         }),
       });
       setInviteOpen(false);
       setInviteEmail('');
       setInviteTestId('');
       setInviteVariantId('');
+      setInviteClientIds([]);
       loadStudents();
       loadInvites();
     } catch (err) {
@@ -210,6 +234,9 @@ export default function Students() {
       setInviteSending(false);
     }
   };
+
+  const studentClientIds = (s: Student) =>
+    s.clientIds?.length ? s.clientIds : s.clientId ? [s.clientId] : s.clients?.map((c) => c.id) ?? [];
 
   const openEdit = (s: Student) => {
     const next = {
@@ -222,6 +249,7 @@ export default function Students() {
     setEditingStudent(s);
     setEditForm(next);
     setInitialEditForm(next);
+    setEditClientIds(studentClientIds(s));
     setEditError('');
     setResetPw('');
     setResetPwSuccess(false);
@@ -242,6 +270,7 @@ export default function Students() {
           phoneNumber: editForm.phoneNumber.trim() || null,
           address: editForm.address.trim() || null,
           isActive: editForm.isActive,
+          ...(!isClientScoped && { clientIds: editClientIds }),
         }),
       });
       setStudents((prev) => prev.map((s) => (s.id === updated.id ? { ...s, ...updated } : s)));
@@ -372,10 +401,14 @@ export default function Students() {
     e.preventDefault();
     await api<Student>('/users/students/direct', {
       method: 'POST',
-      body: JSON.stringify(directForm),
+      body: JSON.stringify({
+        ...directForm,
+        ...(directClientIds.length > 0 && { clientIds: directClientIds }),
+      }),
     });
     setDirectOpen(false);
     setDirectForm({ name: '', email: '', password: '', phoneNumber: '', address: '' });
+    setDirectClientIds([]);
     loadStudents();
   };
 
@@ -413,12 +446,18 @@ export default function Students() {
   const filteredPendingInvites = filterInvites(pendingInvites, inviteSearch);
   const filteredExpiredInvites = filterInvites(expiredInvites, expiredInviteSearch);
 
+  const initialEditClientIds = editingStudent ? studentClientIds(editingStudent) : [];
+  const clientIdsDirty =
+    !isClientScoped &&
+    (editClientIds.length !== initialEditClientIds.length ||
+      editClientIds.some((id) => !initialEditClientIds.includes(id)));
   const isEditDirty =
     editForm.name !== initialEditForm.name ||
     editForm.email !== initialEditForm.email ||
     editForm.phoneNumber !== initialEditForm.phoneNumber ||
     editForm.address !== initialEditForm.address ||
-    editForm.isActive !== initialEditForm.isActive;
+    editForm.isActive !== initialEditForm.isActive ||
+    clientIdsDirty;
   const canSaveEdit = !editSaving && editForm.email.trim().length > 0 && isEditDirty;
   const filtered = students.filter((s) => {
     const q = search.trim().toLowerCase();
@@ -594,28 +633,33 @@ export default function Students() {
               Add Student Directly
             </button>
           )}
-          <button
-            type="button"
-            onClick={() => { setInviteOpen(true); setInviteError(''); }}
-            disabled={!canEdit('students')}
-            style={adminBtnPrimaryDisabled(!canEdit('students'))}
-          >
-            Invite Student
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setBulkInviteOpen(true);
-              setBulkInviteError('');
-              setBulkInviteFile(null);
-              setBulkInviteTestId('');
-              setBulkInviteVariantId('');
-            }}
-            disabled={!canEdit('students')}
-            style={adminBtnPrimaryDisabled(!canEdit('students'))}
-          >
-            Bulk Invite
-          </button>
+          {!isClientScoped && (
+            <button
+              type="button"
+              onClick={() => { setInviteOpen(true); setInviteError(''); setInviteClientIds([]); }}
+              disabled={!canEdit('students')}
+              style={adminBtnPrimaryDisabled(!canEdit('students'))}
+            >
+              Invite Student
+            </button>
+          )}
+          {!isClientScoped && (
+            <button
+              type="button"
+              onClick={() => {
+                setBulkInviteOpen(true);
+                setBulkInviteError('');
+                setBulkInviteFile(null);
+                setBulkInviteTestId('');
+                setBulkInviteVariantId('');
+                setBulkInviteClientIds([]);
+              }}
+              disabled={!canEdit('students')}
+              style={adminBtnPrimaryDisabled(!canEdit('students'))}
+            >
+              Bulk Invite
+            </button>
+          )}
         </div>
       </div>
       {/* ── 1. Active Students ────────────────────────────────────────────── */}
@@ -649,7 +693,9 @@ export default function Students() {
                   <tr key={s.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                     <td style={{ padding: '0.75rem 1rem' }}>{s.name}</td>
                     <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.email}</td>
-                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{s.client?.name ?? '--'}</td>
+                    <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>
+                      {(s.clients?.length ? s.clients.map((c) => c.name).join(', ') : s.client?.name) ?? '--'}
+                    </td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <span style={{ padding: '2px 8px', borderRadius: 4, fontSize: '0.8rem', background: s.isActive ? '#16a34a22' : '#ef444422', color: s.isActive ? '#4ade80' : '#f87171' }}>
                         {s.isActive ? 'Active' : 'Inactive'}
@@ -909,6 +955,15 @@ export default function Students() {
                   </select>
                 </div>
               ) : null}
+              <div style={{ marginBottom: '1rem' }}>
+                <ClientMultiSelect
+                  clients={clients}
+                  value={bulkInviteClientIds}
+                  onChange={setBulkInviteClientIds}
+                  label="Clients (optional)"
+                  hint="Select one or more clients for invited students. Defaults to General if none selected."
+                />
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" onClick={() => setBulkInviteOpen(false)} style={adminBtnCancel}>Cancel</button>
                 <button type="submit" disabled={bulkInviteRunning || !bulkInviteFile} style={adminBtnPrimaryDisabled(bulkInviteRunning || !bulkInviteFile)}>
@@ -953,6 +1008,15 @@ export default function Students() {
                   </select>
                 </div>
               ) : null}
+              <div style={{ marginBottom: '1rem' }}>
+                <ClientMultiSelect
+                  clients={clients}
+                  value={inviteClientIds}
+                  onChange={setInviteClientIds}
+                  label="Clients (optional)"
+                  hint="Select one or more clients for this student. Defaults to General if none selected."
+                />
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" onClick={() => setInviteOpen(false)} style={adminBtnCancel}>Cancel</button>
                 <button type="submit" disabled={!canInvite} style={adminBtnPrimaryDisabled(!canInvite)}>{inviteSending ? 'Sending…' : 'Send Invite'}</button>
@@ -990,6 +1054,15 @@ export default function Students() {
                 <label style={labelStyle}>Address</label>
                 <input value={directForm.address} onChange={(e) => setDirectForm((f) => ({ ...f, address: e.target.value }))} style={inputStyle} />
               </div>
+              <div style={{ marginBottom: '0.8rem' }}>
+                <ClientMultiSelect
+                  clients={clients}
+                  value={directClientIds}
+                  onChange={setDirectClientIds}
+                  label="Clients (optional)"
+                  hint="Select one or more clients. Defaults to General if none selected."
+                />
+              </div>
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1rem' }}>
                 <button type="button" onClick={() => setDirectOpen(false)} style={adminBtnCancel}>Cancel</button>
                 <button type="submit" style={adminBtnPrimary}>Create Student</button>
@@ -1025,6 +1098,17 @@ export default function Students() {
                 <input type="checkbox" id="edit-isActive" checked={editForm.isActive} onChange={(e) => setEditForm((f) => ({ ...f, isActive: e.target.checked }))} />
                 <label htmlFor="edit-isActive" style={labelStyle}>Active (can sign in)</label>
               </div>
+              {!isClientScoped && (
+                <div style={{ marginBottom: '1rem' }}>
+                  <ClientMultiSelect
+                    clients={clients}
+                    value={editClientIds}
+                    onChange={setEditClientIds}
+                    label="Clients"
+                    hint="Assign this student to one or more clients."
+                  />
+                </div>
+              )}
               <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', marginTop: '1.25rem' }}>
                 <button type="button" onClick={() => { setEditOpen(false); setEditingStudent(null); }} style={adminBtnCancel}>Cancel</button>
                 <button type="submit" disabled={!canSaveEdit} style={adminBtnPrimaryDisabled(!canSaveEdit)}>{editSaving ? 'Saving…' : 'Save'}</button>

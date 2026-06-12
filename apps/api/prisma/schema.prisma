@@ -53,6 +53,7 @@ model User {
   aiCareerReviewTestCount   Int?
 
   clientId     String?
+  clientIds    String[] @default([])
 
   tenant               Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   client               Client?              @relation("StudentClient", fields: [clientId], references: [id], onDelete: SetNull)
@@ -203,6 +204,7 @@ model Invite {
   courseId        String?
   courseDueDate   DateTime?
   clientId        String?
+  clientIds       String[]  @default([])
   usedAt          DateTime?
   createdAt       DateTime  @default(now())
 

@@ -1,4 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import { api } from '../lib/api';
 
 interface User {
   id: string;
@@ -8,6 +9,8 @@ interface User {
   tenantId: string;
   permissions?: Record<string, 'none' | 'view' | 'edit'>;
 }
+
+export type ClientScopeState = { mode: 'all' } | { mode: 'client'; clientId: string };
 
 const MODULE_KEYS = ['courses', 'batches', 'tests', 'questions', 'students', 'reports', 'manage_users', 'meetings', 'clients'] as const;
 
@@ -19,6 +22,8 @@ interface AuthContextType {
   canView: (moduleKey: string) => boolean;
   canEdit: (moduleKey: string) => boolean;
   isSuperAdmin: boolean;
+  isClientScoped: boolean;
+  clientScope: ClientScopeState;
   hasNoModuleAccess: boolean;
 }
 
@@ -27,6 +32,27 @@ const AuthContext = createContext<AuthContextType | null>(null);
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [clientScope, setClientScope] = useState<ClientScopeState>({ mode: 'all' });
+
+  const refreshSession = useCallback(async () => {
+    const token = localStorage.getItem('enrich_admin_token');
+    if (!token) {
+      setClientScope({ mode: 'all' });
+      return;
+    }
+    try {
+      const me = await api<{
+        permissions?: User['permissions'];
+        clientScope?: ClientScopeState;
+      }>('/users/me/permissions', { silent: true });
+      if (me.permissions) {
+        setUser((prev) => (prev ? { ...prev, permissions: me.permissions } : prev));
+      }
+      setClientScope(me.clientScope?.mode === 'client' ? me.clientScope : { mode: 'all' });
+    } catch {
+      setClientScope({ mode: 'all' });
+    }
+  }, []);
 
   useEffect(() => {
     const token = localStorage.getItem('enrich_admin_token');
@@ -34,6 +60,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (token && stored) {
       try {
         setUser(JSON.parse(stored));
+        void refreshSession().finally(() => setLoading(false));
+        return;
       } catch {
         localStorage.removeItem('enrich_admin_token');
         localStorage.removeItem('enrich_admin_refresh_token');
@@ -41,7 +69,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     }
     setLoading(false);
-  }, []);
+  }, [refreshSession]);
 
   const apiBase = import.meta.env.VITE_API_URL ?? '';
 
@@ -64,10 +92,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (data.refreshToken) localStorage.setItem('enrich_admin_refresh_token', data.refreshToken);
     localStorage.setItem('enrich_admin_user', JSON.stringify(data.user));
     if (data.user.tenantId) localStorage.setItem('enrich_tenant_id', data.user.tenantId);
-  }, []);
+    await refreshSession();
+  }, [refreshSession]);
 
   const logout = useCallback(() => {
     setUser(null);
+    setClientScope({ mode: 'all' });
     localStorage.removeItem('enrich_admin_token');
     localStorage.removeItem('enrich_admin_refresh_token');
     localStorage.removeItem('enrich_admin_user');
@@ -96,13 +126,27 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isSuperAdmin = user?.role === 'super_admin';
+  const isClientScoped = clientScope.mode === 'client';
   const hasNoModuleAccess =
     !!user &&
     !isSuperAdmin &&
     MODULE_KEYS.every((moduleKey) => !(user.permissions?.[moduleKey] === 'view' || user.permissions?.[moduleKey] === 'edit'));
 
   return (
-    <AuthContext.Provider value={{ user, loading, login, logout, canView, canEdit, isSuperAdmin, hasNoModuleAccess }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        loading,
+        login,
+        logout,
+        canView,
+        canEdit,
+        isSuperAdmin,
+        isClientScoped,
+        clientScope,
+        hasNoModuleAccess,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );
