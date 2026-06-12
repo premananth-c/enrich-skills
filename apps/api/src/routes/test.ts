@@ -8,6 +8,8 @@ import {
 import { formatDuration } from '@enrich-skills/shared';
 import { requireModuleAccess, authenticate } from '../lib/tenant.js';
 import { logRevision } from '../lib/revision.js';
+import { resolveClientScope } from '../lib/clientScope.js';
+import { getTestIdsForClientBatches } from '../lib/studentClients.js';
 
 export async function testRoutes(app: FastifyInstance) {
   app.addHook('preHandler', authenticate);
@@ -15,8 +17,16 @@ export async function testRoutes(app: FastifyInstance) {
   app.get('/', async (request: FastifyRequest, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
+    const clientTestIds =
+      scope.mode === 'client'
+        ? await getTestIdsForClientBatches(prisma, tenantId, scope.clientId)
+        : null;
     const tests = await prisma.test.findMany({
-      where: { tenantId },
+      where: {
+        tenantId,
+        ...(clientTestIds ? { id: { in: clientTestIds } } : {}),
+      },
       include: {
         testQuestions: { include: { question: true }, orderBy: { order: 'asc' } },
       },
@@ -28,6 +38,7 @@ export async function testRoutes(app: FastifyInstance) {
   app.get('/:id', async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
     const tenantId = await requireModuleAccess(request, 'tests', 'view');
     const prisma = await request.getTenantPrisma();
+    const scope = await resolveClientScope(request, prisma);
     const test = await prisma.test.findFirst({
       where: { id: request.params.id, tenantId },
       include: {
@@ -36,6 +47,12 @@ export async function testRoutes(app: FastifyInstance) {
       },
     });
     if (!test) return reply.status(404).send({ error: 'Test not found' });
+    if (scope.mode === 'client') {
+      const allowedIds = await getTestIdsForClientBatches(prisma, tenantId, scope.clientId);
+      if (!allowedIds.includes(test.id)) {
+        return reply.status(403).send({ error: 'You do not have access to this test' });
+      }
+    }
     return reply.send(test);
   });
 
