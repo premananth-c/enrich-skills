@@ -47,7 +47,6 @@ export default function Dashboard() {
         { label: 'Batches', value: batchesCount, to: '/batches' },
         { label: 'Tests', value: stats.tests, to: '/tests' },
         { label: 'Students', value: stats.students, to: '/students' },
-        { label: 'Reports', value: 'View', to: '/reports' },
       ]
     : [
         { label: 'Courses', value: coursesCount, to: '/courses' },
