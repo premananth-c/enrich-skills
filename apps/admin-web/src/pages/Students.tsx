@@ -59,6 +59,7 @@ interface TestOption {
 
 export default function Students() {
   const { isSuperAdmin, canEdit, isClientScoped } = useAuth();
+  const showRevisionHistory = !isClientScoped;
   const [students, setStudents] = useState<Student[]>([]);
   const [loading, setLoading] = useState(true);
   const [invites, setInvites] = useState<Invite[]>([]);
@@ -707,7 +708,9 @@ export default function Students() {
                         <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
                         <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
                         <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                        {showRevisionHistory && (
                         <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
+                      )}
                       </div>
                     </td>
                   </tr>
@@ -906,7 +909,9 @@ export default function Students() {
                     <div style={{ display: 'flex', gap: '0.5rem' }}>
                       <button type="button" onClick={() => handleRevoke(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Revoke</button>
                       <button type="button" onClick={() => handleDeletePermanently(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Delete</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
+                      {showRevisionHistory && (
+                        <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
+                      )}
                     </div>
                   </td>
                 </tr>
