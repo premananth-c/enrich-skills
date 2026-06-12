@@ -82,9 +82,11 @@ export default function Batches() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Batches</h1>
-        <button type="button" onClick={() => navigate('/batches/new')} style={adminBtnPrimary}>
-          + Create Batch
-        </button>
+        {!isClientScoped && (
+          <button type="button" onClick={() => navigate('/batches/new')} style={adminBtnPrimary}>
+            + Create Batch
+          </button>
+        )}
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input

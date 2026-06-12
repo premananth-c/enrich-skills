@@ -140,7 +140,7 @@ function buildUpdateSnapshot(input: {
 export default function TestDetail() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
-  const { canEdit } = useAuth();
+  const { canEdit, isClientScoped } = useAuth();
   const [test, setTest] = useState<TestData | null>(null);
   const [attempts, setAttempts] = useState<AttemptEntry[]>([]);
   const [studentAttempts, setStudentAttempts] = useState<StudentAttemptSummary[]>([]);
@@ -149,6 +149,10 @@ export default function TestDetail() {
   const [pool, setPool] = useState<QuestionItem[]>([]);
   const [selectedPoolIds, setSelectedPoolIds] = useState<Set<string>>(new Set());
   const [tab, setTab] = useState<'questions' | 'students' | 'variants'>('questions');
+
+  useEffect(() => {
+    if (isClientScoped) setTab('students');
+  }, [isClientScoped]);
 
   // Variant form state
   const [variantFormOpen, setVariantFormOpen] = useState(false);
@@ -578,19 +582,21 @@ export default function TestDetail() {
             </span>
           )}
         </div>
-        <div>
-          <button
-            type="button"
-            onClick={openAllocate}
-            disabled={!canEdit('tests') || !canAssignToStudents}
-            style={adminBtnPrimaryDisabled(!canEdit('tests') || !canAssignToStudents)}
-          >
-            Assign To Students
-          </button>
-        </div>
+        {!isClientScoped && (
+          <div>
+            <button
+              type="button"
+              onClick={openAllocate}
+              disabled={!canEdit('tests') || !canAssignToStudents}
+              style={adminBtnPrimaryDisabled(!canEdit('tests') || !canAssignToStudents)}
+            >
+              Assign To Students
+            </button>
+          </div>
+        )}
       </div>
 
-      <form onSubmit={handleUpdateTest} style={{ marginBottom: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
+      {!isClientScoped && <form onSubmit={handleUpdateTest} style={{ marginBottom: '1.5rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
         <h3 style={{ margin: '0 0 1rem' }}>Test Configuration</h3>
         {saveError && <div style={{ padding: '0.65rem 0.75rem', marginBottom: '0.75rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171' }}>{saveError}</div>}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
@@ -765,9 +771,9 @@ export default function TestDetail() {
             Cancel
           </button>
         </div>
-      </form>
+      </form>}
 
-      <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
+      {!isClientScoped && <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap', marginBottom: '1.5rem' }}>
         <div style={{ padding: '1rem 1.25rem', background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8 }}>
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Type</div>
           <div style={{ fontWeight: 500, textTransform: 'uppercase' }}>{test.type}</div>
@@ -806,19 +812,22 @@ export default function TestDetail() {
           <div style={{ color: 'var(--color-text-muted)', fontSize: '0.8rem' }}>Attempts</div>
           <div style={{ fontWeight: 500 }}>{attempts.length}</div>
         </div>
-      </div>
+      </div>}
 
-      {/* Tabs */}
-      <div style={{ display: 'flex', gap: '0', marginBottom: '1rem', borderBottom: '1px solid var(--color-border)' }}>
-        {(['questions', 'variants', 'students'] as const).map((t) => (
-          <button key={t} onClick={() => setTab(t)} style={{ padding: '0.5rem 1.25rem', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: 500, textTransform: 'capitalize', cursor: 'pointer' }}>
-            {t === 'students' ? `Students & Scores (${attempts.length})` : t === 'variants' ? `Difficulty Variants (${variants.length})` : `Questions (${test.testQuestions.length})`}
-          </button>
-        ))}
-      </div>
+      {isClientScoped ? (
+        <h2 style={{ margin: '0 0 1rem', fontSize: '1.1rem' }}>Students & Scores ({attempts.length})</h2>
+      ) : (
+        <div style={{ display: 'flex', gap: '0', marginBottom: '1rem', borderBottom: '1px solid var(--color-border)' }}>
+          {(['questions', 'variants', 'students'] as const).map((t) => (
+            <button key={t} onClick={() => setTab(t)} style={{ padding: '0.5rem 1.25rem', background: 'transparent', border: 'none', borderBottom: tab === t ? '2px solid var(--color-primary)' : '2px solid transparent', color: tab === t ? 'var(--color-text)' : 'var(--color-text-muted)', fontWeight: 500, textTransform: 'capitalize', cursor: 'pointer' }}>
+              {t === 'students' ? `Students & Scores (${attempts.length})` : t === 'variants' ? `Difficulty Variants (${variants.length})` : `Questions (${test.testQuestions.length})`}
+            </button>
+          ))}
+        </div>
+      )}
 
       {/* Questions Tab */}
-      {tab === 'questions' && (
+      {!isClientScoped && tab === 'questions' && (
         <div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
             <button type="button" onClick={openPool} style={adminBtnPrimaryCompact}>
@@ -886,7 +895,7 @@ export default function TestDetail() {
       )}
 
       {/* Variants Tab */}
-      {tab === 'variants' && (
+      {!isClientScoped && tab === 'variants' && (
         <div>
           <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem' }}>
             <button type="button" onClick={() => openVariantForm()} style={adminBtnPrimaryCompact}>
@@ -935,7 +944,7 @@ export default function TestDetail() {
       )}
 
       {/* Students Tab */}
-      {tab === 'students' && (
+      {(isClientScoped || tab === 'students') && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, overflow: 'hidden' }}>
           {studentAttempts.length === 0 ? (
             <div style={{ padding: '2rem', textAlign: 'center', color: 'var(--color-text-muted)' }}>No students are assigned to this test yet.</div>
@@ -950,7 +959,7 @@ export default function TestDetail() {
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Score</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempt Timestamps</th>
-                  {canEdit('tests') && (
+                  {canEdit('tests') && !isClientScoped && (
                     <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
                   )}
                 </tr>
@@ -989,7 +998,7 @@ export default function TestDetail() {
                             .map((a, i) => `#${i + 1} ${new Date(a.startedAt).toLocaleString()}${a.submittedAt ? ` -> ${new Date(a.submittedAt).toLocaleString()}` : ''}`)
                             .join(' | ')}
                     </td>
-                    {canEdit('tests') && (
+                    {canEdit('tests') && !isClientScoped && (
                       <td style={{ padding: '0.75rem 1rem' }}>
                         <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
                           {latestAttemptId && id && (

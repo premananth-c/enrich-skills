@@ -16,6 +16,7 @@ import {
   adminBtnPrimaryDisabled,
   adminBtnPrimarySm,
 } from '../lib/adminButtonStyles';
+import { useAuth } from '../context/AuthContext';
 
 type Tab = 'members' | 'calendar' | 'notes' | 'videos' | 'assignments' | 'tests' | 'reports';
 
@@ -83,6 +84,7 @@ const labelStyle: React.CSSProperties = { display: 'block', marginBottom: '0.25r
 export default function BatchDetail() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { isClientScoped } = useAuth();
   const [batch, setBatch] = useState<BatchInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [tab, setTab] = useState<Tab>('members');
@@ -459,64 +461,68 @@ export default function BatchDetail() {
 
       {tab === 'members' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '0.75rem' }}>
-            <label htmlFor="batch-add-student-combobox" style={{ ...labelStyle, marginBottom: '0.35rem' }}>Add student</label>
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
-              <StudentSearchCombobox
-                id="batch-add-student-combobox"
-                options={membersAvailableStudents}
-                value={addMemberUserId}
-                onChange={setAddMemberUserId}
-                maxWidth={280}
-                emptyMessage={membersAvailableStudents.length === 0 ? 'No students left to add' : 'No students match'}
-              />
-              <button type="button" onClick={addMember} disabled={!addMemberUserId} style={adminBtnPrimaryDisabled(!addMemberUserId)}>Add Student</button>
-            </div>
-          </div>
-          <form onSubmit={inviteMemberByEmail} style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
-            <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Invite by email</div>
-            <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-              Send a registration invite. When they sign up, they are added to this batch automatically.
-            </p>
-            {inviteMemberError && (
-              <div style={{ padding: '0.45rem 0.6rem', marginBottom: '0.5rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.85rem' }}>{inviteMemberError}</div>
-            )}
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                type="email"
-                value={inviteMemberEmail}
-                onChange={(e) => { setInviteMemberEmail(e.target.value); setInviteMemberError(''); }}
-                placeholder="student@example.com"
-                style={{ ...inputStyle, flex: '1 1 200px', minWidth: 180, maxWidth: 280 }}
-              />
-              <button type="submit" disabled={inviteMemberSending || !inviteMemberEmail.trim()} style={adminBtnPrimaryDisabled(inviteMemberSending || !inviteMemberEmail.trim())}>
-                {inviteMemberSending ? 'Sending…' : 'Send Invite'}
-              </button>
-            </div>
-          </form>
-          <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
-            <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Bulk assign (spreadsheet)</div>
-            <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
-              File must include a column header named <strong>Email</strong>. Existing students are added to this batch immediately; others receive an invite and join the batch when they register.
-            </p>
-            {bulkMembersProgress && <div style={{ marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{bulkMembersProgress}</div>}
-            <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
-                onChange={(e) => setBulkMembersFile(e.target.files?.[0] ?? null)}
-                style={{ ...inputStyle, padding: '0.35rem', flex: '1 1 200px', minWidth: 180 }}
-              />
-              <button
-                type="button"
-                onClick={bulkAddMembersFromSpreadsheet}
-                disabled={bulkMembersBusy || !bulkMembersFile}
-                style={adminBtnPrimaryDisabled(bulkMembersBusy || !bulkMembersFile)}
-              >
-                {bulkMembersBusy ? 'Processing…' : 'Run Bulk Add'}
-              </button>
-            </div>
-          </div>
+          {!isClientScoped && (
+            <>
+              <div style={{ marginBottom: '0.75rem' }}>
+                <label htmlFor="batch-add-student-combobox" style={{ ...labelStyle, marginBottom: '0.35rem' }}>Add student</label>
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'flex-start' }}>
+                  <StudentSearchCombobox
+                    id="batch-add-student-combobox"
+                    options={membersAvailableStudents}
+                    value={addMemberUserId}
+                    onChange={setAddMemberUserId}
+                    maxWidth={280}
+                    emptyMessage={membersAvailableStudents.length === 0 ? 'No students left to add' : 'No students match'}
+                  />
+                  <button type="button" onClick={addMember} disabled={!addMemberUserId} style={adminBtnPrimaryDisabled(!addMemberUserId)}>Add Student</button>
+                </div>
+              </div>
+              <form onSubmit={inviteMemberByEmail} style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
+                <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Invite by email</div>
+                <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  Send a registration invite. When they sign up, they are added to this batch automatically.
+                </p>
+                {inviteMemberError && (
+                  <div style={{ padding: '0.45rem 0.6rem', marginBottom: '0.5rem', background: '#ef444422', border: '1px solid #ef444444', borderRadius: 6, color: '#f87171', fontSize: '0.85rem' }}>{inviteMemberError}</div>
+                )}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="email"
+                    value={inviteMemberEmail}
+                    onChange={(e) => { setInviteMemberEmail(e.target.value); setInviteMemberError(''); }}
+                    placeholder="student@example.com"
+                    style={{ ...inputStyle, flex: '1 1 200px', minWidth: 180, maxWidth: 280 }}
+                  />
+                  <button type="submit" disabled={inviteMemberSending || !inviteMemberEmail.trim()} style={adminBtnPrimaryDisabled(inviteMemberSending || !inviteMemberEmail.trim())}>
+                    {inviteMemberSending ? 'Sending…' : 'Send Invite'}
+                  </button>
+                </div>
+              </form>
+              <div style={{ marginBottom: '1rem', padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 8, maxWidth: 520 }}>
+                <div style={{ ...labelStyle, marginBottom: '0.35rem' }}>Bulk assign (spreadsheet)</div>
+                <p style={{ margin: '0 0 0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>
+                  File must include a column header named <strong>Email</strong>. Existing students are added to this batch immediately; others receive an invite and join the batch when they register.
+                </p>
+                {bulkMembersProgress && <div style={{ marginBottom: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>{bulkMembersProgress}</div>}
+                <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls,.csv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv"
+                    onChange={(e) => setBulkMembersFile(e.target.files?.[0] ?? null)}
+                    style={{ ...inputStyle, padding: '0.35rem', flex: '1 1 200px', minWidth: 180 }}
+                  />
+                  <button
+                    type="button"
+                    onClick={bulkAddMembersFromSpreadsheet}
+                    disabled={bulkMembersBusy || !bulkMembersFile}
+                    style={adminBtnPrimaryDisabled(bulkMembersBusy || !bulkMembersFile)}
+                  >
+                    {bulkMembersBusy ? 'Processing…' : 'Run Bulk Add'}
+                  </button>
+                </div>
+              </div>
+            </>
+          )}
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead>
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
@@ -548,13 +554,15 @@ export default function BatchDetail() {
             <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1))} style={{ ...adminBtnCancel, padding: '0.35rem 0.75rem', color: 'var(--color-text)' }}>← Prev</button>
             <span style={{ fontWeight: 600, minWidth: 160 }}>{calendarMonth.toLocaleString('default', { month: 'long', year: 'numeric' })}</span>
             <button type="button" onClick={() => setCalendarMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1))} style={{ ...adminBtnCancel, padding: '0.35rem 0.75rem', color: 'var(--color-text)' }}>Next →</button>
-            {!eventForm ? (
-              <button type="button" onClick={() => setEventForm(true)} style={adminBtnPrimary}>+ Add Event</button>
-            ) : (
-              <button type="button" onClick={() => setEventForm(false)} style={adminBtnCancel}>Cancel New Event</button>
+            {!isClientScoped && (
+              !eventForm ? (
+                <button type="button" onClick={() => setEventForm(true)} style={adminBtnPrimary}>+ Add Event</button>
+              ) : (
+                <button type="button" onClick={() => setEventForm(false)} style={adminBtnCancel}>Cancel New Event</button>
+              )
             )}
           </div>
-          {eventForm && (
+          {!isClientScoped && eventForm && (
             <form onSubmit={addEvent} style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem', maxWidth: 400, marginBottom: '1rem', padding: '1rem', background: 'var(--color-bg)', borderRadius: 8, border: '1px solid var(--color-border)' }}>
               <div><label style={labelStyle}>Title</label><input value={newEvent.title} onChange={(e) => setNewEvent((p) => ({ ...p, title: e.target.value }))} required style={inputStyle} /></div>
               <div><label style={labelStyle}>Start</label><input type="datetime-local" value={newEvent.startAt} onChange={(e) => setNewEvent((p) => ({ ...p, startAt: e.target.value }))} required style={inputStyle} /></div>
@@ -647,11 +655,13 @@ export default function BatchDetail() {
 
       {tab === 'videos' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '1rem' }}>
-            <label style={{ ...labelStyle, display: 'inline-block', marginRight: '0.5rem' }}>Upload recorded video:</label>
-            <input type="file" accept="video/*" onChange={uploadVideo} disabled={videoUploading} />
-            {videoUploading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>Uploading...</span>}
-          </div>
+          {!isClientScoped && (
+            <div style={{ marginBottom: '1rem' }}>
+              <label style={{ ...labelStyle, display: 'inline-block', marginRight: '0.5rem' }}>Upload recorded video:</label>
+              <input type="file" accept="video/*" onChange={uploadVideo} disabled={videoUploading} />
+              {videoUploading && <span style={{ marginLeft: '0.5rem', color: 'var(--color-text-muted)' }}>Uploading...</span>}
+            </div>
+          )}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
             {videos.map((v) => (
               <div key={v.id} style={{ padding: '0.75rem', background: 'var(--color-bg)', border: '1px solid var(--color-border)', borderRadius: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -672,10 +682,12 @@ export default function BatchDetail() {
 
       {tab === 'assignments' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
-          <div style={{ marginBottom: '1rem' }}>
-            <button type="button" onClick={() => setAssignCourseOpen(true)} style={adminBtnPrimary}>Assign Course To Batch</button>
-          </div>
-          {assignCourseOpen && (
+          {!isClientScoped && (
+            <div style={{ marginBottom: '1rem' }}>
+              <button type="button" onClick={() => setAssignCourseOpen(true)} style={adminBtnPrimary}>Assign Course To Batch</button>
+            </div>
+          )}
+          {!isClientScoped && assignCourseOpen && (
             <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
               <select value={assignCourseId} onChange={(e) => setAssignCourseId(e.target.value)} style={{ ...inputStyle, width: 300 }}>
                 <option value="">Select course...</option>
@@ -712,10 +724,12 @@ export default function BatchDetail() {
       {tab === 'tests' && (
         <div style={{ background: 'var(--color-surface)', border: '1px solid var(--color-border)', borderRadius: 8, padding: '1rem' }}>
           <p style={{ color: 'var(--color-text-muted)', fontSize: '0.9rem', marginBottom: '1rem' }}>Assign tests from the test bank to this batch. Assigned tests will be available to all students in the batch.</p>
-          <div style={{ marginBottom: '1rem' }}>
-            <button type="button" onClick={() => setAssignTestOpen(true)} style={adminBtnPrimary}>Assign Test From Test Bank</button>
-          </div>
-          {assignTestOpen && (
+          {!isClientScoped && (
+            <div style={{ marginBottom: '1rem' }}>
+              <button type="button" onClick={() => setAssignTestOpen(true)} style={adminBtnPrimary}>Assign Test From Test Bank</button>
+            </div>
+          )}
+          {!isClientScoped && assignTestOpen && (
             <div style={{ marginBottom: '1rem', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
               <select value={assignTestId} onChange={(e) => setAssignTestId(e.target.value)} style={{ ...inputStyle, width: 320 }}>
                 <option value="">Select test...</option>

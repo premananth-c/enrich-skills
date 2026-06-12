@@ -4,6 +4,7 @@ import { api } from '../lib/api';
 import { formatStatusLabel } from '../lib/status';
 import { emitToast } from '../lib/toast';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import { useAuth } from '../context/AuthContext';
 import CreateTestFromFileModal from '../components/CreateTestFromFileModal';
 import CreateCodingTestFromFileModal from '../components/CreateCodingTestFromFileModal';
 import {
@@ -24,6 +25,7 @@ interface Test {
 }
 
 export default function Tests() {
+  const { isClientScoped } = useAuth();
   const [tests, setTests] = useState<Test[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -107,7 +109,9 @@ export default function Tests() {
           <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Type</th>
           <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
           <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Duration</th>
-          <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+          {!isClientScoped && (
+            <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
+          )}
         </tr>
       </thead>
       <tbody>
@@ -123,21 +127,23 @@ export default function Tests() {
               </span>
             </td>
             <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{t.config.durationMinutes} min</td>
-            <td style={{ padding: '0.75rem 1rem' }}>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
-                <button type="button" onClick={() => navigate(`/tests/${t.id}`)} style={adminBtnPrimarySm}>Edit</button>
-                {t.status !== 'archived' && (
-                  <button type="button" onClick={() => handleArchive(t.id, t.title)} style={adminBtnDestructiveTable}>Archive</button>
-                )}
-                {t.status === 'archived' && (
-                  <>
-                    <button type="button" onClick={() => handleRevoke(t.id, t.title)} style={adminBtnPrimarySm}>Revoke</button>
-                    <button type="button" onClick={() => openDeleteModal(t.id, t.title)} style={adminBtnDestructiveTable}>Delete</button>
-                  </>
-                )}
-                <button type="button" onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={adminBtnCancelSm}>Revision History</button>
-              </div>
-            </td>
+            {!isClientScoped && (
+              <td style={{ padding: '0.75rem 1rem' }}>
+                <div style={{ display: 'flex', gap: '0.5rem' }}>
+                  <button type="button" onClick={() => navigate(`/tests/${t.id}`)} style={adminBtnPrimarySm}>Edit</button>
+                  {t.status !== 'archived' && (
+                    <button type="button" onClick={() => handleArchive(t.id, t.title)} style={adminBtnDestructiveTable}>Archive</button>
+                  )}
+                  {t.status === 'archived' && (
+                    <>
+                      <button type="button" onClick={() => handleRevoke(t.id, t.title)} style={adminBtnPrimarySm}>Revoke</button>
+                      <button type="button" onClick={() => openDeleteModal(t.id, t.title)} style={adminBtnDestructiveTable}>Delete</button>
+                    </>
+                  )}
+                  <button type="button" onClick={() => setHistoryTarget({ id: t.id, title: t.title })} style={adminBtnCancelSm}>Revision History</button>
+                </div>
+              </td>
+            )}
           </tr>
         ))}
       </tbody>
@@ -148,17 +154,19 @@ export default function Tests() {
     <div>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
         <h1 style={{ margin: 0 }}>Tests</h1>
-        <div style={{ display: 'flex', gap: '0.5rem' }}>
-          <button type="button" onClick={() => setCreateFromFileOpen(true)} style={adminBtnPrimary}>
-            Create MCQ Test From File
-          </button>
-          <button type="button" onClick={() => setCreateCodingFromFileOpen(true)} style={adminBtnPrimary}>
-            Create Coding Test From File
-          </button>
-          <button type="button" onClick={() => navigate('/tests/new')} style={adminBtnPrimary}>
-            + Create Test
-          </button>
-        </div>
+        {!isClientScoped && (
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button type="button" onClick={() => setCreateFromFileOpen(true)} style={adminBtnPrimary}>
+              Create MCQ Test From File
+            </button>
+            <button type="button" onClick={() => setCreateCodingFromFileOpen(true)} style={adminBtnPrimary}>
+              Create Coding Test From File
+            </button>
+            <button type="button" onClick={() => navigate('/tests/new')} style={adminBtnPrimary}>
+              + Create Test
+            </button>
+          </div>
+        )}
       </div>
       <div style={{ marginBottom: '1rem' }}>
         <input
