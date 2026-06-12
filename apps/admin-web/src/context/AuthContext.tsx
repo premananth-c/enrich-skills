@@ -107,12 +107,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const canView = useCallback(
     (moduleKey: string) => {
       if (!user) return false;
+      if (clientScope.mode === 'client' && moduleKey === 'reports') return true;
       if (user.role === 'super_admin') return true;
       if (user.role === 'admin') return moduleKey !== 'manage_users';
       const permission = user.permissions?.[moduleKey];
       return permission === 'view' || permission === 'edit';
     },
-    [user]
+    [user, clientScope]
   );
 
   const canEdit = useCallback(

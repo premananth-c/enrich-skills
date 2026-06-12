@@ -1,4 +1,5 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
+import { resolveClientScope } from './clientScope.js';
 
 export const MODULE_KEYS = [
   'courses',
@@ -101,6 +102,10 @@ export async function getResolvedPermissions(request: FastifyRequest): Promise<R
   for (const key of MODULE_KEYS) {
     const raw = permissionObj[key];
     if (raw === 'view' || raw === 'edit') base[key] = raw;
+  }
+  const scope = await resolveClientScope(request, prisma);
+  if (scope.mode === 'client' && !hasLevel(base.reports, 'view')) {
+    base.reports = 'view';
   }
   return base;
 }

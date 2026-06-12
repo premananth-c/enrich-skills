@@ -528,7 +528,7 @@ export default function BatchDetail() {
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Name</th>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Email</th>
-                <th style={{ padding: '0.5rem', width: 80 }}></th>
+                {!isClientScoped && <th style={{ padding: '0.5rem', width: 80 }}></th>}
               </tr>
             </thead>
             <tbody>
@@ -536,9 +536,11 @@ export default function BatchDetail() {
                 <tr key={m.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.5rem' }}>{m.user.name}</td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{m.user.email}</td>
-                  <td style={{ padding: '0.5rem' }}>
-                    <button type="button" onClick={() => removeMember(m.user.id)} style={adminBtnDestructiveTable}>Remove</button>
-                  </td>
+                  {!isClientScoped && (
+                    <td style={{ padding: '0.5rem' }}>
+                      <button type="button" onClick={() => removeMember(m.user.id)} style={adminBtnDestructiveTable}>Remove</button>
+                    </td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -704,7 +706,7 @@ export default function BatchDetail() {
               <tr style={{ borderBottom: '1px solid var(--color-border)', textAlign: 'left' }}>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Course</th>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Due date</th>
-                <th style={{ padding: '0.5rem', width: 80 }}></th>
+                {!isClientScoped && <th style={{ padding: '0.5rem', width: 80 }}></th>}
               </tr>
             </thead>
             <tbody>
@@ -712,7 +714,9 @@ export default function BatchDetail() {
                 <tr key={a.id} style={{ borderBottom: '1px solid var(--color-border)' }}>
                   <td style={{ padding: '0.5rem' }}><Link to={`/courses/${a.course.id}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{a.course.title}</Link></td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{a.dueDate ? new Date(a.dueDate).toLocaleDateString() : '—'}</td>
-                  <td><button type="button" onClick={() => unassignCourse(a.id)} style={adminBtnDestructiveTable}>Remove</button></td>
+                  {!isClientScoped && (
+                    <td><button type="button" onClick={() => unassignCourse(a.id)} style={adminBtnDestructiveTable}>Remove</button></td>
+                  )}
                 </tr>
               ))}
             </tbody>
@@ -747,7 +751,7 @@ export default function BatchDetail() {
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Test</th>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Type</th>
                 <th style={{ padding: '0.5rem', color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>Status</th>
-                <th style={{ padding: '0.5rem', width: 80 }}></th>
+                {!isClientScoped && <th style={{ padding: '0.5rem', width: 80 }}></th>}
               </tr>
             </thead>
             <tbody>
@@ -756,7 +760,9 @@ export default function BatchDetail() {
                   <td style={{ padding: '0.5rem' }}><Link to={`/tests/${bt.testId}`} style={{ color: 'var(--color-primary)', textDecoration: 'none' }}>{bt.test.title}</Link></td>
                   <td style={{ padding: '0.5rem', color: 'var(--color-text-muted)' }}>{bt.test.type}</td>
                   <td style={{ padding: '0.5rem' }}><span style={{ padding: '2px 6px', borderRadius: 4, background: bt.test.status === 'published' ? 'rgba(34,197,94,0.2)' : 'var(--color-bg)', fontSize: '0.8rem' }}>{formatStatusLabel(bt.test.status)}</span></td>
-                  <td><button type="button" onClick={() => unassignTest(bt.testId)} style={adminBtnDestructiveTable}>Remove</button></td>
+                  {!isClientScoped && (
+                    <td><button type="button" onClick={() => unassignTest(bt.testId)} style={adminBtnDestructiveTable}>Remove</button></td>
+                  )}
                 </tr>
               ))}
             </tbody>
