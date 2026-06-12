@@ -9,6 +9,7 @@ import {
   adminBtnPrimarySm,
 } from '../lib/adminButtonStyles';
 import RevisionHistoryModal from '../components/RevisionHistoryModal';
+import { useAuth } from '../context/AuthContext';
 
 interface Batch {
   id: string;
@@ -20,6 +21,7 @@ interface Batch {
 }
 
 export default function Batches() {
+  const { isClientScoped } = useAuth();
   const [batches, setBatches] = useState<Batch[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -114,11 +116,15 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b.client?.name ?? '--'}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b._count?.members ?? 0}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => navigate(`/batches/${b.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
-                      <button type="button" onClick={() => handleArchive(b.id, b.name)} style={adminBtnDestructiveTable}>Archive</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
-                    </div>
+                    {!isClientScoped ? (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => navigate(`/batches/${b.id}/edit`)} style={adminBtnPrimarySm}>Edit</button>
+                        <button type="button" onClick={() => handleArchive(b.id, b.name)} style={adminBtnDestructiveTable}>Archive</button>
+                        <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>—</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -145,11 +151,15 @@ export default function Batches() {
                   <td style={{ padding: '0.75rem 1rem', fontWeight: 500 }}>{b.name}</td>
                   <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{b._count?.members ?? 0}</td>
                   <td style={{ padding: '0.75rem 1rem' }}>
-                    <div style={{ display: 'flex', gap: '0.5rem' }}>
-                      <button type="button" onClick={() => handleRevoke(b.id, b.name)} style={adminBtnPrimarySm}>Revoke</button>
-                      <button type="button" onClick={() => handleDelete(b.id, b.name)} style={adminBtnDestructiveTable}>Delete</button>
-                      <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
-                    </div>
+                    {!isClientScoped ? (
+                      <div style={{ display: 'flex', gap: '0.5rem' }}>
+                        <button type="button" onClick={() => handleRevoke(b.id, b.name)} style={adminBtnPrimarySm}>Revoke</button>
+                        <button type="button" onClick={() => handleDelete(b.id, b.name)} style={adminBtnDestructiveTable}>Delete</button>
+                        <button type="button" onClick={() => setHistoryTarget({ id: b.id, name: b.name })} style={adminBtnCancelSm}>Revision History</button>
+                      </div>
+                    ) : (
+                      <span style={{ color: 'var(--color-text-muted)', fontSize: '0.85rem' }}>—</span>
+                    )}
                   </td>
                 </tr>
               ))}
