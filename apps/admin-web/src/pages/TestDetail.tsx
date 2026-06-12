@@ -7,6 +7,7 @@ import { useAuth } from '../context/AuthContext';
 import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
 import { emitToast } from '../lib/toast';
 import { StudentSearchCombobox } from '../components/StudentSearchCombobox';
+import type { CSSProperties } from 'react';
 import {
   adminBtnCancel,
   adminBtnCancelSm,
@@ -16,6 +17,18 @@ import {
   adminBtnPrimaryDisabled,
   adminBtnPrimarySm,
 } from '../lib/adminButtonStyles';
+
+const viewAttemptBtn: CSSProperties = {
+  padding: '4px 10px',
+  background: '#16a34a',
+  color: '#fff',
+  border: '1px solid #15803d',
+  borderRadius: 4,
+  fontSize: '0.8rem',
+  fontWeight: 500,
+  textDecoration: 'none',
+  display: 'inline-block',
+};
 
 interface QuestionItem {
   id: string;
@@ -959,9 +972,7 @@ export default function TestDetail() {
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Status</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Score</th>
                   <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Attempt Timestamps</th>
-                  {canEdit('tests') && !isClientScoped && (
-                    <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
-                  )}
+                  <th style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)', fontWeight: 500, fontSize: '0.85rem' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -998,35 +1009,28 @@ export default function TestDetail() {
                             .map((a, i) => `#${i + 1} ${new Date(a.startedAt).toLocaleString()}${a.submittedAt ? ` -> ${new Date(a.submittedAt).toLocaleString()}` : ''}`)
                             .join(' | ')}
                     </td>
-                    {canEdit('tests') && !isClientScoped && (
-                      <td style={{ padding: '0.75rem 1rem' }}>
-                        <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
-                          {latestAttemptId && id && (
-                            <Link
-                              to={`/tests/${id}/attempts/${latestAttemptId}`}
-                              style={{
-                                ...adminBtnCancelSm,
-                                textDecoration: 'none',
-                                display: 'inline-block',
-                              }}
-                            >
-                              View attempt
-                            </Link>
-                          )}
-                        <button
-                          type="button"
-                          onClick={() => removeStudentFromTest(s.userId)}
-                          disabled={removingUserId === s.userId}
-                          style={{
-                            ...adminBtnDestructiveTableDisabled(removingUserId === s.userId),
-                            cursor: removingUserId === s.userId ? 'wait' : 'pointer',
-                          }}
-                        >
-                          {removingUserId === s.userId ? 'Removing…' : 'Remove From Test'}
-                        </button>
-                        </div>
-                      </td>
-                    )}
+                    <td style={{ padding: '0.75rem 1rem' }}>
+                      <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+                        {latestAttemptId && id && (
+                          <Link to={`/tests/${id}/attempts/${latestAttemptId}`} style={viewAttemptBtn}>
+                            View attempt
+                          </Link>
+                        )}
+                        {canEdit('tests') && !isClientScoped && (
+                          <button
+                            type="button"
+                            onClick={() => removeStudentFromTest(s.userId)}
+                            disabled={removingUserId === s.userId}
+                            style={{
+                              ...adminBtnDestructiveTableDisabled(removingUserId === s.userId),
+                              cursor: removingUserId === s.userId ? 'wait' : 'pointer',
+                            }}
+                          >
+                            {removingUserId === s.userId ? 'Removing…' : 'Remove From Test'}
+                          </button>
+                        )}
+                      </div>
+                    </td>
                   </tr>
                   );
                 })}

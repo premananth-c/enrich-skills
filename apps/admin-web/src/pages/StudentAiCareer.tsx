@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
 import { isIndustryCareerReport, type AiCareerReviewLegacy, type AiCareerReviewPayload } from '@enrich-skills/shared';
 import { api } from '../lib/api';
+import { downloadCareerReportPdf } from '../lib/careerReportPdf';
 import { emitToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
 import { adminBtnCancel, adminBtnPrimary } from '../lib/adminButtonStyles';
@@ -105,32 +104,8 @@ export default function StudentAiCareer() {
     if (!el || !data) return;
     setDownloadingPdf(true);
     try {
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        backgroundColor: '#ffffff',
-      });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF('p', 'mm', 'a4');
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const pageHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pageWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-      let heightLeft = imgHeight;
-      let position = 0;
-
-      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-      heightLeft -= pageHeight;
-
-      while (heightLeft > 0) {
-        position = heightLeft - imgHeight;
-        pdf.addPage();
-        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
-        heightLeft -= pageHeight;
-      }
-
       const safeName = data.student.name.replace(/[^\w\-]+/g, '_').slice(0, 40);
-      pdf.save(`career-report-${safeName}.pdf`);
+      await downloadCareerReportPdf(el, `career-report-${safeName}.pdf`);
     } catch (e) {
       emitToast('error', e instanceof Error ? e.message : 'Failed to generate PDF');
     } finally {
@@ -272,12 +247,12 @@ export default function StudentAiCareer() {
       </div>
 
       <div ref={reportRef} style={{ ...cardStyle, marginTop: '1.25rem', fontSize: '1.05rem' }}>
-        <h2 style={{ fontSize: '1.4rem', margin: '0 0 0.85rem' }}>
+        <h2 className="pdf-block" style={{ fontSize: '1.4rem', margin: '0 0 0.85rem' }}>
           Industry-ready career report
         </h2>
 
         {careerReview.status && (
-          <p style={{ margin: '0 0 0.85rem', ...smallMuted }}>
+          <p className="pdf-block" style={{ margin: '0 0 0.85rem', ...smallMuted }}>
             Status: <strong>{careerReview.status}</strong>
             {careerReview.generatedAt &&
               careerReview.status === 'ready' &&
@@ -321,13 +296,13 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
 
   return (
     <>
-      <p style={{ margin: '0 0 1.35rem', ...bodyText }}>
+      <p className="pdf-block" style={{ margin: '0 0 1.35rem', ...bodyText }}>
         {report.executiveSummary}
       </p>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>Executive competency snapshot</h3>
-        <div style={{ display: 'grid', gap: '0.5rem' }}>
+        <h3 className="pdf-block" style={sectionTitle}>Executive competency snapshot</h3>
+        <div className="pdf-block" style={{ display: 'grid', gap: '0.5rem' }}>
           {scores.map((s) => (
             <ScoreBar key={s.label} label={s.label} value={s.value} max={10} />
           ))}
@@ -335,20 +310,20 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>
+        <h3 className="pdf-block" style={sectionTitle}>
           1. Language agility & paradigm evaluation
           <span style={{ fontWeight: 400, color: 'var(--color-text-muted)', fontSize: '0.95rem' }}>
             {' '}
             · Versatility {report.languageAgility.versatilityScore}/10
           </span>
         </h3>
-        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>
+        <p className="pdf-block" style={{ margin: '0 0 0.75rem', ...bodyText }}>
           {report.languageAgility.versatilityJustification}
         </p>
-        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>
+        <p className="pdf-block" style={{ margin: '0 0 0.75rem', ...bodyText }}>
           <strong>Paradigm evaluation:</strong> {report.languageAgility.paradigmEvaluation}
         </p>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
+        <div className="pdf-block" style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem', marginBottom: '0.75rem' }}>
           {report.languageAgility.languageProficiency.map((lp) => (
             <span
               key={lp.language}
@@ -365,20 +340,20 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
           ))}
         </div>
         {report.languageAgility.languageProficiency.map((lp) => (
-          <div key={`${lp.language}-detail`} style={{ marginBottom: '0.5rem', ...bodyText }}>
+          <div key={`${lp.language}-detail`} className="pdf-block" style={{ marginBottom: '0.5rem', ...bodyText }}>
             <strong>{lp.language}:</strong> {lp.idiomaticUsage} {lp.paradigmNotes}
           </div>
         ))}
-        <p style={{ margin: '0.5rem 0 0', ...bodyText }}>
+        <p className="pdf-block" style={{ margin: '0.5rem 0 0', ...bodyText }}>
           <strong>Data structures:</strong> {report.languageAgility.coreCsConcepts.dataStructures}
         </p>
-        <p style={{ margin: '0.25rem 0 0', ...bodyText }}>
+        <p className="pdf-block" style={{ margin: '0.25rem 0 0', ...bodyText }}>
           <strong>Algorithms:</strong> {report.languageAgility.coreCsConcepts.algorithms}
         </p>
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>2. Production code quality</h3>
+        <h3 className="pdf-block" style={sectionTitle}>2. Production code quality</h3>
         <TextBlock label="Readability & maintainability" text={report.codeQuality.readabilityAndMaintainability} />
         <TextBlock label="Naming conventions" text={report.codeQuality.namingConventions} />
         <TextBlock label="Modularity" text={report.codeQuality.modularity} />
@@ -388,11 +363,12 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>3. Algorithmic efficiency</h3>
-        <p style={{ margin: '0 0 0.75rem', ...bodyText }}>{report.algorithmicEfficiency.summary}</p>
+        <h3 className="pdf-block" style={sectionTitle}>3. Algorithmic efficiency</h3>
+        <p className="pdf-block" style={{ margin: '0 0 0.75rem', ...bodyText }}>{report.algorithmicEfficiency.summary}</p>
         {report.algorithmicEfficiency.problemAnalyses.map((p) => (
           <div
             key={p.problemTitle}
+            className="pdf-block"
             style={{
               marginBottom: '0.5rem',
               padding: '0.75rem',
@@ -414,14 +390,15 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>4. Behavioral patterns</h3>
+        <h3 className="pdf-block" style={sectionTitle}>4. Behavioral patterns</h3>
         <TextBlock label="Debugging efficiency" text={report.behavioralPatterns.debuggingEfficiency} />
         <TextBlock label="Time management" text={report.behavioralPatterns.timeManagement} />
       </div>
 
       <div style={{ marginBottom: '1.25rem' }}>
-        <h3 style={sectionTitle}>5. Industry fitment</h3>
+        <h3 className="pdf-block" style={sectionTitle}>5. Industry fitment</h3>
         <p
+          className="pdf-block"
           style={{
             margin: '0 0 0.75rem',
             padding: '0.5rem 0.75rem',
@@ -434,25 +411,25 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
           {report.industryFitment.employabilityTag}
         </p>
         {report.industryFitment.roleMappings.map((r) => (
-          <div key={r.role} style={{ marginBottom: '0.5rem', ...bodyText }}>
+          <div key={r.role} className="pdf-block" style={{ marginBottom: '0.5rem', ...bodyText }}>
             <strong>
               {r.role}
             </strong>
             <FitBadge level={r.fitLevel} /> — {r.rationale}
           </div>
         ))}
-        <p style={{ margin: '0.75rem 0 0', ...bodyText }}>
+        <p className="pdf-block" style={{ margin: '0.75rem 0 0', ...bodyText }}>
           <strong>Skill gap analysis:</strong> {report.industryFitment.skillGapAnalysis}
         </p>
       </div>
 
       <div>
-        <h3 style={sectionTitle}>6. 4-week skill gap roadmap</h3>
+        <h3 className="pdf-block" style={sectionTitle}>6. 4-week skill gap roadmap</h3>
         {report.fourWeekRoadmap
           .slice()
           .sort((a, b) => a.week - b.week)
           .map((w) => (
-            <div key={w.week} style={{ marginBottom: '0.75rem' }}>
+            <div key={w.week} className="pdf-block" style={{ marginBottom: '0.75rem' }}>
               <div style={{ fontWeight: 600, fontSize: '1.08rem' }}>
                 Week {w.week}: {w.focus}
               </div>
@@ -471,10 +448,10 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
 function LegacyCareerReport({ report }: { report: AiCareerReviewLegacy }) {
   return (
     <>
-      <p style={{ margin: '0 0 0.75rem', ...smallMuted }}>
+      <p className="pdf-block" style={{ margin: '0 0 0.75rem', ...smallMuted }}>
         This is an older report format. Regenerate to get the industry-ready v2 report.
       </p>
-      <p style={{ margin: '0 0 1rem', ...bodyText }}>{report.overallSummary}</p>
+      <p className="pdf-block" style={{ margin: '0 0 1rem', ...bodyText }}>{report.overallSummary}</p>
       <ListSection title="Strengths" items={report.strengths} color="#22c55e" />
       <ListSection title="Weaknesses" items={report.weaknesses} color="#f59e0b" />
       <ListSection title="Recommendations" items={report.recommendations} />
@@ -525,7 +502,7 @@ function FitBadge({ level }: { level: string }) {
 
 function TextBlock({ label, text }: { label: string; text: string }) {
   return (
-    <p style={{ margin: '0 0 0.5rem', ...bodyText }}>
+    <p className="pdf-block" style={{ margin: '0 0 0.5rem', ...bodyText }}>
       <strong>{label}:</strong> {text}
     </p>
   );
@@ -542,7 +519,7 @@ function ListSection({
 }) {
   if (items.length === 0) return null;
   return (
-    <div style={{ marginBottom: '0.75rem' }}>
+    <div className="pdf-block" style={{ marginBottom: '0.75rem' }}>
       <div style={{ fontWeight: 600, fontSize: '1.05rem', color, marginBottom: '0.25rem' }}>
         {title}
       </div>

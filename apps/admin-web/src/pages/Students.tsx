@@ -6,6 +6,7 @@ import RevisionHistoryModal from '../components/RevisionHistoryModal';
 import ClientMultiSelect from '../components/ClientMultiSelect';
 import { useAuth } from '../context/AuthContext';
 import { parseEmailsFromSpreadsheetBuffer } from '../lib/spreadsheetEmails';
+import type { CSSProperties } from 'react';
 import {
   adminBtnCancel,
   adminBtnDestructive,
@@ -18,6 +19,20 @@ import {
   adminBtnPrimarySmDisabled,
   adminBtnCancelSm,
 } from '../lib/adminButtonStyles';
+
+const aiCareerReportBtn: CSSProperties = {
+  padding: '4px 10px',
+  background: '#16a34a',
+  color: '#fff',
+  border: '1px solid #15803d',
+  borderRadius: 4,
+  fontSize: '0.8rem',
+  fontWeight: 500,
+  cursor: 'pointer',
+  textDecoration: 'none',
+  display: 'inline-flex',
+  alignItems: 'center',
+};
 
 interface Student {
   id: string;
@@ -705,9 +720,13 @@ export default function Students() {
                     <td style={{ padding: '0.75rem 1rem', color: 'var(--color-text-muted)' }}>{new Date(s.createdAt).toLocaleDateString()}</td>
                     <td style={{ padding: '0.75rem 1rem' }}>
                       <div style={{ display: 'flex', gap: '0.5rem' }}>
-                        <Link to={`/students/${s.id}/ai-career`} style={{ ...adminBtnCancelSm, textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>AI Career</Link>
-                        <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
-                        <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                        <Link to={`/students/${s.id}/ai-career`} style={aiCareerReportBtn}>AI Career Report</Link>
+                        {!isClientScoped && (
+                          <>
+                            <button type="button" onClick={() => openEdit(s)} disabled={!canEdit('students')} style={adminBtnPrimarySmDisabled(!canEdit('students'))}>Edit</button>
+                            <button type="button" onClick={() => handleArchive(s)} disabled={!canEdit('students')} style={adminBtnDestructiveDisabled(!canEdit('students'))}>Archive</button>
+                          </>
+                        )}
                         {showRevisionHistory && (
                         <button type="button" onClick={() => setHistoryTarget({ id: s.id, name: s.name })} style={adminBtnCancelSm}>Revision History</button>
                       )}
