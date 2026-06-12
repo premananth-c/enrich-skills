@@ -104,16 +104,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     localStorage.removeItem('enrich_tenant_id');
   }, []);
 
+  const isTenantWideAdmin = user?.role === 'admin' || user?.role === 'super_admin';
+
   const canView = useCallback(
     (moduleKey: string) => {
       if (!user) return false;
-      if (clientScope.mode === 'client' && moduleKey === 'reports') return true;
+      if (!isTenantWideAdmin && clientScope.mode === 'client' && moduleKey === 'reports') return true;
       if (user.role === 'super_admin') return true;
       if (user.role === 'admin') return moduleKey !== 'manage_users';
       const permission = user.permissions?.[moduleKey];
       return permission === 'view' || permission === 'edit';
     },
-    [user, clientScope]
+    [user, clientScope, isTenantWideAdmin]
   );
 
   const canEdit = useCallback(
@@ -127,7 +129,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const isSuperAdmin = user?.role === 'super_admin';
-  const isClientScoped = clientScope.mode === 'client';
+  const isClientScoped = clientScope.mode === 'client' && !isTenantWideAdmin;
   const hasNoModuleAccess =
     !!user &&
     !isSuperAdmin &&

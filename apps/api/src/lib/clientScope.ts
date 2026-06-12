@@ -7,9 +7,18 @@ export type ClientScope =
   | { mode: 'client'; clientId: string };
 
 /**
+ * Tenant-wide admins are never restricted to a single client.
+ */
+export function isUnrestrictedAdmin(request: FastifyRequest): boolean {
+  const role = (request.user as { role?: string } | undefined)?.role;
+  return role === 'admin' || role === 'super_admin';
+}
+
+/**
  * Resolve which client(s) the current admin user can access.
- * - Admins with a ClientMember row are scoped to that client.
- * - All other admins (super_admin, admin, custom roles without membership) see everything.
+ * - super_admin and admin always see all clients (even if they have a ClientMember row).
+ * - Custom-role users with a ClientMember row are scoped to that client.
+ * - Everyone else sees everything.
  */
 export async function resolveClientScope(
   request: FastifyRequest,
@@ -17,6 +26,7 @@ export async function resolveClientScope(
 ): Promise<ClientScope> {
   const payload = request.user as { sub?: string } | undefined;
   if (!payload?.sub) return { mode: 'all' };
+  if (isUnrestrictedAdmin(request)) return { mode: 'all' };
 
   const tenantId = requireTenant(request);
   const membership = await (prisma as any).clientMember.findFirst({
