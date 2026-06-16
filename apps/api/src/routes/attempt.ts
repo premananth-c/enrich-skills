@@ -793,7 +793,7 @@ export async function attemptRoutes(app: FastifyInstance) {
   app.post(
     '/:id/ai-overall-review/regenerate',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      await requireModuleAccess(request, 'tests', 'edit');
+      await requireModuleAccess(request, 'tests', 'view');
       const prisma = await request.getTenantPrisma();
 
       const attempt = await prisma.attempt.findFirst({
@@ -822,7 +822,7 @@ export async function attemptRoutes(app: FastifyInstance) {
   app.post(
     '/:id/ai-review/regenerate',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      await requireModuleAccess(request, 'tests', 'edit');
+      await requireModuleAccess(request, 'tests', 'view');
       const prisma = await request.getTenantPrisma();
       const body = (request.body ?? {}) as { questionIds?: string[] };
 
