@@ -72,7 +72,7 @@ const cardStyle: React.CSSProperties = {
 
 export default function AttemptDetail() {
   const { testId, attemptId } = useParams();
-  const { canEdit } = useAuth();
+  const { canView } = useAuth();
   const [data, setData] = useState<AttemptDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -128,7 +128,7 @@ export default function AttemptDetail() {
 
   const { test, attempt } = data;
   const aiEnabled = test.config?.aiFeedbackEnabled === true;
-  const canRegenerate = canEdit('tests') && aiEnabled;
+  const canRegenerate = canView('tests') && aiEnabled;
   const topicGroups = groupByPrimaryTopic(attempt.submissions, (s) => s.question.tags);
   const showTopicHeaders =
     topicGroups.length > 1 || (topicGroups[0]?.topic ?? UNTAGGED_TOPIC) !== UNTAGGED_TOPIC;

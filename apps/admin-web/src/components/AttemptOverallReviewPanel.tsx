@@ -111,7 +111,9 @@ export default function AttemptOverallReviewPanel({
         ? 'Queuing…'
         : localStatus === 'generating' || localStatus === 'queued'
           ? 'Retry overall review'
-          : 'Regenerate overall test review'}
+          : localStatus == null
+            ? 'Generate overall test review'
+            : 'Regenerate overall test review'}
     </button>
   ) : null;
 
@@ -126,7 +128,7 @@ export default function AttemptOverallReviewPanel({
         </div>
         <p style={{ margin: '0.5rem 0 0', color: 'var(--color-text-muted)', fontSize: '0.9rem' }}>
           No overall review yet for this attempt (common for submissions before this feature was
-          enabled). Click &quot;Regenerate overall test review&quot; to generate one from the
+          enabled). Click &quot;Generate overall test review&quot; to generate one from the
           per-question AI reviews.
         </p>
       </div>
