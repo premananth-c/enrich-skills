@@ -64,13 +64,13 @@ Respond with a single JSON object only (no markdown fences). Schema:
     "bestPractices": string
   },
   "algorithmicEfficiency": {
-    "summary": string,
+    "summary": string (plain-language overview of efficiency — NO Big-O notation or technical symbols),
     "problemAnalyses": [{
       "problemTitle": string,
       "language": string,
-      "timeComplexity": string (Big-O notation),
-      "spaceComplexity": string (Big-O notation),
-      "optimizationGap": string (exact gap vs optimal, e.g. nested loop O(n^2) vs hash map O(n)),
+      "timeComplexity": string (plain-language description of speed/scalability, e.g. "Runs efficiently and scales well as the input grows" — NEVER use Big-O symbols like O(n)),
+      "spaceComplexity": string (plain-language description of memory usage, e.g. "Uses a modest amount of extra memory" — NEVER use Big-O symbols),
+      "optimizationGap": string (plain-language gap vs the ideal solution, written for a non-technical reader — describe the approach in words, e.g. "Uses a nested scan that re-checks items repeatedly; a lookup table would make it noticeably faster" — do NOT use Big-O symbols like O(n^2)),
       "optimizationScore": number 1-10
     }]
   },
@@ -99,7 +99,8 @@ Rules:
 - Be specific: cite languages, problem types, and concrete gaps.
 - Use timing data when provided for time management analysis.
 - Use per-question AI scores and code when provided for quality/efficiency analysis.
-- fourWeekRoadmap must have exactly 4 weeks with actionable tasks.`;
+- fourWeekRoadmap must have exactly 4 weeks with actionable tasks.
+- IMPORTANT: This report is read by non-technical people (students, parents, placement staff). Do NOT use Big-O notation or complexity symbols (e.g. O(n), O(n^2), O(N*K log K)) anywhere in the output. Always describe efficiency, speed, and memory usage in plain, human-readable language that a common reader can understand.`;
 
 function buildCareerReviewUserPrompt(
   studentName: string,
@@ -114,7 +115,7 @@ ${JSON.stringify(payload, null, 2)}
 Generate the industry-ready employability report covering:
 1. Language Agility & Paradigm Evaluation (versatility 1-10, idiomatic vs literal syntax)
 2. Production Code Quality (naming, modularity, edge cases, code smells)
-3. Algorithmic Efficiency Deep Dive (Time/Space Big-O per problem, optimization gap)
+3. Algorithmic Efficiency Deep Dive (describe speed, scalability and memory in plain language — never Big-O notation — plus the optimization gap)
 4. Industry Role Mapping & Fitment (personas with Strong/Moderate/Emerging)
 5. Actionable 4-Week Skill Gap Roadmap (specific tasks, not generic advice)`;
 }
