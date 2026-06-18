@@ -5,7 +5,7 @@ import { api } from '../lib/api';
 import { downloadCareerReportPdf } from '../lib/careerReportPdf';
 import { emitToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
-import { adminBtnCancel, adminBtnPrimary } from '../lib/adminButtonStyles';
+import { adminBtnPrimary } from '../lib/adminButtonStyles';
 
 const careerReportGreenBtn: React.CSSProperties = {
   padding: '0.5rem 1.25rem',
@@ -16,6 +16,18 @@ const careerReportGreenBtn: React.CSSProperties = {
   fontWeight: 500,
   fontSize: '0.9rem',
   cursor: 'pointer',
+};
+
+const downloadPdfBtn: React.CSSProperties = {
+  padding: '0.5rem 1.25rem',
+  background: 'linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%)',
+  color: '#fff',
+  border: '1px solid #1e40af',
+  borderRadius: 6,
+  fontWeight: 600,
+  fontSize: '0.9rem',
+  cursor: 'pointer',
+  boxShadow: '0 1px 2px rgba(30,64,175,0.35)',
 };
 
 interface CareerReviewData {
@@ -218,7 +230,11 @@ export default function StudentAiCareer() {
                 type="button"
                 onClick={() => void handleDownloadPdf()}
                 disabled={downloadingPdf}
-                style={adminBtnCancel}
+                style={{
+                  ...downloadPdfBtn,
+                  opacity: downloadingPdf ? 0.65 : 1,
+                  cursor: downloadingPdf ? 'wait' : 'pointer',
+                }}
               >
                 {downloadingPdf ? 'Preparing PDF…' : 'Download as PDF'}
               </button>
