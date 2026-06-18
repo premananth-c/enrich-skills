@@ -7,6 +7,17 @@ import { emitToast } from '../lib/toast';
 import { useAuth } from '../context/AuthContext';
 import { adminBtnCancel, adminBtnPrimary } from '../lib/adminButtonStyles';
 
+const careerReportGreenBtn: React.CSSProperties = {
+  padding: '0.5rem 1.25rem',
+  background: '#16a34a',
+  color: '#fff',
+  border: '1px solid #15803d',
+  borderRadius: 6,
+  fontWeight: 500,
+  fontSize: '0.9rem',
+  cursor: 'pointer',
+};
+
 interface CareerReviewData {
   student: { id: string; name: string; email: string | null };
   codingAttempts: number;
@@ -46,7 +57,7 @@ const smallMuted: React.CSSProperties = {
 
 export default function StudentAiCareer() {
   const { studentId } = useParams();
-  const { canEdit } = useAuth();
+  const { canView } = useAuth();
   const [data, setData] = useState<CareerReviewData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -181,7 +192,7 @@ export default function StudentAiCareer() {
 
   const { student, codingAttempts, careerReview } = data;
   const report = careerReview.report;
-  const canGenerate = canEdit('students');
+  const canGenerate = canView('students');
   const isV2 = report != null && isIndustryCareerReport(report);
 
   const reportReady = careerReview.status === 'ready' && report != null;
@@ -231,7 +242,7 @@ export default function StudentAiCareer() {
               onClick={handleGenerate}
               disabled={regenerating || codingAttempts === 0}
               style={{
-                ...adminBtnPrimary,
+                ...careerReportGreenBtn,
                 opacity: regenerating || codingAttempts === 0 ? 0.6 : 1,
                 cursor: regenerating || codingAttempts === 0 ? 'not-allowed' : 'pointer',
               }}
@@ -239,8 +250,8 @@ export default function StudentAiCareer() {
               {regenerating
                 ? 'Queuing…'
                 : showRegenerateLabel
-                  ? 'Regenerate career comparison report'
-                  : 'Generate career comparison report'}
+                  ? 'Regenerate Career Report'
+                  : 'Generate Career Report'}
             </button>
           )}
         </div>
