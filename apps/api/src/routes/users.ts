@@ -928,7 +928,7 @@ export async function userRoutes(app: FastifyInstance) {
   app.post(
     '/:id/ai-career-review/regenerate',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      await requireModuleAccess(request, 'students', 'edit');
+      await requireModuleAccess(request, 'students', 'view');
       const tenantId = requireTenant(request);
       const prisma = await request.getTenantPrisma();
       const scope = await resolveClientScope(request, prisma);
@@ -957,7 +957,7 @@ export async function userRoutes(app: FastifyInstance) {
   app.post(
     '/:id/ai-career-review/send-email',
     async (request: FastifyRequest<{ Params: { id: string } }>, reply: FastifyReply) => {
-      await requireModuleAccess(request, 'students', 'edit');
+      await requireModuleAccess(request, 'students', 'view');
       const tenantId = requireTenant(request);
       const prisma = await request.getTenantPrisma();
       const scope = await resolveClientScope(request, prisma);
