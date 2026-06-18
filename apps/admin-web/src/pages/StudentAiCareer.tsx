@@ -392,9 +392,6 @@ function IndustryCareerReport({ report }: { report: AiCareerReviewPayload }) {
             <div style={{ fontWeight: 600, fontSize: '1.08rem' }}>
               {p.problemTitle} ({p.language}) · Optimization {p.optimizationScore}/10
             </div>
-            <div style={{ color: 'var(--color-text-muted)', marginTop: '0.2rem' }}>
-              Time {p.timeComplexity} · Space {p.spaceComplexity}
-            </div>
             <div style={{ marginTop: '0.35rem' }}>{p.optimizationGap}</div>
           </div>
         ))}
